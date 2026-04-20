@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NeuroPal — NeuroReader prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Atkinson+Hyperlegible:wght@400;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+:root {
+  /* Clinical Visionary — dark baseline */
+  --surface: #131313;
+  --surface-low: #1b1c1c;
+  --surface: #131313;
+  --surface-container: #1f2020;
+  --surface-high: #2a2a2a;
+  --surface-highest: #353535;
+  --surface-lowest: #0e0e0e;
+  --on-surface: #e4e2e1;
+  --on-surface-variant: #c3c6d6;
+  --outline: #8d909f;
+  --outline-variant: #434653;
+
+  --primary: #b1c5ff;
+  --primary-container: #0051c3;
+  --on-primary: #002c71;
+  --secondary: #a6e6ff;
+  --secondary-dim: #0faebe;
+  --tertiary: #d6baff;
+  --tertiary-container: #722ccf;
+  --error: #ffb4ab;
+  --error-dim: #b95463;
+  --warn: #ffd27a;
+
+  --accent: var(--primary);
+  --accent-glow: rgba(177, 197, 255, 0.25);
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-reader: 'Inter', system-ui, sans-serif;
+
+  --reader-size: 20px;
+  --reader-line: 1.7;
+  --reader-letter: 0em;
+
+  --page-bg: var(--surface);
+  --page-fg: var(--on-surface);
+}
+
+/* Theme variants */
+[data-theme="sepia"] {
+  --surface: #f3ebdd;
+  --surface-low: #ede4d2;
+  --surface-container: #e8dec9;
+  --surface-high: #ddd1b8;
+  --surface-highest: #d1c3a5;
+  --surface-lowest: #f8f1e3;
+  --on-surface: #2a2418;
+  --on-surface-variant: #5a4e35;
+  --outline: #8a7b5c;
+  --outline-variant: #bba985;
+  --primary: #8a5a1f;
+  --primary-container: #c08a4a;
+  --on-primary: #ffffff;
+  --secondary: #5e7a3f;
+  --secondary-dim: #3c5a22;
+  --tertiary: #8a4a6a;
+  --accent: #8a5a1f;
+  --accent-glow: rgba(138, 90, 31, 0.15);
+  --page-bg: var(--surface);
+  --page-fg: var(--on-surface);
+}
+
+[data-theme="light"] {
+  --surface: #fafaf7;
+  --surface-low: #f1f1ed;
+  --surface-container: #eaeae5;
+  --surface-high: #dedcd4;
+  --surface-highest: #cecbc2;
+  --surface-lowest: #ffffff;
+  --on-surface: #1a1a1a;
+  --on-surface-variant: #505058;
+  --outline: #767680;
+  --outline-variant: #c5c5cd;
+  --primary: #1357c9;
+  --primary-container: #b1c5ff;
+  --on-primary: #ffffff;
+  --secondary: #007a8c;
+  --secondary-dim: #005a6a;
+  --tertiary: #5f07bc;
+  --accent: #1357c9;
+  --accent-glow: rgba(19, 87, 201, 0.12);
+}
+
+[data-theme="contrast"] {
+  --surface: #000000;
+  --surface-low: #0a0a0a;
+  --surface-container: #141414;
+  --surface-high: #1f1f1f;
+  --surface-highest: #2a2a2a;
+  --surface-lowest: #000000;
+  --on-surface: #ffffff;
+  --on-surface-variant: #e0e0e0;
+  --outline: #ffffff;
+  --outline-variant: #808080;
+  --primary: #ffff00;
+  --primary-container: #ffd700;
+  --on-primary: #000000;
+  --secondary: #00ffff;
+  --tertiary: #ff80ff;
+  --accent: #ffff00;
+  --accent-glow: rgba(255, 255, 0, 0.3);
+}
+
+/* Accent hue overrides (on top of dark baseline) */
+[data-accent="cyan"] { --accent: #a6e6ff; --accent-glow: rgba(166, 230, 255, 0.25); --primary: #a6e6ff; --primary-container: #00566b; --on-primary: #003543; }
+[data-accent="purple"] { --accent: #d6baff; --accent-glow: rgba(214, 186, 255, 0.25); --primary: #d6baff; --primary-container: #5f07bc; --on-primary: #280057; }
+[data-accent="green"] { --accent: #b9e6a8; --accent-glow: rgba(185, 230, 168, 0.22); --primary: #b9e6a8; --primary-container: #1f5a12; --on-primary: #0f2d08; }
+
+/* Font family variants */
+[data-reader-font="atkinson"] { --font-reader: 'Atkinson Hyperlegible', system-ui, sans-serif; }
+[data-reader-font="dyslexic"] { --font-reader: 'Atkinson Hyperlegible', system-ui, sans-serif; letter-spacing: 0.04em; }
+[data-reader-font="serif"] { --font-reader: 'Lora', Georgia, serif; }
+[data-reader-font="fraunces"] { --font-reader: 'Fraunces', Georgia, serif; }
+
+/* Base */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--page-bg);
+  color: var(--page-fg);
+  font-family: var(--font-body);
+  font-feature-settings: "ss01", "cv11";
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body { overflow: hidden; }
+#root { height: 100vh; overflow: hidden; }
+
+.font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+.font-body    { font-family: var(--font-body); }
+.font-mono    { font-family: var(--font-mono); }
+.font-reader  { font-family: var(--font-reader); }
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
+.msym-fill { font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 10px; opacity: 0.4; }
+::-webkit-scrollbar-thumb:hover { background: var(--outline); }
+
+/* Reusable primitives */
+.glass {
+  background: color-mix(in oklab, var(--surface-container) 70%, transparent);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  border: 1px solid color-mix(in oklab, var(--outline-variant) 15%, transparent);
+}
+.ghost-border { border: 1px solid color-mix(in oklab, var(--outline-variant) 20%, transparent); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+  color: var(--on-primary);
+  font-family: var(--font-display); font-weight: 600;
+  padding: 12px 22px; border-radius: 14px; border: 0; cursor: pointer;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent), 0 8px 32px -8px var(--accent-glow);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 50%, transparent), 0 12px 40px -8px var(--accent-glow); }
+.btn-primary:active { transform: translateY(0); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--outline-variant) 25%, transparent);
+  font-family: var(--font-display); font-weight: 500;
+  padding: 10px 18px; border-radius: 14px; cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-ghost:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); border-color: color-mix(in oklab, var(--accent) 30%, transparent); }
+
+/* Data-pulse */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+.data-pulse {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* Reading highlight (karaoke) */
+.word-read { color: var(--on-surface-variant); opacity: 0.55; transition: opacity 0.2s, color 0.2s; }
+.word-current {
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
+  color: var(--on-surface);
+  box-shadow: 0 2px 0 var(--accent);
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+.word-pending { color: var(--on-surface); }
+
+/* Inline ask chip */
+.chip-ask {
+  position: absolute;
+  background: var(--surface-high);
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+  color: var(--accent);
+  padding: 6px 12px; border-radius: 999px;
+  font-family: var(--font-display); font-size: 13px; font-weight: 500;
+  box-shadow: 0 12px 40px -8px rgba(0,0,0,0.6);
+  cursor: pointer; z-index: 50;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* Margin annotation */
+.margin-note {
+  background: color-mix(in oklab, var(--surface-container) 90%, var(--accent));
+  border-left: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-surface-variant);
+  position: relative;
+}
+.margin-note .nm-q {
+  color: var(--accent);
+  font-family: var(--font-display); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 8px; display: block;
+}
+.margin-note .nm-cite {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--outline); margin-top: 10px;
+  padding-top: 10px; border-top: 1px dashed color-mix(in oklab, var(--outline-variant) 40%, transparent);
+}
+.para-anchored {
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 6%, transparent) 0%, transparent 60%);
+  border-left: 2px solid color-mix(in oklab, var(--accent) 60%, transparent);
+  padding-left: 14px;
+  margin-left: -16px;
+  border-radius: 2px;
+}
+
+/* Minimap */
+.minimap-track {
+  position: relative;
+  width: 6px;
+  background: color-mix(in oklab, var(--outline-variant) 30%, transparent);
+  border-radius: 999px;
+  height: 100%;
+}
+.minimap-progress {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: linear-gradient(180deg, var(--accent), color-mix(in oklab, var(--accent) 40%, transparent));
+  border-radius: 999px;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.minimap-marker {
+  position: absolute;
+  left: -4px; right: -4px;
+  height: 2px;
+  background: var(--on-surface-variant);
+  opacity: 0.3;
+}
+.minimap-marker.active { background: var(--accent); opacity: 1; box-shadow: 0 0 8px var(--accent-glow); }
+
+/* Custom range */
+input[type=range].np-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%;
+  height: 24px;
+  background: transparent;
+}
+input[type=range].np-range::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--val, 50%), color-mix(in oklab, var(--outline-variant) 40%, transparent) var(--val, 50%), color-mix(in oklab, var(--outline-variant) 40%, transparent) 100%);
+}
+input[type=range].np-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--surface-container) 80%, transparent), 0 0 12px var(--accent-glow);
+  margin-top: -7px; cursor: pointer;
+}
+input[type=range].np-range::-moz-range-track {
+  height: 4px; border-radius: 999px;
+  background: color-mix(in oklab, var(--outline-variant) 40%, transparent);
+}
+input[type=range].np-range::-moz-range-progress { background: var(--accent); height: 4px; border-radius: 999px;}
+input[type=range].np-range::-moz-range-thumb {
+  width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--surface-container) 80%, transparent);
+}
+
+/* Fade reveal */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp 0.4s ease both; }
+
+/* No focus outline for mouse, keep for kb */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Citation graph */
+.cite-node {
+  position: absolute;
+  border-radius: 50%;
+  transition: transform 0.3s, box-shadow 0.3s;
+  cursor: pointer;
+}
+.cite-node:hover { transform: scale(1.15); }
+.cite-edge { stroke: color-mix(in oklab, var(--accent) 40%, transparent); stroke-width: 1; fill: none; }
+
+/* Wave equalizer for TTS playback */
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  width: 3px; background: var(--accent); border-radius: 3px; transform-origin: bottom;
+  animation: eq 0.9s ease-in-out infinite;
+}
+
+/* Nav rail */
+.nav-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border-radius: 14px;
+  color: var(--on-surface-variant);
+  cursor: pointer; font-size: 14px;
+  transition: background 0.2s, color 0.2s;
+}
+.nav-item:hover { background: color-mix(in oklab, var(--surface-high) 60%, transparent); color: var(--on-surface); }
+.nav-item.active {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.nav-item.active .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 500; }
+
+/* Placeholder striped image */
+.ph-image {
+  background:
+    repeating-linear-gradient(135deg,
+      color-mix(in oklab, var(--outline-variant) 25%, transparent) 0 6px,
+      transparent 6px 14px),
+    var(--surface-high);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--on-surface-variant);
+  border-radius: 12px;
+  text-align: center;
+}
+</style>
+
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#131313">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#131313"/>
+    <circle cx="600" cy="400" r="180" fill="none" stroke="#b1c5ff" stroke-width="3" opacity="0.9"/>
+    <circle cx="600" cy="400" r="8" fill="#b1c5ff"/>
+    <text x="600" y="620" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="44" font-weight="600" fill="#b1c5ff" letter-spacing="-1">NeuroPal</text>
+    <text x="600" y="660" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#8d909f" letter-spacing="4">LOADING READER</text>
+  </svg>
+</template>
+<div id="root"></div>
+
+<!-- Tweak defaults -->
+<script>
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "blue",
+  "readerFont": "inter",
+  "readerLayout": "split",
+  "density": "calm",
+  "fontSize": 20,
+  "lineSpacing": 1.7,
+  "wpm": 225,
+  "voice": "soft"
+}/*EDITMODE-END*/;
+window.__TWEAKS__ = { ...TWEAK_DEFAULTS };
+</script>
+
+<!-- Component modules -->
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/Shell.jsx"></script>
+<script type="text/babel" src="src/Home.jsx"></script>
+<script type="text/babel" src="src/Library.jsx"></script>
+<script type="text/babel" src="src/Reader.jsx"></script>
+<script type="text/babel" src="src/Tweaks.jsx"></script>
+<script type="text/babel" src="src/App.jsx"></script>
+
+</body>
+</html>

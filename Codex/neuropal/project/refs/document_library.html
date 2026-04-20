@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"on-secondary-container": "#00566b", background: "#131313", "secondary-fixed": "#b7eaff", "on-primary-fixed": "#001947", "outline-variant": "#434653", "on-secondary-fixed-variant": "#004e60", primary: "#b1c5ff", "surface-bright": "#393939", "on-tertiary-container": "#ddc5ff", "tertiary-fixed-dim": "#d6baff", "tertiary-fixed": "#ecdcff", "error-dim": "#b95463", "on-background": "#e4e2e1", "tertiary-container": "#722ccf", "on-primary-container": "#beceff", "secondary-fixed-dim": "#4cd6ff", "surface-container-highest": "#353535", "primary-fixed-dim": "#b1c5ff", "on-error": "#690005", "inverse-on-surface": "#303030", "secondary-container": "#14d1ff", "on-secondary": "#003543", "error-container": "#93000a", "on-surface-variant": "#c3c6d6", "on-secondary-fixed": "#001f28", "surface-tint": "#b1c5ff", "on-primary": "#002c71", "surface-variant": "#353535", "on-tertiary": "#430089", "inverse-surface": "#e4e2e1", "surface-dim": "#131313", "primary-dim": "#a8b5fd", "surface-container": "#1f2020", "on-tertiary-fixed": "#280057", "inverse-primary": "#1357c9", "primary-container": "#0051c3", surface: "#131313", outline: "#8d909f", error: "#ffb4ab", "on-error-container": "#ffdad6", "surface-container-lowest": "#0e0e0e", "primary-fixed": "#dae2ff", "on-primary-fixed-variant": "#00419f", "tertiary-dim": "#b3bcef", secondary: "#a6e6ff", "on-surface": "#e4e2e1", "surface-container-high": "#2a2a2a", "secondary-dim": "#0faebe", "on-tertiary-fixed-variant": "#5f07bc", "surface-container-low": "#1b1c1c", tertiary: "#d6baff"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, fontFamily: {headline: ["Space Grotesk"], body: ["Inter"], label: ["Inter"], display: "Space Grotesk"}}}};</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .focus-anchor {
+            height: 4px;
+            background: linear-gradient(90deg, #0faebe 0%, #67e6f7 100%);
+        }
+        body {
+            background-color: #0c0e13;
+            color: #dfe5f8;
+            font-family: 'Lexend', sans-serif;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-[#0c0e13] flex justify-between items-center w-full px-6 py-4 fixed top-0 z-50">
+<div class="flex items-center gap-4">
+<button class="hover:bg-[#1b202b] transition-colors duration-300 p-2 rounded-full scale-95 transition-transform duration-300 ease-in-out">
+<span class="material-symbols-outlined text-[#b9c3ff]">menu</span>
+</button>
+<h1 class="font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-[#b9c3ff]">NeuroPal</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant/20">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="Close up portrait of a young professional with a friendly expression, soft studio lighting, clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClc_6I-nXFZ7m-yoDlYDAjJVx_Yzf5A4dQ2tMUDcz7_H18GuZ6-MWfPMYjYyCa8kNzd4i0BUrHs68pBErntiyejBU2WwW78S_JUIudW6-HCrqez4IeszzSEy8ZvtKC93nCMu4fR464USek0jy9zXiOvn2mdchKu4V7vhM1_VZQTkrSDe9ARnQqycrcmcpplJE73kTokpb05nTKHNfbfVRdGCnUBe9HRWfw98dgfUZ2cDr2SHouRUeL5cE5d1tJGN4xZYtbd0LCsDE"/>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="pt-24 px-6 max-w-5xl mx-auto">
+<!-- Header Section -->
+<section class="mb-10 mt-4">
+<h2 class="font-headline text-4xl font-bold text-on-surface mb-2">Document Library</h2>
+<p class="text-on-surface-variant font-body">Continue your cognitive journey where you left off.</p>
+</section>
+<!-- Bento Style Layout for Documents -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Document Card 1 -->
+<div class="group relative bg-surface-container hover:bg-surface-container-high transition-all duration-300 rounded-xl overflow-hidden p-5 flex flex-col gap-4 border border-outline-variant/10">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-primary/10 rounded-xl">
+<span class="material-symbols-outlined text-primary">picture_as_pdf</span>
+</div>
+<span class="text-[10px] font-bold tracking-widest uppercase text-on-surface-variant bg-surface-container-highest px-2 py-1 rounded">PDF</span>
+</div>
+<div>
+<h3 class="font-headline text-xl font-semibold text-on-surface group-hover:text-primary transition-colors">Cognitive Science Paper</h3>
+<p class="text-sm text-on-surface-variant mt-1">Understanding Neuroplasticity</p>
+</div>
+<div class="mt-auto pt-4">
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs font-medium text-on-surface-variant">45% Completed</span>
+</div>
+<div class="w-full h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 45%"></div>
+</div>
+</div>
+<button class="mt-4 py-3 px-4 bg-surface-container-highest text-primary font-medium rounded-xl hover:bg-primary hover:text-on-primary transition-all duration-300 flex items-center justify-center gap-2">
+<span>Continue Reading</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+<!-- Document Card 2 -->
+<div class="group relative bg-surface-container hover:bg-surface-container-high transition-all duration-300 rounded-xl overflow-hidden p-5 flex flex-col gap-4 border border-outline-variant/10">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-secondary/10 rounded-xl">
+<span class="material-symbols-outlined text-secondary">book_5</span>
+</div>
+<span class="text-[10px] font-bold tracking-widest uppercase text-on-surface-variant bg-surface-container-highest px-2 py-1 rounded">Book</span>
+</div>
+<div>
+<h3 class="font-headline text-xl font-semibold text-on-surface group-hover:text-secondary transition-colors">The Body Keeps the Score</h3>
+<p class="text-sm text-on-surface-variant mt-1">Bessel van der Kolk</p>
+</div>
+<div class="mt-auto pt-4">
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs font-medium text-on-surface-variant">12% Completed</span>
+</div>
+<div class="w-full h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 12%"></div>
+</div>
+</div>
+<button class="mt-4 py-3 px-4 bg-surface-container-highest text-secondary font-medium rounded-xl hover:bg-secondary hover:text-on-secondary transition-all duration-300 flex items-center justify-center gap-2">
+<span>Continue Reading</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+<!-- Upload Placeholder/Empty State Logic -->
+<div class="relative bg-surface-container-low border-2 border-dashed border-outline-variant/30 rounded-xl flex flex-col items-center justify-center p-8 min-h-[300px] text-center group hover:border-primary/50 transition-colors">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-outline text-3xl">add_circle</span>
+</div>
+<p class="text-on-surface font-medium">Add New Resource</p>
+<p class="text-sm text-on-surface-variant mt-2 max-w-[200px]">Tap the button below or drag a file here to expand your library.</p>
+</div>
+</div>
+<!-- Secondary Empty State Visualization (Hidden by default but ready) -->
+<!-- 
+        <div class="flex flex-col items-center justify-center py-24 text-center">
+            <span class="material-symbols-outlined text-6xl text-outline-variant mb-6">draft_orders</span>
+            <h3 class="text-2xl font-headline font-bold text-on-surface">No documents yet.</h3>
+            <p class="text-on-surface-variant mt-2">Tap the button below to add your first reading.</p>
+        </div> 
+        -->
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-28 right-6 w-16 h-16 bg-primary text-on-primary rounded-2xl shadow-[0_8px_32px_rgba(185,195,255,0.3)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-300 z-50">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#1b202b]/80 backdrop-blur-xl border-t border-[#424857]/20 shadow-[0_-4px_20px_rgba(185,195,255,0.05)] rounded-t-[24px]">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Home</span>
+</a>
+<!-- Library (Active) -->
+<a class="flex flex-col items-center justify-center bg-[#b9c3ff]/10 text-[#b9c3ff] rounded-2xl px-3 py-1.5 scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">book_5</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Library</span>
+</a>
+<!-- Reader -->
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">chrome_reader_mode</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Reader</span>
+</a>
+<!-- Anchors -->
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">anchor</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Anchors</span>
+</a>
+<!-- Profile -->
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Profile</span>
+</a>
+</nav>
+</body></html>

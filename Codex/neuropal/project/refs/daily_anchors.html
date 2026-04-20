@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NeuroPal — Daily Anchors</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"on-secondary-container": "#00566b", background: "#131313", "secondary-fixed": "#b7eaff", "on-primary-fixed": "#001947", "outline-variant": "#434653", "on-secondary-fixed-variant": "#004e60", primary: "#b1c5ff", "surface-bright": "#393939", "on-tertiary-container": "#ddc5ff", "tertiary-fixed-dim": "#d6baff", "tertiary-fixed": "#ecdcff", "error-dim": "#b95463", "on-background": "#e4e2e1", "tertiary-container": "#722ccf", "on-primary-container": "#beceff", "secondary-fixed-dim": "#4cd6ff", "surface-container-highest": "#353535", "primary-fixed-dim": "#b1c5ff", "on-error": "#690005", "inverse-on-surface": "#303030", "secondary-container": "#14d1ff", "on-secondary": "#003543", "error-container": "#93000a", "on-surface-variant": "#c3c6d6", "on-secondary-fixed": "#001f28", "surface-tint": "#b1c5ff", "on-primary": "#002c71", "surface-variant": "#353535", "on-tertiary": "#430089", "inverse-surface": "#e4e2e1", "surface-dim": "#131313", "primary-dim": "#a8b5fd", "surface-container": "#1f2020", "on-tertiary-fixed": "#280057", "inverse-primary": "#1357c9", "primary-container": "#0051c3", surface: "#131313", outline: "#8d909f", error: "#ffb4ab", "on-error-container": "#ffdad6", "surface-container-lowest": "#0e0e0e", "primary-fixed": "#dae2ff", "on-primary-fixed-variant": "#00419f", "tertiary-dim": "#b3bcef", secondary: "#a6e6ff", "on-surface": "#e4e2e1", "surface-container-high": "#2a2a2a", "secondary-dim": "#0faebe", "on-tertiary-fixed-variant": "#5f07bc", "surface-container-low": "#1b1c1c", tertiary: "#d6baff"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, fontFamily: {headline: ["Space Grotesk"], body: ["Inter"], label: ["Inter"], display: "Space Grotesk"}}}};</script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .headline-font { font-family: 'Space Grotesk', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-[#10131a] docked full-width top-0 flex justify-between items-center w-full px-6 py-4 sticky z-50">
+<div class="flex items-center gap-4">
+<button class="text-[#b9c3ff] hover:bg-[#1b202b] transition-colors duration-300 p-2 rounded-full scale-95 transition-transform duration-300 ease-in-out">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-[#b9c3ff]">NeuroPal</h1>
+</div>
+<div class="flex items-center">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20 hover:bg-[#1b202b] transition-colors duration-300 cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="close-up portrait of a calm person with soft lighting on a dark background for profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3nGSJytkKO1CeD1QCIkv_TMwPa6TIrTUpd_ras0QgIX5WwwyjL_W0horu7YD_0GsU3jL5eB-s89RHSK_r1cyO6Ui6AB4atnlu-D2wnVdxTYvkXSV3HRT_dhYSgrCYF-5xcfwgXh3MEJwZOq22Pvw-97fz3wOu03pXhLQXwO-rwWc3UcuW0ecqY7IMB4bsgAFu5mYuuO2-As0i2MkPyroODJrlTia8CWGmKos3AA74awvNE9shPL70lg29NlDh49Gd9FnJA8Z3i-M"/>
+</div>
+</div>
+</header>
+<main class="max-w-xl mx-auto px-6 pt-12">
+<!-- Focus Anchor Progress Bar -->
+<div class="w-full h-1.5 bg-surface-container rounded-full mb-10 overflow-hidden">
+<div class="h-full w-1/3 bg-gradient-to-r from-secondary to-on-secondary-container"></div>
+</div>
+<section class="space-y-2 mb-12">
+<h2 class="headline-font text-4xl font-bold tracking-tight text-on-surface">Daily Anchors</h2>
+<p class="text-on-surface-variant font-light">SCAFFOLD Framework • Thursday, Oct 24</p>
+</section>
+<!-- Vertical Timeline Shell -->
+<div class="relative">
+<!-- Continuous Timeline Line -->
+<div class="absolute left-6 top-0 bottom-0 w-px bg-outline-variant/30"></div>
+<div class="space-y-16 relative">
+<!-- Completed Anchor: Morning Coffee -->
+<div class="flex gap-8 group">
+<div class="relative z-10">
+<div class="w-12 h-12 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary shadow-[0_0_15px_rgba(185,195,255,0.1)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="flex-1 pt-1">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-semibold text-xl text-on-surface/50 line-through decoration-1">Morning Coffee</h3>
+<span class="text-sm font-medium text-primary/60 bg-primary/5 px-2 py-0.5 rounded-lg">08:15 AM</span>
+</div>
+<p class="text-on-surface-variant text-sm">Status: Completed</p>
+</div>
+</div>
+<!-- Next Anchor: Lunch Break -->
+<div class="flex gap-8 group">
+<div class="relative z-10">
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-secondary-fixed shadow-[0_0_20px_rgba(15,174,190,0.15)] ring-4 ring-background">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lunch_dining</span>
+</div>
+<!-- Current Time Indicator -->
+<div class="absolute -top-16 left-6 h-16 w-px border-l-2 border-dashed border-secondary/40"></div>
+</div>
+<div class="flex-1 pt-1">
+<div class="bg-surface-container-high rounded-2xl p-6 border border-secondary/20 shadow-xl">
+<div class="flex justify-between items-start mb-3">
+<div>
+<span class="text-[10px] uppercase tracking-widest text-secondary font-bold mb-1 block">Active Now</span>
+<h3 class="font-bold text-2xl text-on-surface">Lunch Break</h3>
+</div>
+<span class="text-sm font-bold text-secondary-fixed bg-secondary/20 px-3 py-1 rounded-full">12:30 PM</span>
+</div>
+<p class="text-on-surface-variant text-sm mb-4">Reset cognitive load and hydrate. Step away from screens.</p>
+<button class="w-full bg-secondary text-on-secondary py-3 rounded-xl font-semibold hover:bg-secondary-dim transition-all active:scale-95">Complete Anchor</button>
+</div>
+</div>
+</div>
+<!-- Upcoming Anchor: Work Start -->
+<div class="flex gap-8 group opacity-60 hover:opacity-100 transition-opacity duration-300">
+<div class="relative z-10">
+<div class="w-12 h-12 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">work</span>
+</div>
+</div>
+<div class="flex-1 pt-1">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-semibold text-xl text-on-surface">Work Start</h3>
+<span class="text-sm font-medium text-on-surface-variant">02:00 PM</span>
+</div>
+<p class="text-on-surface-variant text-sm">Status: Upcoming</p>
+</div>
+</div>
+<!-- Placeholder for future spacing -->
+<div class="h-12"></div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button (FAB) -->
+<div class="fixed bottom-28 right-6 z-40">
+<button class="w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_32px_rgba(185,195,255,0.3)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#1b202b]/80 backdrop-blur-xl border-t border-[#424857]/20 shadow-[0_-4px_20px_rgba(185,195,255,0.05)] rounded-t-[24px]">
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">book_5</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Library</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">chrome_reader_mode</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Reader</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-[#b9c3ff]/10 text-[#b9c3ff] rounded-2xl px-3 py-1.5 scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">anchor</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Anchors</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] scale-90 duration-300" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Profile</span>
+</a>
+</nav>
+</body></html>
