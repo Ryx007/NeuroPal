@@ -1,5 +1,14 @@
 import "./global.css";
 
+// Buffer polyfill — pairs with the resolver alias in metro.config.js.
+// Needed by react-native-svg@^15.10's utils/fetchData.ts, which does
+// `import { Buffer } from 'buffer'`. This must run before any
+// react-native-svg import. See docs/buffer-fix.md for the full story.
+import { Buffer } from "buffer";
+if (typeof global.Buffer === "undefined") {
+  global.Buffer = Buffer;
+}
+
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,

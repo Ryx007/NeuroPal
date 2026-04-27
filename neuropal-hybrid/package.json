@@ -1,5 +1,5 @@
 {
-  "name": "neuropal",
+  "name": "neuropal-hybrid",
   "version": "0.1.0",
   "private": true,
   "main": "expo-router/entry",
@@ -39,13 +39,15 @@
     "@shopify/flash-list": "~2.0.0",
     "@react-native-community/slider": "~5.0.0",
     "buffer": "^6.0.3",
+    "@reduxjs/toolkit": "^2.6.0",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
     "@expo-google-fonts/inter": "^0.3.0",
     "@expo-google-fonts/space-grotesk": "^0.3.0",
     "@expo-google-fonts/jetbrains-mono": "^0.3.0",
     "@expo-google-fonts/atkinson-hyperlegible": "^0.3.0",
     "@expo-google-fonts/lora": "^0.3.0",
     "@expo-google-fonts/fraunces": "^0.3.0",
-    "zustand": "^5.0.0",
     "nativewind": "^4.1.23",
     "react-native-css-interop": "^0.1.22",
     "react-native-markdown-display": "^7.0.2"
