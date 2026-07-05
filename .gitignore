@@ -50,3 +50,6 @@ neuropal-expo-app/ios/
 
 # Corrupt pre-pivot git dir (kept locally only)
 .git.corrupt.bak/
+
+# Machine-local Claude Code settings
+.claude/settings.local.json
