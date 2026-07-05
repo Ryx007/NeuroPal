@@ -7,7 +7,7 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-07-05 (MacBook Pro session — Phase 0/1 code complete)_
+_Last updated: 2026-07-05 (MacBook Pro session — Phase 0/1 code complete, reviewed, pushed as `4e3fbf4`)_
 
 ---
 
@@ -36,7 +36,7 @@ Ollama), all other devices are LAN clients. See
 | Phase | State | Notes |
 |---|---|---|
 | **0 — Local infra** | **CODE DONE — needs run on Mini** | `docker-compose.yml` written (Mongo 8 + Qdrant, named volumes, localhost-bound). `.env` template + real `.env` prepared. Ollama steps documented. **Acceptance test NOT yet run** (this MacBook has no Docker/Ollama; must run on the Mini). |
-| **1 — Backend + AI layer** | **CODE DONE — needs acceptance on Mini** | `services/aiProvider.js` implemented (gemini/ollama/anthropic). `query.js` refactored onto it. `LOCAL_MODE` added to `middleware/auth.js`. Smoke-tested: full require graph, provider selection, boot order. **Live acceptance (real PDF → ready → grounded answer) pending on the Mini.** |
+| **1 — Backend + AI layer** | **CODE DONE + REVIEWED — needs acceptance on Mini** | `services/aiProvider.js` (gemini/ollama/anthropic), `query.js` refactored onto it, `LOCAL_MODE` in `middleware/auth.js`. Smoke-tested (require graph, provider selection, boot order). 3-lens adversarial review found+fixed 3 major bugs: binary-as-utf8 fallback context, upload filename collision, citation misattribution (now `{chunk, quote}` indexed binding). **Live acceptance (real PDF → ready → grounded answer) pending on the Mini.** |
 | **2 — Native frontend (S24)** | **NOT STARTED** | `network.js` still has the silent mock fallback (must become opt-in + surface errors). Upload flow + status polling not yet wired to the real backend. Reader thunk not wired to `/query`. |
 | **3 — Web target (Macs)** | **NOT STARTED** | Web Speech API TTS path not implemented; `expo start --web` unverified. |
 | **4 — Exam-prep endpoints** | **NOT STARTED** | summarize / quiz / cheatsheet / explain — all call `aiProvider.generateAnswer` with different system prompts. |
