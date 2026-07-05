@@ -22,10 +22,13 @@ const axios = require('axios');
 const DEFAULT_SYSTEM = [
     'You are a research assistant.',
     "Answer the user's question STRICTLY based on the context below.",
+    'The context is a list of numbered chunks labeled like "[Chunk 3, p.7]".',
     'If the answer is not in the context, say so plainly — do not invent.',
     'Use plain, accessible language.',
     'Respond as VALID JSON ONLY, no prose outside the JSON object:',
-    '{"answer": "...", "citations": ["short verbatim passage", "..."]}',
+    '{"answer": "...", "citations": [{"chunk": 3, "quote": "short verbatim passage from that chunk"}]}',
+    'Cite ONLY the chunks you actually used for the answer.',
+    'If the answer is not in the context, return an empty citations array.',
 ].join(' ');
 
 function activeProvider(override) {
@@ -71,12 +74,14 @@ async function generateAnswer({
     }
 
     const parsed = tolerantParse(result.raw);
-    const verbatim = Array.isArray(parsed.citations) ? parsed.citations : [];
+    const rawCitations = Array.isArray(parsed.citations) ? parsed.citations : [];
+    const citations = mapCitations(contextChunks, rawCitations);
 
     return {
         answer: String(parsed.answer || ''),
-        citations: mapCitations(contextChunks, verbatim),
-        verbatim,
+        citations,
+        // Plain-string quotes for clients that just render text.
+        verbatim: citations.map((c) => c.excerpt).filter(Boolean),
         model: result.model,
         tokens: result.tokens,
         provider: chosen,
@@ -244,16 +249,63 @@ function tolerantParse(raw) {
     }
 }
 
-// Build the structured ChatMessage citations from the retrieved chunks.
-// In fallback (raw-file) mode there are no chunks → empty array.
-function mapCitations(contextChunks, verbatim) {
-    if (!Array.isArray(contextChunks)) return [];
-    return contextChunks.map((c, i) => ({
-        chunkId: c._id,
-        page: c.anchor?.page,
-        sectionHeading: c.sectionHeading,
-        excerpt: (verbatim[i] || c.text || '').slice(0, 400),
-    }));
+// Bind the model's citations to the chunks they actually came from.
+//
+// Preferred shape (what DEFAULT_SYSTEM asks for): {chunk: <1-based index
+// into the context labels>, quote: "..."} — an explicit binding.
+// Tolerated legacy shape: bare quote strings — bound by substring search
+// against the chunk texts; unmatched quotes are kept excerpt-only rather
+// than misattributed to an arbitrary chunk.
+//
+// Only chunks the model actually cited are returned (a "not in the
+// context" answer correctly yields []). In fallback (raw-file) mode there
+// are no chunks → excerpt-only citations.
+function mapCitations(contextChunks, rawCitations) {
+    const chunks = Array.isArray(contextChunks) ? contextChunks : [];
+    const out = [];
+
+    for (const item of Array.isArray(rawCitations) ? rawCitations : []) {
+        if (item && typeof item === 'object') {
+            const quote = String(item.quote || item.excerpt || '').slice(0, 400);
+            const idx = Number(item.chunk) - 1; // context labels are 1-based
+            const c = Number.isInteger(idx) ? chunks[idx] : undefined;
+            if (c) {
+                out.push({
+                    chunkId: c._id,
+                    page: c.anchor?.page,
+                    sectionHeading: c.sectionHeading,
+                    excerpt: quote || (c.text || '').slice(0, 400),
+                });
+            } else if (quote) {
+                out.push({ excerpt: quote });
+            }
+            continue;
+        }
+
+        if (typeof item === 'string' && item.trim()) {
+            const quote = item.slice(0, 400);
+            const needle = normalise(quote).slice(0, 80);
+            const c = needle
+                ? chunks.find((ch) => normalise(ch.text).includes(needle))
+                : undefined;
+            if (c) {
+                out.push({
+                    chunkId: c._id,
+                    page: c.anchor?.page,
+                    sectionHeading: c.sectionHeading,
+                    excerpt: quote,
+                });
+            } else {
+                out.push({ excerpt: quote });
+            }
+        }
+    }
+
+    return out;
+}
+
+function normalise(s) {
+    return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 module.exports = { generateAnswer, activeProvider, DEFAULT_SYSTEM };

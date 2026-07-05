@@ -1,5 +1,4 @@
 const path = require('path');
-const fs = require('fs/promises');
 const { Router } = require('express');
 
 const { Document, DocumentChunk, ChatMessage } = require('../models');
@@ -7,6 +6,7 @@ const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { getQdrant } = require('../db/qdrant');
 const { embedText, getModelName } = require('../services/embedder');
+const { extractText } = require('../services/textExtractor');
 const { generateAnswer, activeProvider } = require('../services/aiProvider');
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
@@ -109,12 +109,23 @@ router.post(
             }
             const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
             try {
-                rawContext = await fs.readFile(absPath, 'utf-8');
+                // Route through the SAME extractor the ingest pipeline uses.
+                // The file on disk is the RAW upload (PDF/EPUB/DOCX bytes) —
+                // a plain utf-8 read would ship mojibake to the model as
+                // "context". extractText handles pdf via pdf-parse, txt
+                // natively, epub/docx best-effort.
+                const extracted = await extractText(absPath, doc.type);
+                rawContext = extracted.text || '';
             } catch (e) {
                 if (e.code === 'ENOENT') {
                     return res.status(404).json({ error: 'file not on disk' });
                 }
                 throw e;
+            }
+            if (!rawContext.trim()) {
+                return res.status(503).json({
+                    error: 'document has no extractable text yet — try again after ingest completes',
+                });
             }
             if (rawContext.length > MAX_FALLBACK_CHARS) {
                 rawContext = rawContext.slice(0, MAX_FALLBACK_CHARS);

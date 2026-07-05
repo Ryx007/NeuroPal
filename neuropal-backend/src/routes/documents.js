@@ -33,8 +33,16 @@ const upload = multer({
             }
         },
         filename: (req, file, cb) => {
-            const safe = file.originalname.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200);
-            cb(null, safe);
+            // Timestamp+random prefix guarantees uniqueness — without it a
+            // second upload named "notes.pdf" silently overwrites the first
+            // document's bytes on disk while its Document row still points
+            // at the shared path (raw-text fallback + reingest would then
+            // serve/ingest the WRONG file's content).
+            const safe = file.originalname
+                .replace(/[^A-Za-z0-9._-]/g, '_')
+                .slice(0, 180);
+            const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            cb(null, `${unique}-${safe}`);
         },
     }),
     limits: {
