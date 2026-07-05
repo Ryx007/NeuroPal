@@ -1,0 +1,58 @@
+xIt appears that the context or project details were not included in your message. 
+
+Please provide the notes, meeting transcripts, or rough ideas for your project. Once you provide the context, I will transform it into a professional **Product Requirements Document (PRD)** or **Project Brief**.
+
+To give you an idea of the quality you can expect, here is the professional structure I will use to organize your information:
+
+---
+
+# [Project Name]: Product Requirements Document (PRD)
+
+## 1. Executive Summary
+*   **Product Vision:** A high-level overview of what we are building and why.
+*   **Status:** (Draft/In-Review/Approved)
+*   **Project Lead:** [Name]
+
+## 2. Problem Statement
+*   What specific pain point are we solving for the user?
+*   What is the business impact of not solving this problem?
+
+## 3. Goals & Success Metrics (KPIs)
+*   **Primary Goal:** The main objective of this project.
+*   **Success Metrics:** How will we measure success? (e.g., Increase conversion by 10%, reduce churn by 5%).
+
+## 4. Target Audience / Personas
+*   Who is this for? (e.g., New users, Power users, Internal Admins).
+*   User needs and motivations.
+
+## 5. Functional Requirements (User Stories)
+| ID | User Story | Priority (P0/P1/P2) | Status |
+|----|------------|---------------------|--------|
+| 1.0| As a [persona], I want to [action] so that [value]. | P0 | Not Started |
+| 2.0| As a [persona], I want to [action] so that [value]. | P1 | Not Started |
+
+## 6. Non-Functional Requirements
+*   **Security:** (e.g., Data encryption, GDPR compliance).
+*   **Performance:** (e.g., Page load time < 2s).
+*   **Scalability:** (e.g., Support for 100k concurrent users).
+
+## 7. User Experience (UX) & Design
+*   **User Flow:** Description of the primary path the user takes.
+*   **Design Links:** (Placeholders for Figma/Sketch/Mocks).
+*   **Key UI Elements:** Specific requirements for the interface.
+
+## 8. Technical Constraints & Assumptions
+*   Dependencies on other teams or APIs.
+*   Assumptions made during the planning phase.
+
+## 9. Risks & Mitigations
+*   What could go wrong?
+*   How will we prevent or respond to it?
+
+## 10. Go-To-Market (GTM) & Timeline
+*   **Release Strategy:** (Beta, Phased Rollout, Full Launch).
+*   **Key Milestones:** Important dates for development, QA, and launch.
+
+---
+
+**Please paste your context below, and I will get to work!**

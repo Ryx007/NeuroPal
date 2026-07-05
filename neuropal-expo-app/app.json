@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "NeuroPal",
+    "slug": "neuropal",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "neuropal",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#131313",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.neuropal.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "NeuroPal uses your microphone only if you opt in to voice capture for notes. Never transmitted without consent.",
+        "NSSpeechRecognitionUsageDescription": "NeuroPal uses on-device speech recognition for dictation into notes and Q&A.",
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "package": "io.neuropal.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#131313"
+      },
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "backgroundColor": "#131313",
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "experiments": {
+      "reactCompiler": true
+    }
+  }
+}

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"on-secondary-container": "#00566b", background: "#131313", "secondary-fixed": "#b7eaff", "on-primary-fixed": "#001947", "outline-variant": "#434653", "on-secondary-fixed-variant": "#004e60", primary: "#b1c5ff", "surface-bright": "#393939", "on-tertiary-container": "#ddc5ff", "tertiary-fixed-dim": "#d6baff", "tertiary-fixed": "#ecdcff", "error-dim": "#b95463", "on-background": "#e4e2e1", "tertiary-container": "#722ccf", "on-primary-container": "#beceff", "secondary-fixed-dim": "#4cd6ff", "surface-container-highest": "#353535", "primary-fixed-dim": "#b1c5ff", "on-error": "#690005", "inverse-on-surface": "#303030", "secondary-container": "#14d1ff", "on-secondary": "#003543", "error-container": "#93000a", "on-surface-variant": "#c3c6d6", "on-secondary-fixed": "#001f28", "surface-tint": "#b1c5ff", "on-primary": "#002c71", "surface-variant": "#353535", "on-tertiary": "#430089", "inverse-surface": "#e4e2e1", "surface-dim": "#131313", "primary-dim": "#a8b5fd", "surface-container": "#1f2020", "on-tertiary-fixed": "#280057", "inverse-primary": "#1357c9", "primary-container": "#0051c3", surface: "#131313", outline: "#8d909f", error: "#ffb4ab", "on-error-container": "#ffdad6", "surface-container-lowest": "#0e0e0e", "primary-fixed": "#dae2ff", "on-primary-fixed-variant": "#00419f", "tertiary-dim": "#b3bcef", secondary: "#a6e6ff", "on-surface": "#e4e2e1", "surface-container-high": "#2a2a2a", "secondary-dim": "#0faebe", "on-tertiary-fixed-variant": "#5f07bc", "surface-container-low": "#1b1c1c", tertiary: "#d6baff"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, fontFamily: {headline: ["Space Grotesk"], body: ["Inter"], label: ["Inter"], display: "Space Grotesk"}}}};</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0c0e13;
+            color: #dfe5f8;
+            font-family: 'Lexend', sans-serif;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-[#0c0e13] sticky top-0 z-40">
+<div class="flex justify-between items-center w-full px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="p-2 hover:bg-[#1b202b] transition-colors duration-300 rounded-full cursor-pointer">
+<span class="material-symbols-outlined text-[#b9c3ff]">menu</span>
+</div>
+<h1 class="font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-[#b9c3ff]">NeuroPal</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20 scale-95 transition-transform duration-300 ease-in-out cursor-pointer">
+<img alt="User profile" data-alt="Close-up portrait of a friendly man with a warm smile, soft natural lighting, professional minimalist aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBndC1omZBTO1WxuMrgQzX_cyGM7eGfqJ6fRKFsbECIy0AIJmW0CpBU-enqbHFyUe7C08CTYyucrrHCKZeD1StY-s6pnRSrULt50ypdmBpoYbRy8Ah8jJHH0JmSfkj0_af7Yl6Km43o4_WM94mJFuyUpTB_8OCPVkE171RX-9v8b9FANSJydTdy5VEfYs1a-EhlIbWtwXRsm4behvkmgdCPPXYJreTJ5DHaUYRwW2wisazoEKUEKk-k2dJ5H5h44YHlgmIbuqZWmcI"/>
+</div>
+</div>
+</header>
+<main class="max-w-2xl mx-auto px-6 pt-8 space-y-10">
+<!-- Welcome Section -->
+<section class="space-y-2">
+<h2 class="font-headline text-4xl font-bold text-on-surface">Hello, Alex</h2>
+<p class="font-body text-on-surface-variant text-lg">One step at a time today.</p>
+</section>
+<!-- State Check-In Widget -->
+<section class="bg-surface-container-low rounded-[2rem] p-6 space-y-6">
+<h3 class="font-headline text-xl font-medium text-on-surface-variant px-2">How are you feeling right now?</h3>
+<div class="grid grid-cols-1 gap-4">
+<button class="flex items-center justify-between p-5 bg-surface-container rounded-2xl border border-secondary/10 hover:bg-secondary/5 transition-all group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-3xl">sentiment_satisfied</span>
+</div>
+<span class="font-body text-lg font-medium text-on-surface">I feel okay</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
+</button>
+<button class="flex items-center justify-between p-5 bg-surface-container rounded-2xl border border-tertiary/10 hover:bg-tertiary/5 transition-all group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-tertiary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary text-3xl">sentiment_neutral</span>
+</div>
+<span class="font-body text-lg font-medium text-on-surface">Feeling a bit off</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
+</button>
+<button class="flex items-center justify-between p-5 bg-surface-container rounded-2xl border border-error-dim/10 hover:bg-error-dim/5 transition-all group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-error-dim/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-error-dim text-3xl">sentiment_very_dissatisfied</span>
+</div>
+<span class="font-body text-lg font-medium text-on-surface">Help, I'm overwhelmed</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
+</button>
+</div>
+</section>
+<!-- Minimum Viable Day Tasks -->
+<section class="space-y-6">
+<div class="flex items-center justify-between px-2">
+<h3 class="font-headline text-xl font-medium text-on-surface-variant">Minimum Viable Day</h3>
+<span class="text-xs font-label uppercase tracking-widest text-primary/60">3 tasks remaining</span>
+</div>
+<div class="space-y-4">
+<!-- Task 1 -->
+<div class="bg-surface-container-high rounded-[1.5rem] p-1">
+<label class="flex items-center gap-4 p-5 cursor-pointer">
+<div class="relative flex items-center">
+<input class="peer appearance-none w-10 h-10 rounded-xl border-2 border-primary/30 checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-primary-container opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body text-xl font-medium text-on-surface peer-checked:line-through peer-checked:text-on-surface-variant">Stay Hydrated</span>
+<span class="text-sm text-on-surface-variant">2 glasses left</span>
+</div>
+</label>
+</div>
+<!-- Task 2 -->
+<div class="bg-surface-container-high rounded-[1.5rem] p-1">
+<label class="flex items-center gap-4 p-5 cursor-pointer">
+<div class="relative flex items-center">
+<input class="peer appearance-none w-10 h-10 rounded-xl border-2 border-primary/30 checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-primary-container opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body text-xl font-medium text-on-surface">Take Meds</span>
+<span class="text-sm text-on-surface-variant">Morning dosage</span>
+</div>
+</label>
+</div>
+<!-- Task 3 -->
+<div class="bg-surface-container-high rounded-[1.5rem] p-1">
+<label class="flex items-center gap-4 p-5 cursor-pointer">
+<div class="relative flex items-center">
+<input class="peer appearance-none w-10 h-10 rounded-xl border-2 border-primary/30 checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-primary-container opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body text-xl font-medium text-on-surface">Walk</span>
+<span class="text-sm text-on-surface-variant">10 minutes outside</span>
+</div>
+</label>
+</div>
+</div>
+</section>
+<!-- Next Scheduled Anchor -->
+<section class="relative overflow-hidden rounded-[2rem] bg-primary-container/30 border border-primary/10 p-8 flex items-center justify-between">
+<div class="relative z-10 space-y-2">
+<span class="font-label text-sm uppercase tracking-[0.2em] text-primary/70">Next Anchor</span>
+<h4 class="font-headline text-2xl font-bold text-on-primary-container">Lunch at 1:00 PM</h4>
+<div class="flex items-center gap-2 text-on-primary-container/70">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-sm">In 45 minutes</span>
+</div>
+</div>
+<div class="relative z-10 w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">anchor</span>
+</div>
+<!-- Decorative Glow -->
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-secondary/10 blur-[60px] rounded-full"></div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#1b202b]/80 backdrop-blur-xl border-t border-[#424857]/20 shadow-[0_-4px_20px_rgba(185,195,255,0.05)] rounded-t-[24px]">
+<a class="flex flex-col items-center justify-center bg-[#b9c3ff]/10 text-[#b9c3ff] rounded-2xl px-3 py-1.5 transition-transform duration-300 scale-90" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] transition-colors duration-300" href="#">
+<span class="material-symbols-outlined">book_5</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Library</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] transition-colors duration-300" href="#">
+<span class="material-symbols-outlined">chrome_reader_mode</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Reader</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] transition-colors duration-300" href="#">
+<span class="material-symbols-outlined">anchor</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Anchors</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#dfe5f8]/60 hover:text-[#b9c3ff] transition-colors duration-300" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['Lexend'] text-[12px] font-medium tracking-wide">Profile</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,49 @@
+# NeuroPal — local infrastructure (Brief §2.2)
+# MongoDB 8 + Qdrant, persisted to named volumes, bound to localhost only.
+#
+#   Start:   docker compose up -d        (run from neuropal-backend/)
+#   Status:  docker compose ps
+#   Logs:    docker compose logs -f
+#   Stop:    docker compose down         (data survives)
+#   Wipe:    docker compose down -v       (deletes the volumes — fresh DB)
+#
+# Compose reads variable values from the sibling `.env` file. You must set
+# MONGO_ROOT_USER and MONGO_ROOT_PASSWORD there (see .env.example). They must
+# match the credentials embedded in MONGODB_URI so the Node app can connect.
+#
+# Note: only the Node backend (same host) talks to these. Phones/laptops never
+# reach Mongo/Qdrant directly — they only hit the Express API on :4000. So
+# binding to 127.0.0.1 is correct and keeps the DBs off the LAN.
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: neuropal-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: neuropal
+    volumes:
+      - neuropal-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: neuropal-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"   # REST API
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - neuropal-qdrant-data:/qdrant/storage
+
+volumes:
+  neuropal-mongo-data:
+  neuropal-qdrant-data:

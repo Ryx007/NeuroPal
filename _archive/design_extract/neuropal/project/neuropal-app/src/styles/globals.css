@@ -1,0 +1,104 @@
+/* ─── NeuroPal global styles ─── */
+@import "tailwindcss";
+
+/* Clinical Visionary custom tokens exposed as CSS variables for both
+   MUI theme and raw Tailwind usage. The MUI theme in theme.js reads
+   these same hex values so everything stays in sync. */
+
+:root {
+  --np-surface:          #131313;
+  --np-surface-low:      #1b1c1c;
+  --np-surface-container:#1f2020;
+  --np-surface-high:     #2a2a2a;
+  --np-surface-highest:  #353535;
+  --np-surface-lowest:   #0e0e0e;
+  --np-on-surface:       #e4e2e1;
+  --np-on-surface-variant:#c3c6d6;
+  --np-outline:          #8d909f;
+  --np-outline-variant:  #434653;
+
+  --np-primary:          #b1c5ff;
+  --np-primary-container:#0051c3;
+  --np-on-primary:       #002c71;
+  --np-secondary:        #a6e6ff;
+  --np-secondary-dim:    #0faebe;
+  --np-tertiary:         #d6baff;
+  --np-tertiary-container:#722ccf;
+  --np-error:            #ffb4ab;
+  --np-error-dim:        #b95463;
+  --np-warn:             #ffd27a;
+
+  --np-font-display: 'Space Grotesk', system-ui, sans-serif;
+  --np-font-body:    'Inter', system-ui, sans-serif;
+  --np-font-mono:    'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--np-surface);
+  color: var(--np-on-surface);
+  font-family: var(--np-font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--np-outline-variant); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--np-outline); }
+
+/* Glassmorphism utility */
+.glass {
+  background: color-mix(in oklab, var(--np-surface-container) 70%, transparent);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  border: 1px solid color-mix(in oklab, var(--np-outline-variant) 15%, transparent);
+}
+
+/* Data-pulse animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+/* Karaoke word states */
+.word-read { color: var(--np-on-surface-variant); opacity: 0.55; transition: opacity 0.2s, color 0.2s; }
+.word-current {
+  background: color-mix(in oklab, var(--np-primary) 20%, transparent);
+  color: var(--np-on-surface);
+  box-shadow: 0 2px 0 var(--np-primary);
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+.word-pending { color: var(--np-on-surface); }
+
+/* Paragraph anchored (has margin note) */
+.para-anchored {
+  background: linear-gradient(90deg, color-mix(in oklab, var(--np-primary) 6%, transparent) 0%, transparent 60%);
+  border-left: 2px solid color-mix(in oklab, var(--np-primary) 60%, transparent);
+  padding-left: 14px;
+  margin-left: -16px;
+  border-radius: 2px;
+}
+
+/* EQ bars for TTS */
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* Fade up */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.fade-up { animation: fadeUp 0.4s ease both; }
+
+/* Focus ring */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--np-primary); outline-offset: 2px; border-radius: 6px; }
