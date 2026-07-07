@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Speech from "expo-speech";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Modal,
@@ -15,15 +15,18 @@ import {
 import Svg, { Circle, Line } from "react-native-svg";
 
 import { GlassPanel, withAlpha } from "../components/primitives";
+import { USE_MOCK } from "../services/network";
 import { appStore } from "../store";
 import {
   selectDocumentById,
+  selectReaderDoc,
   selectReaderMessages,
   selectReaderPlayback,
   selectUiState,
 } from "../store/selectors";
 import {
   advanceReader,
+  fetchReaderDocument,
   pauseReader,
   playReader,
   requestReaderAnswer,
@@ -32,6 +35,10 @@ import {
 } from "../store/slices/readerSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
+
+// Stable fallback so the words/ranges memo doesn't recompute when there is
+// simply no content.
+const EMPTY_SECTIONS = [];
 
 export function ReaderScreen() {
   const route = useRoute();
@@ -46,7 +53,45 @@ export function ReaderScreen() {
   const { readerLayout, voice, wpm } = useSelector(selectUiState);
   const playback = useSelector(selectReaderPlayback);
   const chat = useSelector(selectReaderMessages);
-  const activeDocument =
+  const readerDoc = useSelector(selectReaderDoc);
+
+  // Backend documents carry no `sections` (mock ones do) — pull the ingested
+  // text from GET /documents/:id/text and render that instead. Key off the
+  // resolved document (the tab-bar route has no id param and falls back to
+  // the first library doc). Gates:
+  //  - only fetch once ingest is `ready` — before that /text serves the raw
+  //    on-disk file, which for a PDF is binary mojibake that would then be
+  //    cached (and spoken!) for the rest of the session. The library's
+  //    ingest poll updates `document.status` live, so the fetch fires on
+  //    its own the moment the doc flips to ready.
+  //  - never fetch in mock mode (mock docs without sections stay empty).
+  //  - the docId guard stops a rejected fetch from retrying in a loop.
+  const targetId = document?.id;
+  const status = document?.status;
+  const ingesting =
+    status === "pending" ||
+    status === "parsing" ||
+    status === "chunking" ||
+    status === "embedding";
+  const needsText =
+    Boolean(targetId) &&
+    !document.sections &&
+    !USE_MOCK &&
+    (status === "ready" || status === undefined);
+  useEffect(() => {
+    if (needsText && readerDoc.docId !== targetId) {
+      dispatch(fetchReaderDocument({ documentId: targetId }));
+    }
+  }, [needsText, readerDoc.docId, targetId, dispatch]);
+
+  const retryTextFetch = useCallback(() => {
+    if (targetId) dispatch(fetchReaderDocument({ documentId: targetId }));
+  }, [targetId, dispatch]);
+
+  const fetchedSections =
+    needsText && readerDoc.docId === targetId ? readerDoc.sections : null;
+
+  const baseDocument =
     document || {
       id: "doc-empty",
       title: "No document selected",
@@ -56,19 +101,42 @@ export function ReaderScreen() {
       pageCount: 0,
       sections: [],
     };
+  const sections = baseDocument.sections || fetchedSections || EMPTY_SECTIONS;
+  const activeDocument = { ...baseDocument, sections };
+
+  const textError = needsText && readerDoc.docId === targetId ? readerDoc.error : null;
+  const emptyNotice = !baseDocument.sections
+    ? ingesting
+      ? "This document is still being processed — the text will appear here as soon as it's ready."
+      : status === "failed"
+        ? `⚠ Ingest failed${document?.ingestError ? `: ${document.ingestError}` : ""}. Re-upload the file or reingest from the backend.`
+        : readerDoc.loading
+          ? "Loading document text…"
+          : textError
+            ? `⚠ ${textError}`
+            : USE_MOCK && document && !document.sections
+              ? "Mock mode: this sample document has no content."
+              : null
+    : null;
 
   const [askingId, setAskingId] = useState(null);
   const [citationOpen, setCitationOpen] = useState(false);
   const simTimerRef = useRef(null);
 
+  // Depends on `sections` (a stable reference from Redux/mock data), NOT the
+  // per-render activeDocument spread — otherwise this recomputes on every
+  // karaoke tick. Loop-push instead of spread-push: spreading a huge word
+  // array as arguments overflows the JS argument limit.
   const { words, ranges } = useMemo(() => {
     const nextWords = [];
     const nextRanges = [];
 
-    (activeDocument.sections || []).forEach((section) => {
+    sections.forEach((section) => {
       section.paragraphs.forEach((paragraph, index) => {
         const start = nextWords.length;
-        nextWords.push(...paragraph.split(/\s+/));
+        for (const word of paragraph.split(/\s+/)) {
+          nextWords.push(word);
+        }
         nextRanges.push({
           pid: `${section.id}-${index}`,
           start,
@@ -78,7 +146,7 @@ export function ReaderScreen() {
     });
 
     return { words: nextWords, ranges: nextRanges };
-  }, [activeDocument]);
+  }, [sections]);
 
   useEffect(() => {
     dispatch(resetReader());
@@ -131,6 +199,9 @@ export function ReaderScreen() {
     playback.totalWords === 0 ? 0 : playback.wordIndex / playback.totalWords;
 
   function askAboutParagraph(paragraphId, question, excerpt) {
+    // No real document open (empty library / placeholder) — nothing to
+    // query; the placeholder id would just 400 on the backend.
+    if (!document) return;
     dispatch(
       requestReaderAnswer({
         documentId: activeDocument.id,
@@ -170,6 +241,8 @@ export function ReaderScreen() {
           ranges={ranges}
           chat={chat}
           askingId={askingId}
+          emptyNotice={emptyNotice}
+          onRetryText={textError ? retryTextFetch : null}
           layout={readerLayout}
           readerFontFamily={readerFontFamily}
           readerFontSize={readerFontSize}
@@ -306,6 +379,8 @@ function ReaderBody({
   ranges,
   chat,
   askingId,
+  emptyNotice,
+  onRetryText,
   layout,
   readerFontFamily,
   readerFontSize,
@@ -329,6 +404,48 @@ function ReaderBody({
       showsVerticalScrollIndicator={false}
     >
       <View style={{ maxWidth, width: "100%" }}>
+        {!document.sections?.length && emptyNotice ? (
+          <View style={{ marginTop: 28 }}>
+            <Text
+              accessibilityRole="alert"
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "Inter_400Regular",
+                fontSize: 15,
+                lineHeight: 22,
+              }}
+            >
+              {emptyNotice}
+            </Text>
+            {onRetryText ? (
+              <Pressable
+                onPress={onRetryText}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading the document text"
+                style={{
+                  marginTop: 14,
+                  alignSelf: "flex-start",
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  backgroundColor: withAlpha(palette.accent, 0.14),
+                  borderWidth: 1,
+                  borderColor: withAlpha(palette.accent, 0.4),
+                }}
+              >
+                <Text
+                  style={{
+                    color: palette.accent,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 14,
+                  }}
+                >
+                  Retry
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         {(document.sections || []).map((section) => (
           <View key={section.id}>
             <Text
@@ -377,6 +494,7 @@ function ReaderBody({
                     <ParagraphText
                       text={paragraph}
                       firstWordIndex={range.start}
+                      wordCount={range.end - range.start}
                       currentWordIndex={currentWordIndex}
                       fontFamily={readerFontFamily}
                       fontSize={readerFontSize}
@@ -399,7 +517,31 @@ function ReaderBody({
   );
 }
 
-function ParagraphText({
+// A real paper is thousands of words across hundreds of paragraphs; without
+// memoisation every word <Text> re-renders on every karaoke tick. Only the
+// cursor's position RELATIVE to this paragraph matters: clamp it to
+// [-1, wordCount] and skip the re-render when that value hasn't moved.
+function paragraphHighlightEqual(prev, next) {
+  if (
+    prev.text !== next.text ||
+    prev.firstWordIndex !== next.firstWordIndex ||
+    prev.wordCount !== next.wordCount ||
+    prev.fontFamily !== next.fontFamily ||
+    prev.fontSize !== next.fontSize ||
+    prev.lineHeight !== next.lineHeight ||
+    prev.letterSpacing !== next.letterSpacing
+  ) {
+    return false;
+  }
+  const clamp = (cursor, first, count) =>
+    Math.max(-1, Math.min(count, cursor - first));
+  return (
+    clamp(prev.currentWordIndex, prev.firstWordIndex, prev.wordCount) ===
+    clamp(next.currentWordIndex, next.firstWordIndex, next.wordCount)
+  );
+}
+
+const ParagraphText = memo(function ParagraphText({
   text,
   firstWordIndex,
   currentWordIndex,
@@ -447,7 +589,7 @@ function ParagraphText({
       })}
     </Text>
   );
-}
+}, paragraphHighlightEqual);
 
 function MarginNote({ note }) {
   const palette = usePalette();

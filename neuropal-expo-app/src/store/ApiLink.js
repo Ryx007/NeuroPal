@@ -1,12 +1,17 @@
 // API endpoint constants — single source of truth for the backend URL.
-// Nginx on the server points `local.ryx007.science` at the Node API on
-// `localhost:4000`, with TLS terminated at the proxy.
 //
-// To swap environments (laptop LAN, staging, prod), change ONLY this file.
+// The host comes from EXPO_PUBLIC_API_BASE_URL (.env / .env.example) — the
+// Mac Mini's LAN address, e.g. http://192.168.3.169:4000. Expo inlines
+// EXPO_PUBLIC_* at bundle time, so restart `expo start` after changing it.
 
-const API_HOST = 'https://local.ryx007.science';
+const API_HOST = (process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/+$/, '');
 
-export const baseUrl = `${API_HOST}/api/`;
+// False when EXPO_PUBLIC_API_BASE_URL is missing — callers surface this as a
+// visible configuration error instead of silently falling back to mock data.
+export const apiConfigured = Boolean(API_HOST);
+export const apiHost = API_HOST;
+
+export const baseUrl = API_HOST ? `${API_HOST}/api/` : '';
 export const socketUrl = API_HOST;
 
 // Image / file serving — both ride on the same `/api/documents/:id/raw`

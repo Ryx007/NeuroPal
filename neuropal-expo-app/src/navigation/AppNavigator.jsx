@@ -9,11 +9,13 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 
 import { TweaksSheet } from "../components/TweaksSheet";
 import { DataPulse, GlassPanel, withAlpha } from "../components/primitives";
 import { useApiRequest } from "../store/ApiRequest";
 import { clearSession } from "../store/ApiLink";
+import { describeNetworkError, USE_MOCK } from "../services/network";
 import {
   hydrateUser,
   updateLogin,
@@ -234,18 +236,42 @@ function TabsChrome() {
 //   1. Call /api/auth/me with the persisted JWT (silent, no toast on 401)
 //   2. If it resolves → hydrate user into Redux + loggedIn=true
 //   3. If it 401s / 404s / no token  → clearSession + loggedIn=false
+//   4. If the backend never answered → loggedIn=false too, but keep the
+//      session and say so — landing on Login with no explanation is exactly
+//      the "built but disconnected" failure mode this build is removing.
 function useAuthBootstrap(loggedIn) {
   const dispatch = useDispatch();
   const { fetchData } = useApiRequest();
 
   const boot = useCallback(async () => {
-    const me = await fetchData("auth/me", { silent: true });
-    if (me && (me.id || me._id)) {
-      dispatch(hydrateUser(me));
-    } else {
-      await clearSession().catch(() => {});
-      dispatch(updateLogin(false));
+    // Mock mode is fully offline — skip the network probe entirely and log
+    // straight in as a fake user, otherwise mock mode dead-ends at Login.
+    if (USE_MOCK) {
+      dispatch(
+        hydrateUser({ id: "mock-user", name: "Mock", email: "mock@neuropal.app" })
+      );
+      return;
     }
+    try {
+      const me = await fetchData("auth/me", { silent: true, rethrow: true });
+      if (me && (me.id || me._id)) {
+        dispatch(hydrateUser(me));
+        return;
+      }
+      await clearSession().catch(() => {});
+    } catch (error) {
+      if (!error?.response) {
+        Toast.show({
+          type: "error",
+          text1: "Cannot reach the backend",
+          text2: describeNetworkError(error),
+          visibilityTime: 8000,
+        });
+      } else {
+        await clearSession().catch(() => {});
+      }
+    }
+    dispatch(updateLogin(false));
   }, [dispatch, fetchData]);
 
   useEffect(() => {

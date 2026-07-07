@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Pressable,
@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 
+import { describeNetworkError, USE_MOCK } from "../services/network";
+import { apiConfigured } from "../store/ApiLink";
 import { useApiRequest } from "../store/ApiRequest";
 import { selectDocuments } from "../store/selectors";
 import {
@@ -24,24 +26,23 @@ import { withAlpha } from "../components/primitives";
 // Backend → UI normalisation. Mongo gives us `_id` + ingest status; the
 // card renderer below reads `id`, `progress`, `subtitle`. One shared mapper
 // keeps the rest of the file unaware of the wire shape.
+const PROCESSING_STATUSES = ["pending", "parsing", "chunking", "embedding"];
+
 function normaliseDoc(d) {
   if (!d) return d;
   const status = d.status;
-  const processing =
-    status === "pending" ||
-    status === "parsing" ||
-    status === "chunking" ||
-    status === "embedding";
+  const processing = PROCESSING_STATUSES.includes(status);
   return {
     ...d,
     id: d.id || d._id,
+    type: d.type || "pdf",
     progress: typeof d.progress === "number" ? d.progress : 0,
     subtitle:
       d.subtitle ||
       (processing
         ? "Processing…"
         : status === "failed"
-          ? "Ingest failed"
+          ? `Ingest failed${d.ingestError ? `: ${d.ingestError}` : ""}`
           : ""),
   };
 }
@@ -53,21 +54,52 @@ export function LibraryScreen() {
   const { fetchData, uploadData } = useApiRequest();
   const documents = useSelector(selectDocuments);
   const [activeFilter, setActiveFilter] = useState(0);
+  const [connectionError, setConnectionError] = useState(
+    !apiConfigured && !USE_MOCK
+      ? "No backend configured — set EXPO_PUBLIC_API_BASE_URL in .env and restart expo start."
+      : null
+  );
   const { width } = useWindowDimensions();
   const cols = width > 900 ? 3 : width > 600 ? 2 : 1;
 
-  // Initial fetch + a refresh hook for after upload. Silent so a 401 on
-  // cold boot doesn't fire a toast (the navigator's gate handles it).
+  // Initial fetch + a refresh hook for after upload. Silent (no toast) but
+  // NOT invisible — failures land in the banner below instead. The in-flight
+  // guard keeps the 2.5s ingest poll from stacking requests on a slow or
+  // unreachable backend.
+  const refreshInFlight = useRef(false);
   const refresh = useCallback(async () => {
-    const data = await fetchData("documents", { silent: true });
-    if (Array.isArray(data)) {
-      dispatch(hydrateLibrary({ docs: data.map(normaliseDoc) }));
+    if (USE_MOCK || !apiConfigured || refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    try {
+      const data = await fetchData("documents", { silent: true, rethrow: true });
+      if (Array.isArray(data)) {
+        dispatch(hydrateLibrary({ docs: data.map(normaliseDoc) }));
+        setConnectionError(null);
+      }
+    } catch (error) {
+      setConnectionError(describeNetworkError(error));
+    } finally {
+      refreshInFlight.current = false;
     }
   }, [fetchData, dispatch]);
 
+  // Refresh every time the tab gains focus (fires on first mount too).
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
+  // While any document is still ingesting, poll so status/progress walk to
+  // `ready` on their own — no manual refresh.
+  const hasProcessing = documents.some((d) =>
+    PROCESSING_STATUSES.includes(d.status)
+  );
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!hasProcessing) return undefined;
+    const timer = setInterval(refresh, 2500);
+    return () => clearInterval(timer);
+  }, [hasProcessing, refresh]);
 
   async function pickDocument() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -141,6 +173,73 @@ export function LibraryScreen() {
         >
           Continue your cognitive journey where you left off.
         </Text>
+
+        {USE_MOCK ? (
+          <Text
+            accessibilityRole="alert"
+            style={{
+              color: palette.warn,
+              fontFamily: "Inter_500Medium",
+              fontSize: 12,
+              marginTop: 10,
+            }}
+          >
+            Mock mode — showing bundled sample data, not your backend.
+          </Text>
+        ) : null}
+
+        {connectionError ? (
+          <View
+            accessibilityRole="alert"
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              backgroundColor: withAlpha(palette.error, 0.12),
+              borderWidth: 1,
+              borderColor: withAlpha(palette.error, 0.4),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <MaterialIcons name="cloud-off" size={20} color={palette.error} />
+            <Text
+              style={{
+                flex: 1,
+                color: palette.error,
+                fontFamily: "Inter_500Medium",
+                fontSize: 13,
+                lineHeight: 18,
+              }}
+            >
+              {connectionError}
+            </Text>
+            {apiConfigured ? (
+              <Pressable
+                onPress={refresh}
+                accessibilityRole="button"
+                accessibilityLabel="Retry connecting to the backend"
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  backgroundColor: withAlpha(palette.error, 0.16),
+                }}
+              >
+                <Text
+                  style={{
+                    color: palette.error,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  Retry
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         <ScrollView
           horizontal

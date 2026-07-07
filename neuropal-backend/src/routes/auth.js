@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const { User } = require('../models');
+const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = Router();
@@ -84,6 +85,21 @@ router.post(
             token,
             user: publicUser(user),
         });
+    }),
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/auth/me
+// The client's cold-boot probe. In LOCAL_MODE the auth middleware injects
+// the fixed local user, so this resolves with no token at all; otherwise it
+// verifies the JWT like every other authed route.
+// returns: the public user object
+// ---------------------------------------------------------------------------
+router.get(
+    '/me',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        res.json(publicUser(req.user));
     }),
 );
 

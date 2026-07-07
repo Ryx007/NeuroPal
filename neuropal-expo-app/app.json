@@ -15,7 +15,9 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "NeuroPal uses your microphone only if you opt in to voice capture for notes. Never transmitted without consent.",
         "NSSpeechRecognitionUsageDescription": "NeuroPal uses on-device speech recognition for dictation into notes and Q&A.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -27,7 +29,8 @@
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
-      ]
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

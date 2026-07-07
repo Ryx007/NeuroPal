@@ -41,5 +41,15 @@ export const selectReaderPlayback = createSelector(
   })
 );
 
+export const selectReaderDoc = createSelector(
+  [selectReaderState],
+  (reader) => ({
+    docId: reader.docId,
+    sections: reader.docSections,
+    loading: reader.docLoading,
+    error: reader.docError,
+  })
+);
+
 export const selectDocumentById = (state, id) =>
   state.library.docs.find((doc) => doc.id === id) || state.library.docs[0];

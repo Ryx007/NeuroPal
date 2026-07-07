@@ -2,78 +2,24 @@
     "version": "0.0.1",
     "configurations": [
         {
-            "name": "neuropal-backend",
-            "runtimeExecutable": "npm",
+            "name": "expo-web",
+            "runtimeExecutable": "bash",
             "runtimeArgs": [
-                "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/neuropal-backend",
-                "run",
-                "dev"
-            ],
-            "port": 4000
-        },
-        {
-            "name": "neuropal-app",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/neuropal-app",
-                "start",
-                "--",
-                "--port",
-                "8081"
+                "-c",
+                "cd /Users/ryx/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start --web --port 8081"
             ],
             "port": 8081
         },
         {
-            "name": "neuropal-hybrid",
+            "name": "neuropal-backend",
             "runtimeExecutable": "npm",
             "runtimeArgs": [
                 "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/neuropal-hybrid",
-                "start",
-                "--",
-                "--port",
-                "8082"
-            ],
-            "port": 8082
-        },
-        {
-            "name": "neuropal-synxweb",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/neuropal-synxweb",
-                "start",
-                "--",
-                "--port",
-                "8083"
-            ],
-            "port": 8083
-        },
-        {
-            "name": "codex-expo",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/Codex/neuropal-expo-app",
-                "start",
-                "--",
-                "--port",
-                "8084"
-            ],
-            "port": 8084
-        },
-        {
-            "name": "codex-web",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "--prefix",
-                "/Users/ryx/Documents/Gitkraken/App Dev/NeuroPal/Codex/neuropal-app",
+                "/Users/ryx/Documents/Gitkraken/NeuroPal/neuropal-backend",
                 "run",
                 "dev"
             ],
-            "port": 5173
+            "port": 4000
         }
     ]
 }

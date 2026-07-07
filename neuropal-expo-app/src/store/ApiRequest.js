@@ -63,6 +63,8 @@ export const useApiRequest = () => {
     //   fetchData('documents')              → GET /api/documents
     //   fetchData('documents/' + id)        → GET /api/documents/<id>
     //   fetchData('auth/me', { silent: true }) → no toast on error
+    //   opts.rethrow → propagate the axios error to the caller instead of
+    //   swallowing it into null (callers that render their own error state)
     const fetchData = useCallback(
         async (endpoint, opts = {}) => {
             try {
@@ -70,6 +72,7 @@ export const useApiRequest = () => {
                 return response.data;
             } catch (error) {
                 if (!opts.silent) handleError(error);
+                if (opts.rethrow) throw error;
                 return null;
             }
         },
@@ -99,6 +102,9 @@ export const useApiRequest = () => {
                 const response = await axiosInstance.post(endpoint, formData, {
                     headers: { Accept: 'application/json' },
                     transformRequest: (data) => data, // keep FormData intact
+                    // The backend accepts files up to 100MB — a textbook PDF
+                    // over WiFi can easily outlive the default 30s.
+                    timeout: 300000,
                 });
                 return response.data;
             } catch (error) {

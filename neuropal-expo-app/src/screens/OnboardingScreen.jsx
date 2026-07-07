@@ -1,4 +1,4 @@
-import PagerView from "react-native-pager-view";
+import PagerView from "../components/PagerView";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";

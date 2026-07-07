@@ -7,7 +7,7 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-07-05 (MacBook Pro session — Phase 0/1 code complete, reviewed, pushed as `4e3fbf4`)_
+_Last updated: 2026-07-07 (Mac Mini session — Phase 0+1 acceptance PASSED on the Mini; Phase 2 wiring done + verified on Expo web; S24 acceptance pending)_
 
 ---
 
@@ -35,10 +35,10 @@ Ollama), all other devices are LAN clients. See
 
 | Phase | State | Notes |
 |---|---|---|
-| **0 — Local infra** | **CODE DONE — needs run on Mini** | `docker-compose.yml` written (Mongo 8 + Qdrant, named volumes, localhost-bound). `.env` template + real `.env` prepared. Ollama steps documented. **Acceptance test NOT yet run** (this MacBook has no Docker/Ollama; must run on the Mini). |
-| **1 — Backend + AI layer** | **CODE DONE + REVIEWED — needs acceptance on Mini** | `services/aiProvider.js` (gemini/ollama/anthropic), `query.js` refactored onto it, `LOCAL_MODE` in `middleware/auth.js`. Smoke-tested (require graph, provider selection, boot order). 3-lens adversarial review found+fixed 3 major bugs: binary-as-utf8 fallback context, upload filename collision, citation misattribution (now `{chunk, quote}` indexed binding). **Live acceptance (real PDF → ready → grounded answer) pending on the Mini.** |
-| **2 — Native frontend (S24)** | **NOT STARTED** | `network.js` still has the silent mock fallback (must become opt-in + surface errors). Upload flow + status polling not yet wired to the real backend. Reader thunk not wired to `/query`. |
-| **3 — Web target (Macs)** | **NOT STARTED** | Web Speech API TTS path not implemented; `expo start --web` unverified. |
+| **0 — Local infra** | **✅ ACCEPTED on the Mini (2026-07-07)** | Docker Mongo 8 + Qdrant up (named volumes), Ollama serving `nomic-embed-text` + `qwen2.5:7b`. All §6 checks green: Qdrant collections, Mongo ping `{ok:1}`, Ollama tags, `/healthz`. |
+| **1 — Backend + AI layer** | **✅ ACCEPTED on the Mini (2026-07-07)** | Real PDF (arXiv 1401.4118, Lvovsky "Squeezed light", 21pp/16k words) → `ready` in ~10s → `/text` returns full text → `/query` grounded `{answer, citations[{chunkId,page,excerpt}]}` via **gemini-2.5-flash** (mode:rag, 8 chunks) AND via **ollama qwen2.5:7b** (correct answer; citations empty — tolerant-parse contract held). Added missing `GET /api/auth/me` (frontend boot probe 404'd without it). |
+| **2 — Native frontend (S24)** | **WIRED + VERIFIED on Expo web — S24 acceptance pending** | `network.js` rewritten: mock is opt-in via `EXPO_PUBLIC_USE_MOCK`, real errors surfaced (Library banner + reader chat error notes + boot toast). `ApiLink` host now from `EXPO_PUBLIC_API_BASE_URL`. Library: real fetch, upload, 2.5s ingest-status polling, focus refresh. Reader: fetches `/documents/:id/text` (backend docs have no `sections`), citations objects → `p. N` chips, karaoke perf memo on ParagraphText. Verified end-to-end in browser against `http://192.168.3.169:4000` (login gate → library → reader text → karaoke advance → grounded Q&A with citation chip). **Remaining: run on the S24 via Expo Go (see §Next actions), incl. DocumentPicker upload + expo-speech TTS on Android.** |
+| **3 — Web target (Macs)** | **PARTIALLY UNBLOCKED** | `expo start --web` now bundles (react-native-pager-view platform-split via `src/components/PagerView[.web].js`). Whole Module 0 read/Q&A loop already works in the browser. Remaining: Web Speech API TTS with `onboundary` karaoke (current sim-timer estimator runs but no audio), browser file upload. |
 | **4 — Exam-prep endpoints** | **NOT STARTED** | summarize / quiz / cheatsheet / explain — all call `aiProvider.generateAnswer` with different system prompts. |
 | **5 — APK + accessibility** | **NOT STARTED** | Deferred until Module 0 is solid (per owner's directive). |
 
@@ -76,19 +76,22 @@ Ollama), all other devices are LAN clients. See
 
 ## Next actions (in order)
 
-1. **On the Mac Mini** — follow `neuropal-backend/docs/MAC-MINI-SETUP.md`
-   top-to-bottom: installs → clone → `.env` (paste `GEMINI_API_KEY`) →
-   `docker compose up -d` → `ollama pull` ×2 → `npm install` → `npm run dev`.
-2. **Run Phase 0 + Phase 1 acceptance tests** (MAC-MINI-SETUP §6–§7) with a
-   real physics PDF. Both providers: default (gemini) and `"provider":"ollama"`.
-3. **Phase 2** — on any machine, `neuropal-expo-app/`:
-   - Fix `src/services/network.js` (mock → explicit `EXPO_PUBLIC_USE_MOCK` flag;
-     surface connection errors in UI).
-   - `EXPO_PUBLIC_API_BASE_URL=http://<mini-ip>:4000`.
-   - Wire upload + library polling + reader query to the real API.
-   - Acceptance on the S24 Ultra (Expo Go / dev build).
-4. **Phase 3** — web TTS via `speechSynthesis` + `onboundary`; browser upload.
-5. **Phase 4** — summarize/quiz/cheatsheet/explain endpoints on `aiProvider`.
+1. **Phase 2 acceptance on the S24 Ultra** — on the Mini:
+   `cd ~/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start`,
+   scan the QR with Expo Go on the S24 (same WiFi). Then: pick a PDF →
+   watch it walk to `ready` in the Library (auto-polls) → open in Reader →
+   TTS + karaoke → ask a question → grounded cited answer.
+   Watch specifically: DocumentPicker→FormData upload on Android and
+   expo-speech behavior (sim-timer estimator drives the highlight).
+2. **Phase 3** — web TTS via `speechSynthesis` + `onboundary`; browser
+   upload. (`expo start --web` already bundles; Module 0 Q&A loop already
+   works in the browser.)
+3. **Phase 4** — summarize/quiz/cheatsheet/explain endpoints on `aiProvider`.
+
+**Machine facts (Mini, recorded 2026-07-07):** WiFi is `en1`, currently
+`192.168.3.169` — the older `.213` is stale. Give the Mini a DHCP
+reservation so `EXPO_PUBLIC_API_BASE_URL` stops drifting. Repo path on the
+Mini: `~/Documents/Gitkraken/NeuroPal`.
 
 ## How to continue with Claude Code on another machine
 

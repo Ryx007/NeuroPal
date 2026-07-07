@@ -1,9 +1,12 @@
 import { createSlice } from "@reduxjs/toolkit";
 
 import { mockDocuments } from "../../data/mockData";
+import { USE_MOCK } from "../../services/network";
 
+// Mock docs only when explicitly requested — an empty library on a fresh
+// backend is truthful, a fake populated one is not.
 const initialState = {
-  docs: mockDocuments,
+  docs: USE_MOCK ? mockDocuments : [],
 };
 
 const librarySlice = createSlice({

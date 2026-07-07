@@ -6,6 +6,7 @@ dist/
 web-build/
 .env
 .env.*
+!.env.example
 
 # Native
 ios/Pods
