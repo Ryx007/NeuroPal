@@ -78,7 +78,8 @@ function startInboxWatcher() {
 
 // Parity with the upload route's multer cap — an unbounded PDF would be
 // read whole into memory by the extractor and could OOM the server.
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
+// 300MB accommodates full-color textbook scans (Young & Freedman is 228MB).
+const MAX_FILE_BYTES = 300 * 1024 * 1024;
 
 async function handleNewFile(filePath) {
     const base = path.basename(filePath);

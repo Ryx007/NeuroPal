@@ -202,4 +202,26 @@ async function deleteDocumentChunks(documentId) {
     await DocumentChunk.deleteMany({ documentId });
 }
 
-module.exports = { ingestDocument, deleteDocumentChunks };
+// Ingest is fire-and-forget, so a server restart kills any in-flight run
+// and strands its document in a processing status forever. Called on boot:
+// every stuck document gets its partial chunks wiped and ingest re-kicked.
+async function resumeStuckIngests() {
+    const stuck = await Document.find({
+        status: { $in: ['pending', 'parsing', 'chunking', 'embedding'] },
+        deletedAt: null,
+    }).select('_id title status');
+
+    for (const doc of stuck) {
+        // eslint-disable-next-line no-console
+        console.warn(
+            `[ingest] resuming "${doc.title}" (stuck in '${doc.status}' from a previous run)`,
+        );
+        await deleteDocumentChunks(doc._id);
+        ingestDocument(doc._id).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('[ingest] resume failed:', doc._id, err.message || err);
+        });
+    }
+}
+
+module.exports = { ingestDocument, deleteDocumentChunks, resumeStuckIngests };

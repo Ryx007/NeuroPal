@@ -54,6 +54,19 @@ async function main() {
             console.error('[inbox] failed to start (continuing):', err.message || err);
         }
     }
+
+    // Documents whose ingest died with a previous process (restart/crash)
+    // would sit in 'parsing'/'embedding' forever — re-kick them.
+    try {
+        const { resumeStuckIngests } = require('./services/ingestPipeline');
+        resumeStuckIngests().catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('[ingest] resume scan failed (continuing):', err.message || err);
+        });
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[ingest] resume scan failed (continuing):', err.message || err);
+    }
 }
 
 main().catch((err) => {
