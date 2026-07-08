@@ -123,6 +123,18 @@ embedding → ready | failed` (+`ingestError`). `Document.progress` (0→1) is
 minutes. Reading progress is `ReadingSession.progress` (not yet wired into
 the phone UI).
 
+**AI provider fallback (added 2026-07-08):** Gemini free tier is 20 req/day
+per model. On a daily-quota 429 the provider now **falls back to local
+Ollama** (`generateAnswer` + `generateStructured`) instead of surfacing a
+500 — the response's `provider` field reports who actually answered. Ollama
+prose calls get a plain-text retry when qwen collapses JSON mode; structured
+calls run at `num_ctx: 8192` (default 2048 truncated the ~8k study context →
+broken JSON) and flashcards pass through a tolerant card normalizer (qwen
+emits `{"Card 1":{Front,Back}}` shapes under long context). Robotic-voice
+fix: the reader passes a user-selected system voice identifier
+(`ui.voiceId`, from `Speech.getAvailableVoicesAsync`) to expo-speech;
+Settings surfaces Enhanced/Neural voices first.
+
 **Study-endpoint context strategy:** whole-doc features can't ship a 500-page
 book to a model. Chunks are sampled EVENLY across the document within a
 provider budget (`gemini`/`anthropic` 120k chars, `ollama` 8k). `/explain`
