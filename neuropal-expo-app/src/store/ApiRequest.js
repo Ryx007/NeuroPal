@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useCallback } from 'react';
 import { useDispatch } from 'react-redux';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast';
 
 import { baseUrl, clearSession, getHeaders } from './ApiLink';
 import { socket } from './Socket';

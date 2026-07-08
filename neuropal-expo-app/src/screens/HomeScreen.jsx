@@ -1,9 +1,11 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { formatTime12 } from "../data/mockData";
+import { AnchorEditor } from "../components/planner/AnchorEditor";
 import {
   selectNextAnchor,
   selectNervousState,
@@ -11,7 +13,16 @@ import {
   selectResumeDocument,
   selectTasks,
 } from "../store/selectors";
-import { setNervousState, toggleTask } from "../store/slices/homeSlice";
+import {
+  addAnchor,
+  addTask,
+  removeAnchor,
+  removeTask,
+  setAnchorStatus,
+  setNervousState,
+  toggleTask,
+  updateAnchor,
+} from "../store/slices/homeSlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { SectionHeader, withAlpha } from "../components/primitives";
 
@@ -24,6 +35,9 @@ export function HomeScreen() {
   const nervous = useSelector(selectNervousState);
   const nextAnchor = useSelector(selectNextAnchor);
   const resume = useSelector(selectResumeDocument);
+  const [editingMvd, setEditingMvd] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [anchorEditor, setAnchorEditor] = useState(null); // null | {anchor?}
   // Real name comes from the backend's LOCAL_MODE user via /auth/me;
   // single-user app, so the owner's name is the offline fallback too.
   const userName = useSelector((s) => s.auth.userName);
@@ -140,25 +154,160 @@ export function HomeScreen() {
       </View>
 
       <View style={{ marginTop: 30 }}>
-        <SectionHeader
-          label="Minimum viable day"
-          trailing={`${remaining} tasks remaining`}
-        />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
+            <SectionHeader
+              label="Minimum viable day"
+              trailing={`${remaining} tasks remaining`}
+            />
+          </View>
+          <Pressable
+            onPress={() => setEditingMvd((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={editingMvd ? "Done editing tasks" : "Edit tasks"}
+            hitSlop={8}
+            style={{
+              marginLeft: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 99,
+              backgroundColor: editingMvd
+                ? withAlpha(palette.accent, 0.16)
+                : palette.surfaceContainer,
+            }}
+          >
+            <Text
+              style={{
+                color: editingMvd ? palette.accent : palette.onSurfaceVariant,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 12,
+              }}
+            >
+              {editingMvd ? "Done" : "Edit"}
+            </Text>
+          </Pressable>
+        </View>
         <View style={{ height: 12 }} />
         {tasks.map((task) => (
           <MvdRow
             key={task.id}
             task={task}
+            editing={editingMvd}
             onToggle={() => dispatch(toggleTask(task.id))}
+            onRemove={() => dispatch(removeTask(task.id))}
           />
         ))}
+        {editingMvd ? (
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 8,
+              marginTop: 2,
+            }}
+          >
+            <TextInput
+              value={newTask}
+              onChangeText={setNewTask}
+              onSubmitEditing={() => {
+                dispatch(addTask(newTask));
+                setNewTask("");
+              }}
+              placeholder="Add a task for today…"
+              placeholderTextColor={palette.onSurfaceVariant}
+              accessibilityLabel="New task title"
+              style={{
+                flex: 1,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                borderRadius: 14,
+                backgroundColor: palette.surfaceHigh,
+                color: palette.onSurface,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+              }}
+            />
+            <Pressable
+              onPress={() => {
+                dispatch(addTask(newTask));
+                setNewTask("");
+              }}
+              disabled={!newTask.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Add task"
+              style={{
+                width: 46,
+                borderRadius: 14,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: withAlpha(palette.accent, 0.16),
+                borderWidth: 1,
+                borderColor: withAlpha(palette.accent, 0.4),
+                opacity: newTask.trim() ? 1 : 0.4,
+              }}
+            >
+              <MaterialIcons name="add" size={20} color={palette.accent} />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
-      {nextAnchor ? (
-        <View style={{ marginTop: 24 }}>
-          <NextAnchor anchor={nextAnchor} />
-        </View>
-      ) : null}
+      <View style={{ marginTop: 24 }}>
+        {nextAnchor ? (
+          <NextAnchor
+            anchor={nextAnchor}
+            onEdit={() => setAnchorEditor({ anchor: nextAnchor })}
+            onDone={() =>
+              dispatch(setAnchorStatus({ id: nextAnchor.id, status: "done" }))
+            }
+            onAdd={() => setAnchorEditor({})}
+          />
+        ) : (
+          <Pressable
+            onPress={() => setAnchorEditor({})}
+            accessibilityRole="button"
+            accessibilityLabel="Set your next anchor"
+            style={{
+              padding: 18,
+              borderRadius: 22,
+              borderWidth: 1.4,
+              borderStyle: "dashed",
+              borderColor: withAlpha(palette.outlineVariant, 0.4),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <MaterialIcons name="add-alarm" size={22} color={palette.accent} />
+            <Text
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "Inter_500Medium",
+                fontSize: 14,
+              }}
+            >
+              Set your next anchor — meds, break, study block…
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      <AnchorEditor
+        visible={Boolean(anchorEditor)}
+        anchor={anchorEditor?.anchor || null}
+        onClose={() => setAnchorEditor(null)}
+        onSave={(payload) => {
+          if (payload.id) {
+            dispatch(updateAnchor(payload));
+          } else {
+            dispatch(addAnchor(payload));
+          }
+          setAnchorEditor(null);
+        }}
+        onDelete={(id) => {
+          dispatch(removeAnchor(id));
+          setAnchorEditor(null);
+        }}
+      />
 
       {resume ? (
         <View style={{ marginTop: 16 }}>
@@ -224,7 +373,7 @@ function StateOption({ selected, icon, label, tint, onPress }) {
   );
 }
 
-function MvdRow({ task, onToggle }) {
+function MvdRow({ task, onToggle, onRemove, editing }) {
   const palette = usePalette();
 
   return (
@@ -272,21 +421,34 @@ function MvdRow({ task, onToggle }) {
         >
           {task.title}
         </Text>
-        <Text
-          style={{
-            color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
-            fontSize: 12,
-          }}
-        >
-          {task.subtitle}
-        </Text>
+        {task.subtitle ? (
+          <Text
+            style={{
+              color: palette.onSurfaceVariant,
+              fontFamily: "Inter_400Regular",
+              fontSize: 12,
+            }}
+          >
+            {task.subtitle}
+          </Text>
+        ) : null}
       </View>
+      {editing ? (
+        <Pressable
+          onPress={onRemove}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove task ${task.title}`}
+          hitSlop={8}
+          style={{ padding: 6 }}
+        >
+          <MaterialIcons name="close" size={18} color={palette.error} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
 
-function NextAnchor({ anchor }) {
+function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
   const palette = usePalette();
   const now = new Date();
   const minutesUntil =
@@ -371,8 +533,86 @@ function NextAnchor({ anchor }) {
             justifyContent: "center",
           }}
         >
-          <MaterialIcons name="anchor" size={32} color={palette.accent} />
+          <MaterialIcons
+            name={anchor.icon || "anchor"}
+            size={32}
+            color={palette.accent}
+          />
         </View>
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+        <Pressable
+          onPress={onDone}
+          accessibilityRole="button"
+          accessibilityLabel="Mark anchor done"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 9,
+            borderRadius: 12,
+            backgroundColor: withAlpha(palette.secondary, 0.16),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.secondary, 0.4),
+          }}
+        >
+          <MaterialIcons name="check" size={15} color={palette.secondary} />
+          <Text
+            style={{
+              color: palette.secondary,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 13,
+            }}
+          >
+            Done
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel="Edit next anchor"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 9,
+            borderRadius: 12,
+            backgroundColor: withAlpha(palette.accent, 0.14),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+          }}
+        >
+          <MaterialIcons name="edit" size={15} color={palette.accent} />
+          <Text
+            style={{
+              color: palette.accent,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 13,
+            }}
+          >
+            Edit
+          </Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel="Add another anchor"
+          hitSlop={8}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: withAlpha(palette.accent, 0.1),
+          }}
+        >
+          <MaterialIcons name="add" size={18} color={palette.accent} />
+        </Pressable>
       </View>
     </View>
   );

@@ -19,6 +19,43 @@ const { generateAnswer, generateStructured, activeProvider } = require('../servi
 //   POST /api/documents/:id/cheatsheet  { provider? }
 //   POST /api/documents/:id/explain     { passage, depth?, provider? }
 
+// Small local models won't hold the {cards:[{front,back}]} contract under a
+// long context — qwen improvises shapes like {"Card 1": {Front, Back}} or a
+// bare array. Pull front/back pairs out of whatever it returned.
+function normalizeCards(data) {
+    if (!data || typeof data !== 'object') return [];
+    const pick = (obj, keys) => {
+        for (const k of Object.keys(obj || {})) {
+            if (keys.includes(k.toLowerCase())) return obj[k];
+        }
+        return undefined;
+    };
+    const asCard = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        const front = pick(obj, ['front', 'question', 'q', 'prompt', 'term']);
+        const back = pick(obj, ['back', 'answer', 'a', 'definition', 'response']);
+        if (typeof front === 'string' && typeof back === 'string') {
+            return { front, back };
+        }
+        return null;
+    };
+
+    // 1) canonical {cards:[...]}
+    let list = Array.isArray(data.cards) ? data.cards : null;
+    // 2) bare array
+    if (!list && Array.isArray(data)) list = data;
+    // 3) object of cards: {"Card 1": {...}, "Card 2": {...}} or {cards:{...}}
+    if (!list) {
+        const container =
+            data.cards && typeof data.cards === 'object' ? data.cards : data;
+        const vals = Object.values(container).filter(
+            (v) => v && typeof v === 'object',
+        );
+        if (vals.length) list = vals;
+    }
+    return (list || []).map(asCard).filter(Boolean);
+}
+
 const router = Router();
 
 // Whole-document features can't ship a 500-page book to the model. Budget
@@ -319,10 +356,10 @@ router.post(
             },
         });
 
-        const cards = (Array.isArray(result.data?.cards) ? result.data.cards : [])
-            .filter((c) => c && typeof c.front === 'string' && typeof c.back === 'string')
+        const cards = normalizeCards(result.data)
             .map((c) => ({ front: c.front.trim(), back: c.back.trim() }))
-            .filter((c) => c.front && c.back);
+            .filter((c) => c.front && c.back)
+            .slice(0, n);
         if (cards.length === 0) {
             return res.status(502).json({
                 error: 'the model did not return usable flashcards — try again',

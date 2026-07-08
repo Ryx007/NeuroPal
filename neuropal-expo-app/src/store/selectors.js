@@ -20,11 +20,16 @@ export const selectRemainingTasks = createSelector([selectTasks], (tasks) =>
   tasks.filter((task) => !task.done).length
 );
 
+// The next timed anchor still ahead of the clock (and not marked done).
+// Falls back to the last of the day so the card never shows stale mocks.
 export const selectNextAnchor = createSelector([selectAnchors], (anchors) => {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const pending = anchors.filter((a) => a.status !== "done");
   return (
-    anchors.find((anchor) => anchor.status === "current") ||
-    anchors.find((anchor) => anchor.status === "pending") ||
-    anchors[anchors.length - 1]
+    pending.find((a) => a.time.hour * 60 + a.time.minute >= nowMin) ||
+    pending[pending.length - 1] ||
+    null
   );
 });
 

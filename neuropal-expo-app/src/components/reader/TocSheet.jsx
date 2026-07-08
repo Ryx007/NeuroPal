@@ -15,6 +15,8 @@ export function TocSheet({
   sections,
   activeSection,
   onJumpSection,
+  sectionSpans = [],
+  wpm = 220,
   bookmarks,
   onJumpBookmark,
   onDeleteBookmark,
@@ -155,7 +157,7 @@ export function TocSheet({
                         marginLeft: 8,
                       }}
                     >
-                      {item.index + 1}
+                      {chapterMinutes(sectionSpans[item.index], wpm)}
                     </Text>
                   </Pressable>
                 );
@@ -233,4 +235,14 @@ export function TocSheet({
       </View>
     </Modal>
   );
+}
+
+// Listening time for a chapter's word span at the current wpm — the Audible
+// habit of scanning the chapter list by length.
+function chapterMinutes(span, wpm) {
+  if (!span) return "";
+  const m = (span.end - span.start) / Math.max(60, wpm);
+  if (m < 1) return "<1m";
+  if (m < 60) return `${Math.round(m)}m`;
+  return `${Math.floor(m / 60)}h ${Math.round(m % 60)}m`;
 }

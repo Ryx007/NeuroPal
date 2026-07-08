@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast';
 
 import { DataPulse, NpPrimaryButton, withAlpha } from '../components/primitives';
 import { saveSessionToken } from '../store/ApiLink';

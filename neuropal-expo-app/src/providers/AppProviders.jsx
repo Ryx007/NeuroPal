@@ -65,7 +65,7 @@ async function reportLastCrash() {
     const crash = JSON.parse(raw);
     // eslint-disable-next-line no-console
     console.warn("[crash] previous session died:", crash.message, crash.at);
-    const Toast = require("react-native-toast-message").default;
+    const Toast = require("../components/toast").default;
     setTimeout(() => {
       Toast.show({
         type: "error",
@@ -90,12 +90,15 @@ function getPersistedSlices(state) {
       lineSpacing: state.ui.lineSpacing,
       wpm: state.ui.wpm,
       voice: state.ui.voice,
+      voiceId: state.ui.voiceId,
     }),
     [STORAGE_KEYS.onboarding]: JSON.stringify(state.onboarding),
     [STORAGE_KEYS.home]: JSON.stringify({
       nervousState: state.home.nervousState,
       tasks: state.home.tasks,
       anchors: state.home.anchors,
+      todos: state.home.todos,
+      dayStamp: state.home.dayStamp,
     }),
     [STORAGE_KEYS.library]: JSON.stringify({
       docs: serializeDocuments(state.library.docs),

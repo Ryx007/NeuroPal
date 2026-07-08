@@ -10,6 +10,9 @@ const initialState = {
   lineSpacing: 1.7,
   wpm: 225,
   voice: "soft",
+  // System TTS voice identifier (from Speech.getAvailableVoicesAsync).
+  // null = platform default. Distinct from `voice` (the tone/pitch preset).
+  voiceId: null,
   tweaksOpen: false,
 };
 
@@ -50,6 +53,9 @@ const uiSlice = createSlice({
     setVoice(state, action) {
       state.voice = action.payload;
     },
+    setVoiceId(state, action) {
+      state.voiceId = action.payload;
+    },
     setTweaksOpen(state, action) {
       state.tweaksOpen = action.payload;
     },
@@ -67,6 +73,7 @@ export const {
   setTheme,
   setTweaksOpen,
   setVoice,
+  setVoiceId,
   setWpm,
 } = uiSlice.actions;
 

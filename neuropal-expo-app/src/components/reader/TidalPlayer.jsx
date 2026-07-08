@@ -14,16 +14,26 @@ import { GlassPanel, withAlpha } from "../primitives";
 
 const VOICES = ["soft", "natural", "deep"];
 
+// Chapter-scoped, Audible-style: the scrubber covers ONLY the current
+// chapter, with elapsed/remaining listening time at the current wpm, and
+// prev/next-chapter transport buttons. Book-level position lives in the tiny
+// "CH n/N · x%" caption — hundreds of pages never compress into one bar.
 export function TidalPlayer({
   playing,
   wordIndex,
   totalWords,
-  sectionSpans,
+  chapterIndex = 0,
+  chapterCount = 1,
+  chapterStart = 0,
+  chapterEnd = 0,
   sectionHeading,
   onSeek,
   onTogglePlay,
   onPrev,
   onNext,
+  onPrevChapter,
+  onNextChapter,
+  onOpenChapters,
   wpm,
   onWpm,
   voice,
@@ -31,7 +41,18 @@ export function TidalPlayer({
 }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const pct = totalWords > 0 ? wordIndex / totalWords : 0;
+  const bookPct = totalWords > 0 ? wordIndex / totalWords : 0;
+  const chapterWords = Math.max(1, chapterEnd - chapterStart);
+  const inChapter = Math.min(
+    Math.max(wordIndex - chapterStart, 0),
+    chapterWords
+  );
+  const minutes = (words) => {
+    const m = words / Math.max(60, wpm);
+    if (m < 1) return `${Math.max(0, Math.round(m * 60))}s`;
+    if (m < 60) return `${Math.round(m)}m`;
+    return `${Math.floor(m / 60)}h ${Math.round(m % 60)}m`;
+  };
 
   return (
     <View
@@ -45,12 +66,23 @@ export function TidalPlayer({
     >
       <GlassPanel radius={24} intensity={55}>
         <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
-          {/* row 1 — scrubber */}
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* row 1 — chapter title (tap = chapter list) + book position */}
+          <Pressable
+            onPress={onOpenChapters}
+            accessibilityRole="button"
+            accessibilityLabel="Open chapter list"
+            style={{ flexDirection: "row", alignItems: "center" }}
+          >
+            <MaterialIcons
+              name="menu-book"
+              size={12}
+              color={palette.onSurfaceVariant}
+            />
             <Text
               numberOfLines={1}
               style={{
                 flex: 1,
+                marginLeft: 6,
                 color: palette.onSurfaceVariant,
                 fontFamily: "Inter_500Medium",
                 fontSize: 10,
@@ -66,47 +98,39 @@ export function TidalPlayer({
                 fontSize: 10,
               }}
             >
-              {Math.round(pct * 100)}%
+              CH {chapterIndex + 1}/{chapterCount} · {Math.round(bookPct * 100)}%
             </Text>
-          </View>
-          <View style={{ justifyContent: "center" }}>
-            {/* chapter ticks under the track */}
-            <View
-              pointerEvents="none"
+          </Pressable>
+          <Slider
+            value={Math.min(chapterStart + inChapter, Math.max(chapterStart, chapterEnd - 1))}
+            minimumValue={chapterStart}
+            maximumValue={Math.max(chapterStart + 1, chapterEnd - 1)}
+            step={1}
+            onSlidingComplete={(value) => onSeek(Math.round(value))}
+            minimumTrackTintColor={palette.accent}
+            maximumTrackTintColor={withAlpha(palette.outlineVariant, 0.35)}
+            thumbTintColor={palette.accent}
+            accessibilityLabel="Position in this chapter"
+          />
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text
               style={{
-                position: "absolute",
-                left: 14,
-                right: 14,
-                height: 8,
-                top: 16,
+                color: palette.onSurfaceVariant,
+                fontFamily: "JetBrainsMono_400Regular",
+                fontSize: 10,
               }}
             >
-              {totalWords > 0 &&
-                (sectionSpans || []).slice(1).map((span, i) => (
-                  <View
-                    key={i}
-                    style={{
-                      position: "absolute",
-                      left: `${(span.start / totalWords) * 100}%`,
-                      width: 2,
-                      height: 8,
-                      borderRadius: 1,
-                      backgroundColor: withAlpha(palette.onSurfaceVariant, 0.45),
-                    }}
-                  />
-                ))}
-            </View>
-            <Slider
-              value={Math.min(wordIndex, Math.max(0, totalWords - 1))}
-              minimumValue={0}
-              maximumValue={Math.max(1, totalWords - 1)}
-              step={1}
-              onSlidingComplete={(value) => onSeek(Math.round(value))}
-              minimumTrackTintColor={palette.accent}
-              maximumTrackTintColor={withAlpha(palette.outlineVariant, 0.35)}
-              thumbTintColor={palette.accent}
-              accessibilityLabel="Reading position"
-            />
+              {minutes(inChapter)}
+            </Text>
+            <Text
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "JetBrainsMono_400Regular",
+                fontSize: 10,
+              }}
+            >
+              -{minutes(chapterWords - inChapter)}
+            </Text>
           </View>
 
           {/* row 2 — transport */}
@@ -115,10 +139,19 @@ export function TidalPlayer({
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
-              gap: 26,
+              gap: 14,
               marginTop: 2,
             }}
           >
+            <Pressable
+              onPress={onPrevChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Previous chapter"
+              hitSlop={8}
+              style={{ padding: 6 }}
+            >
+              <MaterialIcons name="skip-previous" size={24} color={palette.onSurfaceVariant} />
+            </Pressable>
             <Pressable
               onPress={onPrev}
               accessibilityRole="button"
@@ -158,6 +191,15 @@ export function TidalPlayer({
               style={{ padding: 8 }}
             >
               <MaterialIcons name="forward-5" size={26} color={palette.onSurfaceVariant} />
+            </Pressable>
+            <Pressable
+              onPress={onNextChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Next chapter"
+              hitSlop={8}
+              style={{ padding: 6 }}
+            >
+              <MaterialIcons name="skip-next" size={24} color={palette.onSurfaceVariant} />
             </Pressable>
           </View>
 

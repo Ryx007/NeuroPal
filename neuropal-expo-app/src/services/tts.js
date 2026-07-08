@@ -30,6 +30,7 @@ export function speakWords({
   startIndex = 0,
   rate = 1,
   pitch = 1,
+  voice,
   onWord,
   onChunkStart,
   onDone,
@@ -50,6 +51,9 @@ export function speakWords({
     Speech.speak(chunk.text, {
       rate,
       pitch,
+      // A specific platform voice (identifier) if the user picked one;
+      // undefined falls back to the engine default.
+      ...(voice ? { voice } : {}),
       onBoundary: (event) => {
         if (stopped) return;
         const charIndex = event?.charIndex;
@@ -123,4 +127,24 @@ function wordIndexForChar(chunk, charIndex) {
     }
   }
   return chunk.firstWordIndex + ans;
+}
+
+// The installed system voices, best-quality first. expo-speech exposes
+// { identifier, name, quality, language }. quality is 'Default' | 'Enhanced'
+// (and some Android engines tag network/neural voices in the name).
+export async function listVoices() {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    if (!Array.isArray(voices)) return [];
+    const score = (v) => {
+      let s = 0;
+      if (v.quality === "Enhanced" || v.quality === Speech.VoiceQuality?.Enhanced) s += 100;
+      if (/enhanced|premium|neural|natural|network/i.test(v.name || "")) s += 50;
+      if (/^en/i.test(v.language || "")) s += 10; // surface English first
+      return s;
+    };
+    return [...voices].sort((a, b) => score(b) - score(a));
+  } catch (e) {
+    return [];
+  }
 }

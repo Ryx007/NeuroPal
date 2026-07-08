@@ -6,6 +6,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -13,12 +14,13 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import Toast from "react-native-toast-message";
+import Toast from "../components/toast";
 
 import { withAlpha } from "../components/primitives";
 import { MathView } from "../components/MathView";
 import { DisplayOptionsSheet } from "../components/reader/DisplayOptionsSheet";
 import { ReaderTopBar } from "../components/reader/ReaderTopBar";
+import { AskSheet } from "../components/reader/AskSheet";
 import { SelectionBar } from "../components/reader/SelectionBar";
 import { TidalPlayer } from "../components/reader/TidalPlayer";
 import { TocSheet } from "../components/reader/TocSheet";
@@ -29,6 +31,7 @@ import { appStore } from "../store";
 import {
   selectDocumentById,
   selectReaderDoc,
+  selectReaderAsking,
   selectReaderMessages,
   selectReaderPlayback,
   selectUiState,
@@ -47,7 +50,7 @@ import {
   setReaderWord,
 } from "../store/slices/readerSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
-import { blockMathOf } from "../utils/math";
+import { blockMathOf, isUnicodeMathParagraph } from "../utils/math";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 
 // D8/D9/D10 — the Play-Books-style immersive reader.
@@ -77,10 +80,13 @@ export function ReaderScreen() {
   const { readerLayout, voice, wpm } = useSelector(selectUiState);
   const playback = useSelector(selectReaderPlayback);
   const chat = useSelector(selectReaderMessages);
+  const asking = useSelector(selectReaderAsking);
+  const voiceId = useSelector((st) => st.ui.voiceId);
   const readerDoc = useSelector(selectReaderDoc);
   const annotations = useSelector((s) => s.reader.annotations);
 
   const [askingId, setAskingId] = useState(null);
+  const [askOpen, setAskOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
@@ -165,7 +171,7 @@ export function ReaderScreen() {
       const sectionStart = nextWords.length;
       section.paragraphs.forEach((paragraph, index) => {
         const start = nextWords.length;
-        if (!blockMathOf(paragraph)) {
+        if (!blockMathOf(paragraph) && !isUnicodeMathParagraph(paragraph)) {
           for (const word of paragraph.split(/\s+/)) {
             nextWords.push(word);
           }
@@ -249,6 +255,7 @@ export function ReaderScreen() {
     (startIndex) => {
       boundaryLiveRef.current = false;
       const pitch = voice === "deep" ? 0.85 : voice === "natural" ? 1 : 1.1;
+      const voiceIdentifier = appStore.getState().ui.voiceId;
       // 950 wpm ceiling: 400 wpm ≈ engine rate 1.0, clamp at 2.4× (past the
       // reliable Android/iOS range the estimator alone paces the karaoke).
       const rate = Math.min(2.4, Math.max(0.25, wpm / 400));
@@ -258,6 +265,7 @@ export function ReaderScreen() {
         startIndex,
         rate,
         pitch,
+        voice: voiceIdentifier,
         onWord: (wordIndex) => {
           boundaryLiveRef.current = true;
           if (simTimerRef.current) {
@@ -455,24 +463,30 @@ export function ReaderScreen() {
   }
 
   // ---- ask / q&a -----------------------------------------------------------
-  function askAboutCursor() {
-    if (!document) return;
+  // The paragraph under the reading cursor — shown as context in the Ask
+  // sheet and attached to the question as the grounding excerpt.
+  function paragraphAtCursor() {
     const idx = appStore.getState().reader.wordIndex;
     const range =
       ranges.find((r) => idx >= r.start && idx < r.end) || ranges[0];
-    if (!range) return;
+    if (!range) return { pid: null, paragraph: "" };
     const section = sections.find((s) => range.pid.startsWith(s.id));
     const paraIndex = parseInt(range.pid.split("-").pop(), 10);
-    const paragraph = section?.paragraphs?.[paraIndex] || "";
+    return { pid: range.pid, paragraph: section?.paragraphs?.[paraIndex] || "" };
+  }
+
+  function submitQuestion(question) {
+    if (!document) return;
+    const { pid, paragraph } = paragraphAtCursor();
     dispatch(
       requestReaderAnswer({
         documentId: activeDocument.id,
-        paragraphId: range.pid,
-        question: "Summarise the current paragraph in plain language.",
+        paragraphId: pid,
+        question,
         excerpt: paragraph,
       })
     );
-    setAskingId(range.pid);
+    setAskingId(pid);
   }
 
   // ---- navigation helpers --------------------------------------------------
@@ -607,7 +621,7 @@ export function ReaderScreen() {
           style={{ position: "absolute", top: 116, right: 14, zIndex: 15 }}
         >
           <Pressable
-            onPress={askAboutCursor}
+            onPress={() => setAskOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Ask about this passage"
             style={{
@@ -650,12 +664,22 @@ export function ReaderScreen() {
           playing={playback.playing}
           wordIndex={playback.wordIndex}
           totalWords={playback.totalWords}
-          sectionSpans={sectionSpans}
+          chapterIndex={activeSection}
+          chapterCount={sections.length}
+          chapterStart={sectionSpans[activeSection]?.start ?? 0}
+          chapterEnd={sectionSpans[activeSection]?.end ?? words.length}
           sectionHeading={currentHeading}
           onSeek={seekTo}
           onTogglePlay={togglePlay}
           onPrev={() => skipParagraph(-1)}
           onNext={() => skipParagraph(1)}
+          onPrevChapter={() =>
+            jumpToSection(Math.max(0, activeSection - 1))
+          }
+          onNextChapter={() =>
+            jumpToSection(Math.min(sections.length - 1, activeSection + 1))
+          }
+          onOpenChapters={() => setTocOpen(true)}
           wpm={wpm}
           onWpm={(value) => dispatch(setWpm(value))}
           voice={voice}
@@ -667,6 +691,8 @@ export function ReaderScreen() {
         visible={tocOpen}
         onClose={() => setTocOpen(false)}
         sections={sections}
+        sectionSpans={sectionSpans}
+        wpm={wpm}
         activeSection={activeSection}
         onJumpSection={jumpToSection}
         bookmarks={bookmarks}
@@ -693,6 +719,17 @@ export function ReaderScreen() {
         pageCount={activeDocument.pageCount}
         onClose={() => setGotoOpen(false)}
         onGo={goToPage}
+      />
+
+      <AskSheet
+        visible={askOpen}
+        onClose={() => setAskOpen(false)}
+        onAsk={submitQuestion}
+        messages={chat}
+        asking={asking}
+        contextLabel={
+          askOpen ? paragraphAtCursor().paragraph.slice(0, 140) : ""
+        }
       />
 
       <StudySheet
@@ -944,6 +981,8 @@ function ReaderBody({
                 <View key={paragraphId} style={{ marginVertical: 8 }}>
                   {latex ? (
                     <MathView latex={latex} color={equationColor} fontSize={17} />
+                  ) : isUnicodeMathParagraph(paragraph) ? (
+                    <EquationCard text={paragraph} />
                   ) : (
                     <ParagraphText
                       text={paragraph}
@@ -974,6 +1013,41 @@ function ReaderBody({
         ))}
       </Pressable>
     </ScrollView>
+  );
+}
+
+// A PDF-extracted equation (unicode, no LaTeX source): centered serif card,
+// visually distinct from prose, excluded from TTS. True typesetting lives in
+// the Original-pages view.
+function EquationCard({ text }) {
+  const palette = usePalette();
+  return (
+    <View
+      style={{
+        alignSelf: "stretch",
+        marginVertical: 4,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: withAlpha(palette.tertiary, 0.06),
+        borderLeftWidth: 2,
+        borderLeftColor: withAlpha(palette.tertiary, 0.45),
+      }}
+    >
+      <Text
+        selectable
+        style={{
+          color: palette.onSurface,
+          fontFamily: Platform.OS === "web" ? "Georgia, 'Times New Roman', serif" : "serif",
+          fontStyle: "italic",
+          fontSize: 16,
+          lineHeight: 26,
+          textAlign: "center",
+        }}
+      >
+        {text}
+      </Text>
+    </View>
   );
 }
 

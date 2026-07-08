@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Toast from "react-native-toast-message";
+import Toast from "../components/toast";
 
 import { VizView } from "../components/VizView";
 import { buildVizPage, VIZ_TEMPLATES } from "../data/vizTemplates";

@@ -54,9 +54,11 @@ const focusSlice = createSlice({
       state.cyclesDone = 0;
     },
     setDurations(state, action) {
+      // Arbitrary lengths by request — hour-long deep-work blocks and
+      // 2-minute micro-breaks are both legitimate. Only guard the absurd.
       const { workMin, breakMin } = action.payload;
-      if (workMin) state.workMin = Math.max(5, Math.min(90, workMin));
-      if (breakMin) state.breakMin = Math.max(1, Math.min(30, breakMin));
+      if (workMin) state.workMin = Math.max(1, Math.min(600, Math.round(workMin)));
+      if (breakMin) state.breakMin = Math.max(1, Math.min(600, Math.round(breakMin)));
     },
   },
 });

@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import Toast from "react-native-toast-message";
+import Toast from "../components/toast";
 
 import {
   deleteDocument,

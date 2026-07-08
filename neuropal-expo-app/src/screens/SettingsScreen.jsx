@@ -15,6 +15,7 @@ import {
   setVoice,
   setWpm,
 } from "../store/slices/uiSlice";
+import { VoicePicker } from "../components/VoicePicker";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
@@ -175,7 +176,7 @@ export function SettingsScreen() {
           onChange={(value) => dispatch(setWpm(Math.round(value)))}
         />
         <SegmentRow
-          label="Voice profile"
+          label="Tone"
           value={tweaks.voice}
           entries={[
             ["soft", "Soft"],
@@ -184,6 +185,8 @@ export function SettingsScreen() {
           ]}
           onChange={(value) => dispatch(setVoice(value))}
         />
+        <View style={{ height: 6 }} />
+        <VoicePicker />
       </Group>
     </KeyboardAwareScrollView>
   );

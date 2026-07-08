@@ -34,9 +34,9 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import Toast from "react-native-toast-message";
 
-import { toastConfig, TOAST_VISIBILITY_MS } from "./src/components/AppToast";
+import { ReminderPopup } from "./src/components/ReminderPopup";
+import { ToastHost } from "./src/components/toast";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { AppProviders } from "./src/providers/AppProviders";
 import { MuiProvider } from "./src/providers/MuiProvider";
@@ -58,14 +58,14 @@ function AppChrome() {
         translucent={false}
       />
       <AppNavigator />
-      {/* Toast must sit OUTSIDE the navigator so it floats above every
-          screen. ApiRequest.js calls Toast.show({...}) from anywhere.
-          D5: custom config = ✕ + swipe-to-dismiss + 5s auto-hide. */}
-      <Toast
-        config={toastConfig}
-        visibilityTime={TOAST_VISIBILITY_MS}
-        topOffset={64}
-      />
+      {/* Toast host sits OUTSIDE the navigator so it floats above every
+          screen. In-house (see components/toast.js): the previous library's
+          capture-phase gesture stole ✕ taps on device and could wedge
+          auto-hide permanently. */}
+      <ToastHost />
+      {/* On-screen reminder pop-up — fires on every platform while the app
+          is open, independent of OS notification permission. */}
+      <ReminderPopup />
     </>
   );
 }

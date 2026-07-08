@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Toast from "react-native-toast-message";
+import Toast from "../toast";
 
 import { fetchRawDocumentApi, saveRawDocumentApi } from "../../services/network";
 import { usePalette } from "../../theme/ThemeProvider";

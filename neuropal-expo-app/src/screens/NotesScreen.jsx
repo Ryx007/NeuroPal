@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import Toast from "react-native-toast-message";
+import Toast from "../components/toast";
 
 import { ColorPickerSheet } from "../components/notes/ColorPickerSheet";
 import {

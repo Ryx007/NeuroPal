@@ -26,6 +26,21 @@ const remindersSlice = createSlice({
       const item = state.items.find((r) => r.id === action.payload);
       if (item) item.done = !item.done;
     },
+    // The in-app popup fired for this reminder — never pop it twice.
+    markReminderNotified(state, action) {
+      const item = state.items.find((r) => r.id === action.payload);
+      if (item) item.notifiedAt = Date.now();
+    },
+    snoozeReminder(state, action) {
+      const { id, minutes } = action.payload;
+      const item = state.items.find((r) => r.id === id);
+      if (item) {
+        item.at = Date.now() + minutes * 60000;
+        item.notifiedAt = undefined;
+        item.done = false;
+      }
+      state.items.sort((a, b) => a.at - b.at);
+    },
   },
 });
 
@@ -34,6 +49,8 @@ export const {
   addReminder,
   removeReminder,
   toggleReminderDone,
+  markReminderNotified,
+  snoozeReminder,
 } = remindersSlice.actions;
 
 export default remindersSlice.reducer;

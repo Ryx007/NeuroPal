@@ -61,10 +61,19 @@ async function generateAnswer({
 
     const t0 = Date.now();
     let result;
+    let usedProvider = chosen;
     if (chosen === 'gemini') {
-        result = await callGemini(system, userPrompt);
+        try {
+            result = await callGemini(system, userPrompt);
+        } catch (err) {
+            if (!isQuotaExhausted(err)) throw err;
+            // eslint-disable-next-line no-console
+            console.warn('[ai] gemini quota exhausted — falling back to ollama');
+            result = await ollamaAnswerResilient(system, userPrompt);
+            usedProvider = 'ollama';
+        }
     } else if (chosen === 'ollama') {
-        result = await callOllama(system, userPrompt);
+        result = await ollamaAnswerResilient(system, userPrompt);
     } else if (chosen === 'anthropic') {
         result = await callAnthropic(system, userPrompt);
     } else {
@@ -73,18 +82,28 @@ async function generateAnswer({
         );
     }
 
-    const parsed = tolerantParse(result.raw);
+    // The forced-plain Ollama pass returns Markdown directly — its raw is the
+    // answer, not JSON to parse.
+    const parsed = result.forcedPlain ? {} : tolerantParse(result.raw);
     const rawCitations = Array.isArray(parsed.citations) ? parsed.citations : [];
     const citations = mapCitations(contextChunks, rawCitations);
 
+    // A local model occasionally answers in prose despite JSON mode; an
+    // empty `answer` here used to cascade into a Mongoose "content required"
+    // 422 in the chat-thread save. Fall back to the raw text.
+    const answerText =
+        String(parsed.answer || '').trim() ||
+        String(result.raw || '').trim() ||
+        'The model returned an empty answer — please ask again.';
+
     return {
-        answer: String(parsed.answer || ''),
+        answer: answerText,
         citations,
         // Plain-string quotes for clients that just render text.
         verbatim: citations.map((c) => c.excerpt).filter(Boolean),
         model: result.model,
         tokens: result.tokens,
-        provider: chosen,
+        provider: usedProvider,
         latencyMs: Date.now() - t0,
     };
 }
@@ -132,6 +151,14 @@ const GEMINI_RESPONSE_SCHEMA = {
 
 // The free tier throws transient 503 "high demand" / 429 rate-limit errors
 // — retry those with backoff instead of failing a whole study request.
+// A DAILY quota hit (free tier: 20 req/day/model) is not transient — no
+// backoff will fix it until midnight PT. Flagged so callers can fall back
+// to the local model instead of failing the user's request.
+function isDailyQuotaError(err) {
+    const msg = JSON.stringify(err?.error || err?.message || '');
+    return /PerDay|per day|RESOURCE_EXHAUSTED/i.test(msg);
+}
+
 async function withTransientRetry(fn, tries = 3) {
     let lastErr;
     for (let attempt = 0; attempt < tries; attempt++) {
@@ -141,12 +168,21 @@ async function withTransientRetry(fn, tries = 3) {
             lastErr = err;
             const status = err?.status || err?.error?.code || err?.response?.status;
             if (status !== 503 && status !== 429) throw err;
+            if (status === 429 && isDailyQuotaError(err)) throw err;
             // eslint-disable-next-line no-console
             console.warn(`[ai] transient ${status}, retry ${attempt + 1}/${tries - 1}`);
             await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
         }
     }
     throw lastErr;
+}
+
+// Gemini quota exhausted → answer from the local Ollama model instead of
+// failing. The reply is slower and less polished but the feature keeps
+// working; the response's `provider` field says which one actually answered.
+function isQuotaExhausted(err) {
+    const status = err?.status || err?.error?.code || err?.response?.status;
+    return status === 429;
 }
 
 async function callGemini(system, userPrompt) {
@@ -189,7 +225,7 @@ async function callGemini(system, userPrompt) {
 
 // -- Ollama (local chat model, offline path) --------------------------------
 
-async function callOllama(system, userPrompt) {
+async function callOllama(system, userPrompt, { json = true } = {}) {
     const url = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/+$/, '');
     const model = process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:7b';
 
@@ -198,14 +234,20 @@ async function callOllama(system, userPrompt) {
         {
             model,
             stream: false,
-            // Ollama's JSON mode — constrains output to valid JSON, which
-            // makes small local models far more contract-reliable.
-            format: 'json',
+            // JSON mode constrains small local models to valid JSON — great
+            // for the {answer,citations} contract, BUT a 7B model asked to
+            // write a long Markdown summary INSIDE json mode often collapses
+            // it into a broken object. Prose fallbacks pass json:false.
+            ...(json ? { format: 'json' } : {}),
             messages: [
                 { role: 'system', content: system },
                 { role: 'user', content: userPrompt },
             ],
-            options: { temperature: 0.2 },
+            // Ollama defaults num_ctx to 2048 tokens; our study prompts carry
+            // ~8k chars of sampled context, which would be truncated from the
+            // front — the model then loses the JSON-schema instruction and
+            // returns off-shape output (0 flashcards). Give it room.
+            options: { temperature: 0.2, num_ctx: 8192 },
         },
         // Local 7B models chew through long contexts slowly on first load
         // (model paging into RAM). Generous timeout.
@@ -394,6 +436,33 @@ function normalise(s) {
     return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Ollama answer with a prose safety net. JSON mode first (so citations are
+// captured when the model complies); if that yields no usable answer — a 7B
+// model collapsing a long-form prompt into broken JSON — retry WITHOUT json
+// mode and take the Markdown prose directly. Returns { raw, model, tokens,
+// citations }.
+async function ollamaAnswerResilient(system, userPrompt) {
+    const first = await callOllama(system, userPrompt, { json: true });
+    const parsed = tolerantParse(first.raw);
+    const answer = String(parsed.answer || '').trim();
+    const rawTrim = String(first.raw || '').trim();
+    // tolerantParse's last resort returns { answer: <raw> }, so a garbage
+    // JSON blob comes back AS the answer — length alone can't tell it apart.
+    // Require a real `answer` field that isn't just the raw JSON echoed back.
+    const looksLikeJson = rawTrim.startsWith('{') || rawTrim.startsWith('[');
+    const usable =
+        answer.length >= 20 && !(looksLikeJson && answer === rawTrim);
+    if (usable) {
+        return { ...first, forcedPlain: false };
+    }
+    // Strip the JSON-shape instruction so the model writes clean Markdown.
+    const proseSystem =
+        system.replace(/Respond[^]*$/i, '').trim() +
+        '\n\nRespond with well-formatted Markdown prose only. Do not wrap it in JSON.';
+    const second = await callOllama(proseSystem, userPrompt, { json: false });
+    return { ...second, forcedPlain: true };
+}
+
 // ---------------------------------------------------------------------------
 // Structured generation — same providers, custom JSON shape. Gemini enforces
 // the schema at the API level; ollama/anthropic get JSON mode + tolerant
@@ -417,26 +486,37 @@ async function generateStructured({
 
     let raw;
     let model;
+    let usedProvider = chosen;
     if (chosen === 'gemini') {
-        model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-        const resp = await withTransientRetry(() =>
-            geminiClient().models.generateContent({
-                model,
-                contents: userPrompt,
-                config: {
-                    systemInstruction: systemPrompt,
-                    responseMimeType: 'application/json',
-                    responseSchema: geminiSchema,
-                    temperature: 0.3,
-                },
-            }),
-        );
-        raw =
-            (typeof resp.text === 'string' && resp.text) ||
-            (resp.candidates?.[0]?.content?.parts || [])
-                .map((p) => p.text || '')
-                .join('') ||
-            '';
+        try {
+            model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+            const resp = await withTransientRetry(() =>
+                geminiClient().models.generateContent({
+                    model,
+                    contents: userPrompt,
+                    config: {
+                        systemInstruction: systemPrompt,
+                        responseMimeType: 'application/json',
+                        responseSchema: geminiSchema,
+                        temperature: 0.3,
+                    },
+                }),
+            );
+            raw =
+                (typeof resp.text === 'string' && resp.text) ||
+                (resp.candidates?.[0]?.content?.parts || [])
+                    .map((p) => p.text || '')
+                    .join('') ||
+                '';
+        } catch (err) {
+            if (!isQuotaExhausted(err)) throw err;
+            // eslint-disable-next-line no-console
+            console.warn('[ai] gemini quota exhausted — structured falls back to ollama');
+            const r = await callOllama(systemPrompt, userPrompt);
+            raw = r.raw;
+            model = r.model;
+            usedProvider = 'ollama';
+        }
     } else if (chosen === 'ollama') {
         const r = await callOllama(systemPrompt, userPrompt);
         raw = r.raw;
@@ -447,7 +527,15 @@ async function generateStructured({
         model = r.model;
     }
 
-    return { data: tolerantParse(raw), model, provider: chosen };
+    let data = tolerantParse(raw);
+    // If the local model returned an unusable structure (no top-level keys),
+    // one retry often lands it — small models are noisy under json mode.
+    const empty = !data || (typeof data === 'object' && Object.keys(data).length === 0);
+    if (empty && usedProvider === 'ollama') {
+        const r = await callOllama(systemPrompt, userPrompt);
+        data = tolerantParse(r.raw);
+    }
+    return { data, model, provider: usedProvider };
 }
 
 module.exports = { generateAnswer, generateStructured, activeProvider, DEFAULT_SYSTEM };

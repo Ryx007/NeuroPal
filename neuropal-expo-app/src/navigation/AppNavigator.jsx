@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Toast from "react-native-toast-message";
+import Toast from "../components/toast";
 
 import { DataPulse, GlassPanel, withAlpha } from "../components/primitives";
 import { useApiRequest } from "../store/ApiRequest";
