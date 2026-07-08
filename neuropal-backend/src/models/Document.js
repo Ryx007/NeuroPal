@@ -56,6 +56,10 @@ const DocumentSchema = new Schema(
         pageCount: { type: Number, min: 0, default: 0 },
         wordCount: { type: Number, min: 0, default: 0 },
 
+        // INGEST progress 0→1 (dominated by the embedding stage on big
+        // books). Not reading progress — that lives in ReadingSession.
+        progress: { type: Number, min: 0, max: 1 },
+
         // Ingest pipeline state machine — see /rag/ingest.js for transitions.
         //   pending  -> queued, no work yet
         //   parsing  -> text extraction in progress (PyMuPDF / ebooklib)

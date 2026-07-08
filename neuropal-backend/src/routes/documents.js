@@ -254,6 +254,7 @@ router.post(
         await deleteDocumentChunks(doc._id);
 
         doc.status = 'pending';
+        doc.progress = 0;
         doc.ingestError = undefined;
         doc.ingestStartedAt = undefined;
         doc.ingestFinishedAt = undefined;

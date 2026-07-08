@@ -157,18 +157,24 @@ async function embedText(text) {
 // Concurrent embed of N texts.
 //   Ollama:  fan-out with concurrency 4 (single-text endpoint).
 //   OpenAI:  one batched call (the endpoint accepts string[]).
-async function embedBatch(texts) {
+// `onProgress(done, total)` fires as embeddings complete — a 500-page book
+// is thousands of chunks and minutes of work, and the caller uses this to
+// surface ingest progress to the client.
+async function embedBatch(texts, onProgress) {
     if (!Array.isArray(texts) || texts.length === 0) return [];
 
     if (provider() === 'ollama') {
         const results = new Array(texts.length);
         const concurrency = 4;
         let cursor = 0;
+        let done = 0;
         async function worker() {
             while (true) {
                 const i = cursor++;
                 if (i >= texts.length) return;
                 results[i] = await embedOllama(texts[i]);
+                done += 1;
+                if (onProgress) onProgress(done, texts.length);
             }
         }
         await Promise.all(
@@ -187,6 +193,9 @@ async function embedBatch(texts) {
             const resp = await embedOpenAI(slice);
             for (let i = 0; i < resp.length; i++) {
                 out[start + i] = resp[i].embedding;
+            }
+            if (onProgress) {
+                onProgress(Math.min(start + batchSize, texts.length), texts.length);
             }
         }
         return out;

@@ -108,6 +108,28 @@ function geminiClient() {
     return _gemini;
 }
 
+// Schema-constrained output: with responseMimeType alone, long answers
+// eventually contain an unescaped inner quote and the whole reply becomes
+// unparseable. responseSchema makes the API itself guarantee valid JSON.
+const GEMINI_RESPONSE_SCHEMA = {
+    type: 'OBJECT',
+    properties: {
+        answer: { type: 'STRING' },
+        citations: {
+            type: 'ARRAY',
+            items: {
+                type: 'OBJECT',
+                properties: {
+                    chunk: { type: 'INTEGER' },
+                    quote: { type: 'STRING' },
+                },
+                required: ['chunk', 'quote'],
+            },
+        },
+    },
+    required: ['answer', 'citations'],
+};
+
 async function callGemini(system, userPrompt) {
     const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const resp = await geminiClient().models.generateContent({
@@ -116,6 +138,7 @@ async function callGemini(system, userPrompt) {
         config: {
             systemInstruction: system,
             responseMimeType: 'application/json',
+            responseSchema: GEMINI_RESPONSE_SCHEMA,
             temperature: 0.2,
         },
     });
@@ -195,7 +218,9 @@ async function callAnthropic(system, userPrompt) {
     const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
     const resp = await anthropicClient().messages.create({
         model,
-        max_tokens: 1024,
+        // Study features (summaries/quizzes of whole books) produce long
+        // Markdown — 1024 guaranteed mid-JSON truncation.
+        max_tokens: 8192,
         system,
         messages: [{ role: 'user', content: userPrompt }],
     });
@@ -228,25 +253,65 @@ function buildContextBlock(contextChunks, rawContext) {
     return String(rawContext || '');
 }
 
-// Three-tier tolerant parse (unchanged contract from the original query.js):
+// Tolerant parse (same contract as the original query.js, plus escape
+// repair):
 //   1. strict JSON.parse
 //   2. extract the first {...} block and parse that
-//   3. give up gracefully — treat the whole output as the answer
+//   3. retry both after repairing invalid escape sequences — physics
+//      answers are full of LaTeX ("\phi", "\frac{a}{b}") that models emit
+//      as single backslashes, which is invalid JSON and would otherwise
+//      dump the whole raw JSON string on the user as the "answer"
+//   4. give up gracefully — treat the whole output as the answer
 function tolerantParse(raw) {
     const text = String(raw || '').trim();
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) {
-            try {
-                return JSON.parse(match[0]);
-            } catch (e2) {
-                // fall through
-            }
+    const candidates = [text];
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match && match[0] !== text) candidates.push(match[0]);
+
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate);
+        } catch (e) {
+            // try repaired
         }
-        return { answer: text, citations: [] };
+        try {
+            return JSON.parse(repairInvalidEscapes(candidate));
+        } catch (e) {
+            // next candidate
+        }
     }
+
+    // Salvage tier: even when inner quotes are unescaped and no repair can
+    // make the JSON valid, the answer text itself is recoverable — it sits
+    // between the "answer" key and the "citations" key of our contract.
+    const salvaged = text.match(/"answer"\s*:\s*"([\s\S]*?)"\s*,\s*"citations"/);
+    if (salvaged) {
+        return { answer: unescapeJsonString(salvaged[1]), citations: [] };
+    }
+
+    return { answer: text, citations: [] };
+}
+
+// Single pass so "\\n" (escaped backslash + n) decodes to "\n" the
+// two-character string, not a newline — sequential .replace() calls get
+// that wrong.
+const UNESCAPE_MAP = { n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', '/': '/' };
+
+function unescapeJsonString(s) {
+    return s.replace(/\\(.)/g, (match, ch) =>
+        UNESCAPE_MAP[ch] !== undefined ? UNESCAPE_MAP[ch] : match,
+    );
+}
+
+// Double any backslash that doesn't start a valid JSON escape, so
+// "\phi" → "\\phi" (renders back to "\phi" after parsing). Valid escapes
+// (including already-escaped "\\") are consumed atomically by the first
+// alternative so their second character is never re-examined — a plain
+// lookahead corrupts mixed outputs like "\\phi and \alpha".
+function repairInvalidEscapes(s) {
+    return s.replace(/\\(["\\/bfnrt]|u[0-9a-fA-F]{4})|\\/g, (match, valid) =>
+        valid ? match : '\\\\',
+    );
 }
 
 // Bind the model's citations to the chunks they actually came from.

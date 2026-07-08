@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -32,11 +33,24 @@ function normaliseDoc(d) {
   if (!d) return d;
   const status = d.status;
   const processing = PROCESSING_STATUSES.includes(status);
+  const rawProgress = typeof d.progress === "number" ? d.progress : 0;
   return {
     ...d,
     id: d.id || d._id,
     type: d.type || "pdf",
-    progress: typeof d.progress === "number" ? d.progress : 0,
+    // Backend docs carry INGEST progress in d.progress — showing it as
+    // reading progress after `ready` would be a lie ("100% completed" on a
+    // never-opened book). Bar shows ingest % while processing, then resets
+    // until real ReadingSession reading-progress is wired in. Mock docs
+    // (no status field) keep their sample reading progress.
+    progress: status ? (processing ? rawProgress : 0) : rawProgress,
+    progressLabel: status
+      ? processing
+        ? `Ingesting ${Math.round(rawProgress * 100)}%`
+        : status === "failed"
+          ? "Ingest failed"
+          : "Ready"
+      : null,
     subtitle:
       d.subtitle ||
       (processing
@@ -119,15 +133,23 @@ export function LibraryScreen() {
 
     const asset = result.assets[0];
 
-    // RN multipart file value — { uri, name, type }, not a real File.
-    // axios will compute the multipart boundary itself; don't set
-    // Content-Type manually.
     const formData = new FormData();
-    formData.append("file", {
-      uri: asset.uri,
-      name: asset.name || "upload",
-      type: asset.mimeType || "application/octet-stream",
-    });
+    if (Platform.OS === "web") {
+      // On web the picker returns a real File — the RN-style {uri,name,type}
+      // object would serialize as "[object Object]" and 400 the upload.
+      const file =
+        asset.file || (await (await fetch(asset.uri)).blob());
+      formData.append("file", file, asset.name || "upload");
+    } else {
+      // RN multipart file value — { uri, name, type }, not a real File.
+      // axios will compute the multipart boundary itself; don't set
+      // Content-Type manually.
+      formData.append("file", {
+        uri: asset.uri,
+        name: asset.name || "upload",
+        type: asset.mimeType || "application/octet-stream",
+      });
+    }
     if (asset.name) {
       formData.append("title", asset.name.replace(/\.[^.]+$/, ""));
     }
@@ -437,7 +459,8 @@ function DocCard({ document, onPress }) {
             fontSize: 11,
           }}
         >
-          {Math.round(document.progress * 100)}% completed
+          {document.progressLabel ||
+            `${Math.round(document.progress * 100)}% completed`}
         </Text>
         <Text
           style={{

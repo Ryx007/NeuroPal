@@ -4,6 +4,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const documentsRoutes = require('./routes/documents');
 const queryRoutes = require('./routes/query');
+const studyRoutes = require('./routes/study');
 
 // Builds the Express app. server.js calls this after the Mongoose
 // connection is up.
@@ -28,6 +29,7 @@ function buildApp() {
     app.use('/api/auth', authRoutes);
     app.use('/api/documents', documentsRoutes);
     app.use('/api', queryRoutes); // owns POST /api/documents/:id/query
+    app.use('/api', studyRoutes); // owns /api/documents/:id/{summarize,quiz,cheatsheet,explain}
 
     // 404 — anything that fell through the routers above.
     app.use((req, res) => {

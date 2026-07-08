@@ -42,6 +42,18 @@ async function main() {
         // eslint-disable-next-line no-console
         console.log(`[api] listening on :${port}`);
     });
+
+    // Drop-folder ingestion — single-user concept, so LOCAL_MODE only.
+    // Non-fatal: the API works fine without it.
+    if (process.env.LOCAL_MODE === 'true') {
+        try {
+            const { startInboxWatcher } = require('./services/inboxWatcher');
+            startInboxWatcher();
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[inbox] failed to start (continuing):', err.message || err);
+        }
+    }
 }
 
 main().catch((err) => {

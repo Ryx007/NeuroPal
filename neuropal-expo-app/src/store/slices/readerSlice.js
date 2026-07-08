@@ -9,12 +9,13 @@ import {
 
 export const requestReaderAnswer = createAsyncThunk(
   "reader/requestReaderAnswer",
-  async ({ documentId, paragraphId, question, excerpt }) => {
+  async ({ documentId, paragraphId, question, excerpt, kind }) => {
     const response = await askReaderQuestion({
       documentId,
       paragraphId,
       question,
       excerpt,
+      kind,
     });
 
     return {
@@ -46,6 +47,12 @@ export const fetchReaderDocument = createAsyncThunk(
 // argument limit outright.
 const MAX_PARAGRAPH_WORDS = 180;
 
+// A 400-page book is thousands of paragraphs — far more than a phone can
+// render at once. Paragraphs are grouped into "Part N" sections; the Reader
+// renders one section at a time and auto-advances as playback crosses
+// section boundaries.
+const SECTION_PARAGRAPHS = 40;
+
 function textToSections({ documentId, title, text }) {
   const rough = (text || "")
     .split(/\n{2,}/)
@@ -64,13 +71,21 @@ function textToSections({ documentId, title, text }) {
     }
   }
 
-  return [
-    {
-      id: `doc-${documentId}`,
-      heading: title || "Document",
-      paragraphs,
-    },
-  ];
+  const sections = [];
+  const totalParts = Math.max(1, Math.ceil(paragraphs.length / SECTION_PARAGRAPHS));
+  for (let i = 0; i < paragraphs.length; i += SECTION_PARAGRAPHS) {
+    const part = sections.length + 1;
+    sections.push({
+      id: `doc-${documentId}-part-${part}`,
+      heading:
+        totalParts === 1 ? title || "Document" : `${title} — Part ${part} of ${totalParts}`,
+      paragraphs: paragraphs.slice(i, i + SECTION_PARAGRAPHS),
+    });
+  }
+  if (sections.length === 0) {
+    sections.push({ id: `doc-${documentId}`, heading: title || "Document", paragraphs: [] });
+  }
+  return sections;
 }
 
 const initialState = {

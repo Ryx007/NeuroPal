@@ -109,3 +109,7 @@ function secret() {
     }
     return s;
 }
+
+// The inbox watcher ingests dropped files as the LOCAL_MODE user without an
+// HTTP request in sight — it needs the same find-or-create logic.
+module.exports.resolveLocalUser = resolveLocalUser;

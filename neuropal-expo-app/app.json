@@ -29,8 +29,7 @@
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
-      ],
-      "usesCleartextTraffic": true
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -45,6 +44,14 @@
           "imageWidth": 200,
           "backgroundColor": "#131313",
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

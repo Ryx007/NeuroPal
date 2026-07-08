@@ -27,6 +27,7 @@ async function ingestDocument(documentId) {
     try {
         // ---- 1) parsing ----
         doc.status = 'parsing';
+        doc.progress = 0;
         doc.ingestStartedAt = new Date();
         doc.ingestError = undefined;
         await doc.save();
@@ -53,11 +54,26 @@ async function ingestDocument(documentId) {
 
         // ---- 3) embedding ----
         doc.status = 'embedding';
+        doc.progress = 0;
         await doc.save();
+
+        // Throttled progress writes (fire-and-forget updateOne so a slow
+        // Mongo write never blocks the embedding workers, and no VersionError
+        // against the `doc` instance we save at the end).
+        let lastProgressWrite = 0;
+        const onProgress = (done, total) => {
+            const now = Date.now();
+            if (now - lastProgressWrite < 1500 && done < total) return;
+            lastProgressWrite = now;
+            Document.updateOne(
+                { _id: doc._id },
+                { $set: { progress: done / total } },
+            ).catch(() => {});
+        };
 
         const modelName = getModelName();
         const dim = getDim();
-        const vectors = await embedBatch(chunks.map((c) => c.text));
+        const vectors = await embedBatch(chunks.map((c) => c.text), onProgress);
         if (vectors.length !== chunks.length) {
             throw new Error(
                 `embedding count mismatch: ${vectors.length} vs ${chunks.length} chunks`,
@@ -112,6 +128,7 @@ async function ingestDocument(documentId) {
 
         // ---- 5) ready ----
         doc.status = 'ready';
+        doc.progress = 1;
         doc.ingestFinishedAt = new Date();
         await doc.save();
 

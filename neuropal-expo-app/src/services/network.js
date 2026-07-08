@@ -86,19 +86,29 @@ export async function askReaderQuestion({
   paragraphId,
   question,
   excerpt,
+  kind, // 'explain' routes to the passage-grounded endpoint
 }) {
   if (USE_MOCK) {
     return buildMockAnswer(question, excerpt);
   }
   assertConfigured();
 
+  const isExplain = kind === "explain" && excerpt;
+  const url = isExplain
+    ? `documents/${documentId}/explain`
+    : `documents/${documentId}/query`;
+  const body = isExplain
+    ? { passage: excerpt, depth: "intuitive" }
+    : { question };
+
   let data;
   try {
     ({ data } = await apiClient.post(
-      `documents/${documentId}/query`,
-      { question },
-      // Retrieval + LLM reasoning is slow — up to ~2 min on provider=ollama.
-      { timeout: 120000 }
+      url,
+      body,
+      // Retrieval + LLM reasoning is slow — the backend allows provider=
+      // ollama up to 5 min, so the client ceiling must not undercut it.
+      { timeout: 300000 }
     ));
   } catch (error) {
     throw new Error(describeNetworkError(error));
@@ -113,6 +123,41 @@ export async function askReaderQuestion({
     citations: formatCitations(data.citations),
     provider: data.provider,
     mode: data.mode,
+  };
+}
+
+// Phase 4 study material — POST /api/documents/:id/{summarize|quiz|cheatsheet}.
+// Returns { answer (Markdown), citations, model, provider }.
+export async function requestStudyMaterial(documentId, kind, opts = {}) {
+  if (USE_MOCK) {
+    return {
+      answer: `[MOCK] ${kind} would be generated here from the real backend.`,
+      citations: [],
+    };
+  }
+  assertConfigured();
+
+  let data;
+  try {
+    ({ data } = await apiClient.post(
+      `documents/${documentId}/${kind}`,
+      opts,
+      // Whole-document features over a book + LLM can take a while.
+      { timeout: 300000 }
+    ));
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+
+  if (!data || typeof data.answer !== "string") {
+    throw new Error("Backend returned an unexpected response (no answer).");
+  }
+
+  return {
+    answer: data.answer,
+    citations: formatCitations(data.citations),
+    model: data.model,
+    provider: data.provider,
   };
 }
 

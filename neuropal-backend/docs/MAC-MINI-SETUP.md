@@ -75,6 +75,7 @@ Then edit `.env` — every value below is required:
 | `LOCAL_MODE` | `true` (single-user, no login) |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `STORAGE_ROOT` | `./storage` |
+| `INBOX_DIR` | `/Users/ryx/NeuroPal-Inbox` — watched drop-folder; files dropped here auto-ingest into the library (LOCAL_MODE only; optional, defaults to `<STORAGE_ROOT>/inbox`) |
 
 Faster alternative: copy the working `.env` from the MacBook Pro:
 

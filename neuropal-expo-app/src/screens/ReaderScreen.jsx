@@ -1,7 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import * as Speech from "expo-speech";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -15,7 +14,9 @@ import {
 import Svg, { Circle, Line } from "react-native-svg";
 
 import { GlassPanel, withAlpha } from "../components/primitives";
+import { StudySheet } from "../components/StudySheet";
 import { USE_MOCK } from "../services/network";
+import { speakWords } from "../services/tts";
 import { appStore } from "../store";
 import {
   selectDocumentById,
@@ -32,6 +33,7 @@ import {
   requestReaderAnswer,
   resetReader,
   setReaderTotalWords,
+  setReaderWord,
 } from "../store/slices/readerSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
@@ -121,17 +123,25 @@ export function ReaderScreen() {
 
   const [askingId, setAskingId] = useState(null);
   const [citationOpen, setCitationOpen] = useState(false);
+  const [studyOpen, setStudyOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState(0);
   const simTimerRef = useRef(null);
+  const ttsRef = useRef(null);
+  // Flips true on the first real word-boundary event from the TTS engine —
+  // from then on the engine drives the highlight and the estimator dies.
+  const boundaryLiveRef = useRef(false);
 
   // Depends on `sections` (a stable reference from Redux/mock data), NOT the
   // per-render activeDocument spread — otherwise this recomputes on every
   // karaoke tick. Loop-push instead of spread-push: spreading a huge word
   // array as arguments overflows the JS argument limit.
-  const { words, ranges } = useMemo(() => {
+  const { words, ranges, sectionSpans } = useMemo(() => {
     const nextWords = [];
     const nextRanges = [];
+    const nextSpans = [];
 
     sections.forEach((section) => {
+      const sectionStart = nextWords.length;
       section.paragraphs.forEach((paragraph, index) => {
         const start = nextWords.length;
         for (const word of paragraph.split(/\s+/)) {
@@ -143,62 +153,118 @@ export function ReaderScreen() {
           end: nextWords.length,
         });
       });
+      nextSpans.push({ start: sectionStart, end: nextWords.length });
     });
 
-    return { words: nextWords, ranges: nextRanges };
+    return { words: nextWords, ranges: nextRanges, sectionSpans: nextSpans };
   }, [sections]);
+
+  const stopSpeech = useCallback(() => {
+    if (ttsRef.current) {
+      ttsRef.current.stop();
+      ttsRef.current = null;
+    }
+    if (simTimerRef.current) {
+      clearInterval(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     dispatch(resetReader());
     dispatch(setReaderTotalWords(words.length));
+    setActiveSection(0);
     return () => {
-      Speech.stop();
-      if (simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-      }
+      stopSpeech();
       dispatch(pauseReader());
     };
-  }, [dispatch, words.length]);
+  }, [dispatch, words.length, stopSpeech]);
+
+  // Whatever flips `playing` off (manual pause, estimator hitting the end,
+  // TTS onDone/onError) must also kill the audio — the estimator can end
+  // the redux state while the chunk chain is still speaking, and a replay
+  // on top of live audio double-speaks.
+  useEffect(() => {
+    if (!playback.playing) stopSpeech();
+  }, [playback.playing, stopSpeech]);
+
+  // The Reader is a tab — it never unmounts. Losing focus (switching to
+  // Home/Library) must stop the voice; there are no playback controls
+  // anywhere else.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        stopSpeech();
+        dispatch(pauseReader());
+      };
+    }, [stopSpeech, dispatch])
+  );
+
+  // While playing, the visible section follows the voice: when the cursor
+  // crosses out of the active section's word span, jump to the section that
+  // contains it.
+  useEffect(() => {
+    if (!playback.playing || sectionSpans.length < 2) return;
+    const span = sectionSpans[activeSection];
+    if (span && playback.wordIndex >= span.start && playback.wordIndex < span.end) {
+      return;
+    }
+    const next = sectionSpans.findIndex(
+      (s) => playback.wordIndex >= s.start && playback.wordIndex < s.end
+    );
+    if (next >= 0 && next !== activeSection) setActiveSection(next);
+  }, [playback.playing, playback.wordIndex, sectionSpans, activeSection]);
 
   const togglePlay = useCallback(() => {
     if (playback.playing) {
-      Speech.stop();
-      if (simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-      }
+      stopSpeech();
       dispatch(pauseReader());
       return;
     }
 
     dispatch(playReader());
-    const remaining = words.slice(playback.wordIndex).join(" ");
+    boundaryLiveRef.current = false;
     const pitch = voice === "deep" ? 0.85 : voice === "natural" ? 1 : 1.1;
     const rate = Math.min(1, Math.max(0.3, wpm / 400));
 
-    Speech.speak(remaining, {
-      pitch,
+    // Chunked utterances (Android caps one utterance at ~4k chars). Where
+    // the engine emits word boundaries, they drive the highlight exactly;
+    // otherwise the estimator below paces it and chunk starts resync it.
+    ttsRef.current = speakWords({
+      words,
+      startIndex: playback.wordIndex,
       rate,
+      pitch,
+      onWord: (wordIndex) => {
+        boundaryLiveRef.current = true;
+        if (simTimerRef.current) {
+          clearInterval(simTimerRef.current);
+          simTimerRef.current = null;
+        }
+        dispatch(setReaderWord(wordIndex));
+      },
+      onChunkStart: (wordIndex) => {
+        if (!boundaryLiveRef.current) dispatch(setReaderWord(wordIndex));
+      },
       onDone: () => dispatch(pauseReader()),
-      onStopped: () => dispatch(pauseReader()),
       onError: () => dispatch(pauseReader()),
     });
 
-    if (simTimerRef.current) {
-      clearInterval(simTimerRef.current);
-    }
-
     simTimerRef.current = setInterval(() => {
-      dispatch(advanceReader());
+      if (!boundaryLiveRef.current) {
+        dispatch(advanceReader());
+      }
       if (!appStore.getState().reader.playing && simTimerRef.current) {
         clearInterval(simTimerRef.current);
+        simTimerRef.current = null;
       }
     }, 60000 / wpm);
-  }, [dispatch, playback.playing, playback.wordIndex, voice, wpm, words]);
+  }, [dispatch, playback.playing, playback.wordIndex, voice, wpm, words, stopSpeech]);
 
   const progress =
     playback.totalWords === 0 ? 0 : playback.wordIndex / playback.totalWords;
 
-  function askAboutParagraph(paragraphId, question, excerpt) {
+  function askAboutParagraph(paragraphId, question, excerpt, kind) {
     // No real document open (empty library / placeholder) — nothing to
     // query; the placeholder id would just 400 on the backend.
     if (!document) return;
@@ -208,10 +274,14 @@ export function ReaderScreen() {
         paragraphId,
         question,
         excerpt,
+        kind,
       })
     );
     setAskingId(paragraphId);
   }
+
+  const visibleSections =
+    sections.length > 1 ? [sections[Math.min(activeSection, sections.length - 1)]] : sections;
 
   return (
     <View className="flex-1" style={{ flex: 1, backgroundColor: palette.surface }}>
@@ -229,7 +299,27 @@ export function ReaderScreen() {
         document={activeDocument}
         onBack={() => navigation.navigate("Library")}
         onOpenGraph={() => setCitationOpen(true)}
+        onOpenStudy={document ? () => setStudyOpen(true) : null}
       />
+
+      {sections.length > 1 ? (
+        <PartNav
+          index={activeSection}
+          total={sections.length}
+          onChange={(next) => {
+            // Manual navigation wins over the voice: stop playback and move
+            // the cursor to the chosen part's start, so Play resumes there
+            // (and the auto-follow effect has nothing to fight).
+            if (playback.playing) {
+              stopSpeech();
+              dispatch(pauseReader());
+            }
+            const span = sectionSpans[next];
+            if (span) dispatch(setReaderWord(span.start));
+            setActiveSection(next);
+          }}
+        />
+      ) : null}
 
       <View style={{ flex: 1, flexDirection: "row" }}>
         {readerLayout !== "paginated" ? (
@@ -237,6 +327,8 @@ export function ReaderScreen() {
         ) : null}
         <ReaderBody
           document={activeDocument}
+          visibleSections={visibleSections}
+          sectionKey={activeSection}
           currentWordIndex={playback.wordIndex}
           ranges={ranges}
           chat={chat}
@@ -275,11 +367,62 @@ export function ReaderScreen() {
         visible={citationOpen}
         onClose={() => setCitationOpen(false)}
       />
+
+      <StudySheet
+        visible={studyOpen}
+        onClose={() => setStudyOpen(false)}
+        documentId={activeDocument.id}
+        documentTitle={activeDocument.title}
+      />
     </View>
   );
 }
 
-function ReaderHeader({ document, onBack, onOpenGraph }) {
+function PartNav({ index, total, onChange }) {
+  const palette = usePalette();
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 14,
+        paddingVertical: 6,
+      }}
+    >
+      <Pressable
+        onPress={() => onChange(Math.max(0, index - 1))}
+        disabled={index === 0}
+        accessibilityRole="button"
+        accessibilityLabel="Previous part"
+        style={{ padding: 6, opacity: index === 0 ? 0.3 : 1 }}
+      >
+        <MaterialIcons name="chevron-left" size={22} color={palette.onSurfaceVariant} />
+      </Pressable>
+      <Text
+        style={{
+          color: palette.onSurfaceVariant,
+          fontFamily: "JetBrainsMono_400Regular",
+          fontSize: 12,
+        }}
+      >
+        Part {index + 1} / {total}
+      </Text>
+      <Pressable
+        onPress={() => onChange(Math.min(total - 1, index + 1))}
+        disabled={index >= total - 1}
+        accessibilityRole="button"
+        accessibilityLabel="Next part"
+        style={{ padding: 6, opacity: index >= total - 1 ? 0.3 : 1 }}
+      >
+        <MaterialIcons name="chevron-right" size={22} color={palette.onSurfaceVariant} />
+      </Pressable>
+    </View>
+  );
+}
+
+function ReaderHeader({ document, onBack, onOpenGraph, onOpenStudy }) {
   const palette = usePalette();
 
   return (
@@ -329,6 +472,15 @@ function ReaderHeader({ document, onBack, onOpenGraph }) {
           {document.title}
         </Text>
       </View>
+      {onOpenStudy ? (
+        <Pressable
+          onPress={onOpenStudy}
+          style={{ padding: 8 }}
+          accessibilityLabel="Open study tools: summary, quiz, cheatsheet"
+        >
+          <MaterialIcons name="school" size={20} color={palette.accent} />
+        </Pressable>
+      ) : null}
       <Pressable
         onPress={onOpenGraph}
         style={{ padding: 8 }}
@@ -375,6 +527,8 @@ function Minimap({ sections, progress }) {
 
 function ReaderBody({
   document,
+  visibleSections,
+  sectionKey,
   currentWordIndex,
   ranges,
   chat,
@@ -389,11 +543,19 @@ function ReaderBody({
   onAsk,
 }) {
   const palette = usePalette();
+  const scrollRef = useRef(null);
   const maxWidth =
     layout === "focus" ? 520 : layout === "paginated" ? 680 : 720;
 
+  // New part → back to the top, otherwise the karaoke highlight lands at
+  // the old scroll offset, off-screen.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [sectionKey]);
+
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
@@ -446,7 +608,7 @@ function ReaderBody({
             ) : null}
           </View>
         ) : null}
-        {(document.sections || []).map((section) => (
+        {(visibleSections || document.sections || []).map((section) => (
           <View key={section.id}>
             <Text
               style={{
@@ -478,7 +640,8 @@ function ReaderBody({
                       onAsk(
                         paragraphId,
                         `Explain: "${paragraph.slice(0, 120)}..."`,
-                        paragraph
+                        paragraph,
+                        "explain"
                       )
                     }
                     style={{

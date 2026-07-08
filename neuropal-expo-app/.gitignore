@@ -34,3 +34,7 @@ Thumbs.db
 # Editor
 .idea/
 .vscode/
+
+# Native projects are generated on demand (npx expo prebuild) — not tracked
+/android
+/ios

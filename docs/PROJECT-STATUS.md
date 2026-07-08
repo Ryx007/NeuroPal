@@ -7,7 +7,10 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-07-07 (Mac Mini session — Phase 0+1 acceptance PASSED on the Mini; Phase 2 wiring done + verified on Expo web; S24 acceptance pending)_
+_Last updated: 2026-07-08 (Mac Mini session — EPUB extraction, inbox drop-folder,
+ingest progress, Phase 4 study endpoints + StudySheet UI, chunked TTS with
+boundary karaoke, big-book reader windowing, web upload; local release-APK
+pipeline stood up. See `docs/BRAIN.md` — the extended continuation doc.)_
 
 ---
 
@@ -37,10 +40,11 @@ Ollama), all other devices are LAN clients. See
 |---|---|---|
 | **0 — Local infra** | **✅ ACCEPTED on the Mini (2026-07-07)** | Docker Mongo 8 + Qdrant up (named volumes), Ollama serving `nomic-embed-text` + `qwen2.5:7b`. All §6 checks green: Qdrant collections, Mongo ping `{ok:1}`, Ollama tags, `/healthz`. |
 | **1 — Backend + AI layer** | **✅ ACCEPTED on the Mini (2026-07-07)** | Real PDF (arXiv 1401.4118, Lvovsky "Squeezed light", 21pp/16k words) → `ready` in ~10s → `/text` returns full text → `/query` grounded `{answer, citations[{chunkId,page,excerpt}]}` via **gemini-2.5-flash** (mode:rag, 8 chunks) AND via **ollama qwen2.5:7b** (correct answer; citations empty — tolerant-parse contract held). Added missing `GET /api/auth/me` (frontend boot probe 404'd without it). |
-| **2 — Native frontend (S24)** | **WIRED + VERIFIED on Expo web — S24 acceptance pending** | `network.js` rewritten: mock is opt-in via `EXPO_PUBLIC_USE_MOCK`, real errors surfaced (Library banner + reader chat error notes + boot toast). `ApiLink` host now from `EXPO_PUBLIC_API_BASE_URL`. Library: real fetch, upload, 2.5s ingest-status polling, focus refresh. Reader: fetches `/documents/:id/text` (backend docs have no `sections`), citations objects → `p. N` chips, karaoke perf memo on ParagraphText. Verified end-to-end in browser against `http://192.168.3.169:4000` (login gate → library → reader text → karaoke advance → grounded Q&A with citation chip). **Remaining: run on the S24 via Expo Go (see §Next actions), incl. DocumentPicker upload + expo-speech TTS on Android.** |
-| **3 — Web target (Macs)** | **PARTIALLY UNBLOCKED** | `expo start --web` now bundles (react-native-pager-view platform-split via `src/components/PagerView[.web].js`). Whole Module 0 read/Q&A loop already works in the browser. Remaining: Web Speech API TTS with `onboundary` karaoke (current sim-timer estimator runs but no audio), browser file upload. |
-| **4 — Exam-prep endpoints** | **NOT STARTED** | summarize / quiz / cheatsheet / explain — all call `aiProvider.generateAnswer` with different system prompts. |
-| **5 — APK + accessibility** | **NOT STARTED** | Deferred until Module 0 is solid (per owner's directive). |
+| **2 — Native frontend (S24)** | **WIRED + VERIFIED on Expo web — S24 acceptance via the APK** | Mock opt-in, visible errors, real upload/polling/query (2026-07-07). 2026-07-08: TTS rebuilt on `services/tts.js` (chunked utterances — Android caps ~4k chars — with `onBoundary`-driven karaoke + estimator fallback), big-doc windowing (Parts of 40 paragraphs, view follows the voice), long-press → `/explain`. |
+| **3 — Web target (Macs)** | **WORKING** | Bundles + full Module 0 loop verified in browser (login → library → 216k-word book in parts → karaoke → cited Q&A → study sheet). Web upload fixed (real `File` in FormData). TTS boundaries via expo-speech web. |
+| **4 — Exam-prep endpoints** | **DONE + UI** | `routes/study.js`: summarize/quiz/cheatsheet/explain on `aiProvider` with even chunk-sampling (budget: gemini 120k chars, ollama 8k). Gemini now schema-constrained JSON + tolerantParse escape-repair/salvage (LaTeX answers broke the old parser). `StudySheet` modal in the Reader (school icon). Verified on the QFT notes + Moby Dick. |
+| **5 — APK + accessibility** | **APK PIPELINE UP (local Gradle)** | `expo prebuild` + `gradlew assembleRelease` on the Mini. Gotchas solved: JDK17 toolchain (user-level Temurin + gradle.properties), `expo-build-properties` for cleartext HTTP, `babel-preset-expo@55` pin (57 broke Hermes). See BRAIN §6 runbook. Accessibility sweep still pending. |
+| **Extras (2026-07-08)** | **DONE** | Real EPUB extractor (adm-zip, OPF spine). Ingest `progress` 0→1 on Document (books show live % while embedding). **Inbox drop-folder**: `~/NeuroPal-Inbox` watched (chokidar) — drop a book, it auto-ingests (verified with a 216k-word EPUB). |
 
 ## Decisions log (locked — do not re-litigate)
 
