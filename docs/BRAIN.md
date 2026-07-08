@@ -78,6 +78,7 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `GET /api/documents/:id/text` | — | `{id,title,text,pageCount,wordCount,source:'chunks'\|'raw-file'}` — reader/TTS source. `raw-file` = ingest not finished; for binary types that's mojibake, so the client only fetches when status is `ready`. |
 | `POST /api/documents/:id/query` | `{question[,threadId][,provider]}` | `{answer, citations:[{chunkId,page,excerpt}], verbatim[], threadId, mode:'rag'\|'fallback', model, provider, chunksUsed}` |
 | `GET /api/documents/:id/chat` | `?threadId=` | ChatMessage[] (oldest first, cap 100) |
+| `GET /api/documents/:id/progress` | — | `{progress,lastWordIndex,lastPage,lastOpenedAt}` — reader resume point (Audible-style); nulls when never opened |
 | `PATCH /api/documents/:id/progress` | `{progress,lastWordIndex,lastPage,timeSpentSec}` | ReadingSession (reading progress lives HERE, not on Document) |
 | `POST /api/documents/:id/reingest` | — | wipes chunks (Mongo+Qdrant), re-runs ingest |
 | `DELETE /api/documents/:id` | — | soft-delete + cascade chunks/session |
