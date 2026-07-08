@@ -171,8 +171,11 @@ npx expo prebuild --platform android --clean       # regenerates android/ (gitig
 cd android && export JAVA_HOME=$(/usr/libexec/java_home) ANDROID_HOME=~/Library/Android/sdk
 ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
-# Serve to the phone:  cd app/build/outputs/apk/release && python3 -m http.server 8888
-# On the S24 browser:  http://192.168.3.169:8888/app-release.apk → install (allow unknown sources)
+# Publish to the phone (persistent, pm2-served):
+cp app/build/outputs/apk/release/app-release.apk ~/NeuroPal-APK/neuropal.apk
+# (`pm2 serve /Users/ryx/NeuroPal-APK 8888 --name neuropal-apk` is already
+#  registered + saved; just replacing the file is enough.)
+# On the S24 browser:  http://192.168.3.169:8888/neuropal.apk → install (allow unknown sources)
 ```
 Hard-won build facts:
 - RN Gradle wants a **JDK 17 toolchain**; JDK 21 alone makes Gradle try to download one via a broken foojay resolver (`IBM_SEMERU` crash). Fixed by the user-level Temurin 17 + `~/.gradle/gradle.properties` (see §3).
@@ -199,6 +202,8 @@ npx expo start                                     # + QR for Expo Go phones
 - **DocCard "% completed"** shows `Document.progress` = INGEST progress (100% once ready). Reading progress (ReadingSession + PATCH /progress) is not yet wired into the UI.
 - **Web TTS boundaries**: expo-speech web emits boundary events in Chrome/Safari with local voices; headless/exotic browsers fall back to the estimator. Fine in practice.
 - **Ollama study context** is capped at 8k chars — whole-book summaries via the offline model are shallow by design (Gemini is the default for study features).
+- **WPM slider changes don't re-pace an in-flight playback** (pause → play applies them). Pre-existing; low priority.
+- **Reader margin notes are session-scoped** (Redux only) and keyed to the current paragraph split — they don't survive an app restart. Chat history IS persisted server-side (`GET /documents/:id/chat`), just not re-hydrated into the reader yet.
 - **Android share-target** ("Share → NeuroPal") deliberately deferred until the first APK is proven.
 - **Phone-side watched folder** ruled out pre-exam (background restrictions; low value vs picker).
 - **Modules 1–9** (Anchors, DailyLog, Companion, Visualizer, …): schemas exist, routes deliberately absent (brief §10). The old kickoff docs in `~/Downloads/NeuroPal_Instructions/` mention a Module 9 visualizer plan — treat as FUTURE, not current scope.
