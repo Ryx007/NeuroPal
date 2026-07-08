@@ -1,5 +1,4 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import Slider from "@react-native-community/slider";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -10,12 +9,19 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
-import Svg, { Circle, Line } from "react-native-svg";
+import Toast from "react-native-toast-message";
 
-import { GlassPanel, withAlpha } from "../components/primitives";
+import { withAlpha } from "../components/primitives";
+import { MathView } from "../components/MathView";
+import { DisplayOptionsSheet } from "../components/reader/DisplayOptionsSheet";
+import { ReaderTopBar } from "../components/reader/ReaderTopBar";
+import { SelectionBar } from "../components/reader/SelectionBar";
+import { TidalPlayer } from "../components/reader/TidalPlayer";
+import { TocSheet } from "../components/reader/TocSheet";
 import { StudySheet } from "../components/StudySheet";
 import { documentPageUrl, USE_MOCK } from "../services/network";
 import { speakWords } from "../services/tts";
@@ -28,20 +34,30 @@ import {
   selectUiState,
 } from "../store/selectors";
 import {
+  addAnnotation,
   advanceReader,
   fetchReaderDocument,
+  loadAnnotations,
   pauseReader,
   playReader,
+  removeAnnotation,
   requestReaderAnswer,
   resetReader,
   setReaderTotalWords,
   setReaderWord,
 } from "../store/slices/readerSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
+import { blockMathOf } from "../utils/math";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 
-// Stable fallback so the words/ranges memo doesn't recompute when there is
-// simply no content.
+// D8/D9/D10 — the Play-Books-style immersive reader.
+//   · tap the page (not a word) to toggle chrome (top bar + player + Ask)
+//   · tap a word to move the read cursor; long-press a word to start a
+//     selection, tap another word to extend, then highlight/explain
+//   · block equations ($$…$$) render via KaTeX and are skipped by TTS
+//   · Tidal-style docked player: scrubber → transport → tone + WPM
+//   · TOC sheet with chapters + bookmarks; go-to-page; original-pages view
+
 const EMPTY_SECTIONS = [];
 
 export function ReaderScreen() {
@@ -49,8 +65,12 @@ export function ReaderScreen() {
   const navigation = useNavigation();
   const palette = usePalette();
   const dispatch = useDispatch();
-  const { readerFontFamily, readerFontSize, readerLineHeight, readerExtraLetterSpacing } =
-    useTheme();
+  const {
+    readerFontFamily,
+    readerFontSize,
+    readerLineHeight,
+    readerExtraLetterSpacing,
+  } = useTheme();
   const { id } = route.params || {};
 
   const document = useSelector((state) => selectDocumentById(state, id));
@@ -58,18 +78,28 @@ export function ReaderScreen() {
   const playback = useSelector(selectReaderPlayback);
   const chat = useSelector(selectReaderMessages);
   const readerDoc = useSelector(selectReaderDoc);
+  const annotations = useSelector((s) => s.reader.annotations);
 
-  // Backend documents carry no `sections` (mock ones do) — pull the ingested
-  // text from GET /documents/:id/text and render that instead. Key off the
-  // resolved document (the tab-bar route has no id param and falls back to
-  // the first library doc). Gates:
-  //  - only fetch once ingest is `ready` — before that /text serves the raw
-  //    on-disk file, which for a PDF is binary mojibake that would then be
-  //    cached (and spoken!) for the rest of the session. The library's
-  //    ingest poll updates `document.status` live, so the fetch fires on
-  //    its own the moment the doc flips to ready.
-  //  - never fetch in mock mode (mock docs without sections stay empty).
-  //  - the docId guard stops a rejected fetch from retrying in a loop.
+  const [askingId, setAskingId] = useState(null);
+  const [studyOpen, setStudyOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const [gotoOpen, setGotoOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState(0);
+  const [viewMode, setViewMode] = useState("text"); // 'text' | 'pages'
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [selection, setSelection] = useState(null); // {start, end} inclusive
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const simTimerRef = useRef(null);
+  const ttsRef = useRef(null);
+  const settingsRestartRef = useRef(null);
+  const pagesListRef = useRef(null);
+  // Flips true on the first real word-boundary event from the TTS engine —
+  // from then on the engine drives the highlight and the estimator dies.
+  const boundaryLiveRef = useRef(false);
+
+  // ---- document text ------------------------------------------------------
   const targetId = document?.id;
   const status = document?.status;
   const ingesting =
@@ -85,6 +115,7 @@ export function ReaderScreen() {
   useEffect(() => {
     if (needsText && readerDoc.docId !== targetId) {
       dispatch(fetchReaderDocument({ documentId: targetId }));
+      dispatch(loadAnnotations({ documentId: targetId }));
     }
   }, [needsText, readerDoc.docId, targetId, dispatch]);
 
@@ -99,7 +130,7 @@ export function ReaderScreen() {
     document || {
       id: "doc-empty",
       title: "No document selected",
-      subtitle: "Open a document from the library to start the NeuroReader flow.",
+      subtitle: "Open a document from the library to start reading.",
       type: "pdf",
       progress: 0,
       pageCount: 0,
@@ -108,7 +139,8 @@ export function ReaderScreen() {
   const sections = baseDocument.sections || fetchedSections || EMPTY_SECTIONS;
   const activeDocument = { ...baseDocument, sections };
 
-  const textError = needsText && readerDoc.docId === targetId ? readerDoc.error : null;
+  const textError =
+    needsText && readerDoc.docId === targetId ? readerDoc.error : null;
   const emptyNotice = !baseDocument.sections
     ? ingesting
       ? "This document is still being processed — the text will appear here as soon as it's ready."
@@ -123,24 +155,7 @@ export function ReaderScreen() {
               : null
     : null;
 
-  const [askingId, setAskingId] = useState(null);
-  const [citationOpen, setCitationOpen] = useState(false);
-  const [studyOpen, setStudyOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState(0);
-  // 'text' = karaoke reader; 'pages' = rendered original PDF pages (true
-  // visual fidelity — equations/figures exactly as printed).
-  const [viewMode, setViewMode] = useState("text");
-  const simTimerRef = useRef(null);
-  const ttsRef = useRef(null);
-  const settingsRestartRef = useRef(null);
-  // Flips true on the first real word-boundary event from the TTS engine —
-  // from then on the engine drives the highlight and the estimator dies.
-  const boundaryLiveRef = useRef(false);
-
-  // Depends on `sections` (a stable reference from Redux/mock data), NOT the
-  // per-render activeDocument spread — otherwise this recomputes on every
-  // karaoke tick. Loop-push instead of spread-push: spreading a huge word
-  // array as arguments overflows the JS argument limit.
+  // ---- words / ranges / spans (math paragraphs contribute no words: D9) ---
   const { words, ranges, sectionSpans } = useMemo(() => {
     const nextWords = [];
     const nextRanges = [];
@@ -150,8 +165,10 @@ export function ReaderScreen() {
       const sectionStart = nextWords.length;
       section.paragraphs.forEach((paragraph, index) => {
         const start = nextWords.length;
-        for (const word of paragraph.split(/\s+/)) {
-          nextWords.push(word);
+        if (!blockMathOf(paragraph)) {
+          for (const word of paragraph.split(/\s+/)) {
+            nextWords.push(word);
+          }
         }
         nextRanges.push({
           pid: `${section.id}-${index}`,
@@ -165,6 +182,30 @@ export function ReaderScreen() {
     return { words: nextWords, ranges: nextRanges, sectionSpans: nextSpans };
   }, [sections]);
 
+  // Highlights clipped per paragraph — computed once per annotations change
+  // so ParagraphText's memo keeps working (stable array identities).
+  const highlightsByPid = useMemo(() => {
+    const map = new Map();
+    const highlights = annotations.filter((a) => a.kind === "highlight");
+    if (highlights.length === 0) return map;
+    for (const range of ranges) {
+      const clipped = [];
+      for (const h of highlights) {
+        const s = Math.max(h.wordStart, range.start);
+        const e = Math.min(h.wordEnd, range.end - 1);
+        if (s <= e) clipped.push({ s, e, color: h.color || palette.tertiary });
+      }
+      if (clipped.length > 0) map.set(range.pid, clipped);
+    }
+    return map;
+  }, [annotations, ranges, palette.tertiary]);
+
+  const bookmarks = useMemo(
+    () => annotations.filter((a) => a.kind === "bookmark"),
+    [annotations]
+  );
+
+  // ---- playback engine (carried over intact) ------------------------------
   const stopSpeech = useCallback(() => {
     if (ttsRef.current) {
       ttsRef.current.stop();
@@ -181,23 +222,20 @@ export function ReaderScreen() {
     dispatch(setReaderTotalWords(words.length));
     setActiveSection(0);
     setViewMode("text");
+    setSelection(null);
+    setChromeVisible(true);
     return () => {
       stopSpeech();
       dispatch(pauseReader());
     };
   }, [dispatch, words.length, stopSpeech]);
 
-  // Whatever flips `playing` off (manual pause, estimator hitting the end,
-  // TTS onDone/onError) must also kill the audio — the estimator can end
-  // the redux state while the chunk chain is still speaking, and a replay
-  // on top of live audio double-speaks.
+  // Whatever flips `playing` off must also kill the audio.
   useEffect(() => {
     if (!playback.playing) stopSpeech();
   }, [playback.playing, stopSpeech]);
 
-  // The Reader is a tab — it never unmounts. Losing focus (switching to
-  // Home/Library) must stop the voice; there are no playback controls
-  // anywhere else.
+  // The Reader never unmounts (drawer destination) — losing focus stops it.
   useFocusEffect(
     useCallback(() => {
       return () => {
@@ -207,30 +245,13 @@ export function ReaderScreen() {
     }, [stopSpeech, dispatch])
   );
 
-  // While playing, the visible section follows the voice: when the cursor
-  // crosses out of the active section's word span, jump to the section that
-  // contains it.
-  useEffect(() => {
-    if (!playback.playing || sectionSpans.length < 2) return;
-    const span = sectionSpans[activeSection];
-    if (span && playback.wordIndex >= span.start && playback.wordIndex < span.end) {
-      return;
-    }
-    const next = sectionSpans.findIndex(
-      (s) => playback.wordIndex >= s.start && playback.wordIndex < s.end
-    );
-    if (next >= 0 && next !== activeSection) setActiveSection(next);
-  }, [playback.playing, playback.wordIndex, sectionSpans, activeSection]);
-
-  // Start the TTS engine + estimator from a given word. Chunked utterances
-  // (Android caps one utterance at ~4k chars); where the engine emits word
-  // boundaries they drive the highlight exactly, otherwise the estimator
-  // paces it and chunk starts resync it.
   const startPlaybackFrom = useCallback(
     (startIndex) => {
       boundaryLiveRef.current = false;
       const pitch = voice === "deep" ? 0.85 : voice === "natural" ? 1 : 1.1;
-      const rate = Math.min(1, Math.max(0.3, wpm / 400));
+      // 950 wpm ceiling: 400 wpm ≈ engine rate 1.0, clamp at 2.4× (past the
+      // reliable Android/iOS range the estimator alone paces the karaoke).
+      const rate = Math.min(2.4, Math.max(0.25, wpm / 400));
 
       ttsRef.current = speakWords({
         words,
@@ -269,14 +290,14 @@ export function ReaderScreen() {
     if (playback.playing) {
       stopSpeech();
       dispatch(pauseReader());
+      setChromeVisible(true);
       return;
     }
     dispatch(playReader());
     startPlaybackFrom(playback.wordIndex);
+    setChromeVisible(false); // Play-Books: chrome auto-hides while reading
   }, [dispatch, playback.playing, playback.wordIndex, startPlaybackFrom, stopSpeech]);
 
-  // Precise cursor control: jump to any word. If the voice is running it
-  // restarts seamlessly from the new position.
   const seekTo = useCallback(
     (index) => {
       const clamped = Math.max(0, Math.min(Math.max(0, words.length - 1), index));
@@ -288,8 +309,6 @@ export function ReaderScreen() {
     [words.length, stopSpeech, dispatch, startPlaybackFrom]
   );
 
-  // Skip back/forward one paragraph (back first jumps to the top of the
-  // current paragraph, like a music player restarts the current track).
   const skipParagraph = useCallback(
     (dir) => {
       const idx = appStore.getState().reader.wordIndex;
@@ -305,10 +324,7 @@ export function ReaderScreen() {
     [ranges, seekTo]
   );
 
-  const onWordPress = useCallback((globalIndex) => seekTo(globalIndex), [seekTo]);
-
-  // Speed/voice changes now apply mid-playback: debounce (the slider fires
-  // continuously), then restart the engine from the current word.
+  // Speed/voice changes apply mid-playback (debounced engine restart).
   useEffect(() => {
     if (!appStore.getState().reader.playing) return undefined;
     if (settingsRestartRef.current) clearTimeout(settingsRestartRef.current);
@@ -323,129 +339,360 @@ export function ReaderScreen() {
     };
   }, [wpm, voice, stopSpeech, startPlaybackFrom]);
 
-  const progress =
-    playback.totalWords === 0 ? 0 : playback.wordIndex / playback.totalWords;
+  // While playing, the visible section follows the voice.
+  useEffect(() => {
+    if (!playback.playing || sectionSpans.length < 2) return;
+    const span = sectionSpans[activeSection];
+    if (span && playback.wordIndex >= span.start && playback.wordIndex < span.end) {
+      return;
+    }
+    const next = sectionSpans.findIndex(
+      (s) => playback.wordIndex >= s.start && playback.wordIndex < s.end
+    );
+    if (next >= 0 && next !== activeSection) setActiveSection(next);
+  }, [playback.playing, playback.wordIndex, sectionSpans, activeSection]);
 
-  function askAboutParagraph(paragraphId, question, excerpt, kind) {
-    // No real document open (empty library / placeholder) — nothing to
-    // query; the placeholder id would just 400 on the backend.
-    if (!document) return;
+  // ---- selection / highlight / explain ------------------------------------
+  const selectionRef = useRef(null);
+  selectionRef.current = selection;
+  // "Armed" turns the next word tap into a selection start. Long-press does
+  // the same in one gesture, but react-native-web never fires onLongPress on
+  // nested Text nodes — this menu-armed path is the way in on web (and a
+  // more discoverable one everywhere).
+  const armSelectRef = useRef(false);
+
+  const onWordPress = useCallback(
+    (globalIndex) => {
+      const sel = selectionRef.current;
+      if (sel) {
+        setSelection(
+          globalIndex < sel.start
+            ? { start: globalIndex, end: sel.end }
+            : { start: sel.start, end: globalIndex }
+        );
+        return;
+      }
+      if (armSelectRef.current) {
+        armSelectRef.current = false;
+        setSelection({ start: globalIndex, end: globalIndex });
+        return;
+      }
+      seekTo(globalIndex);
+    },
+    [seekTo]
+  );
+
+  const onWordLongPress = useCallback((globalIndex) => {
+    setSelection({ start: globalIndex, end: globalIndex });
+  }, []);
+
+  const selectedText = selection
+    ? words.slice(selection.start, selection.end + 1).join(" ")
+    : "";
+
+  async function applyHighlight(color) {
+    if (!selection || !document) return;
+    try {
+      await dispatch(
+        addAnnotation({
+          documentId: activeDocument.id,
+          kind: "highlight",
+          wordStart: selection.start,
+          wordEnd: selection.end,
+          color,
+          excerpt: selectedText.slice(0, 500),
+        })
+      ).unwrap();
+      Toast.show({ type: "success", text1: "Highlighted" });
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Highlight failed", text2: error?.message });
+    }
+    setSelection(null);
+  }
+
+  function explainSelection() {
+    if (!selection || !document) return;
+    const range = ranges.find(
+      (r) => selection.start >= r.start && selection.start < r.end
+    );
     dispatch(
       requestReaderAnswer({
         documentId: activeDocument.id,
-        paragraphId,
-        question,
-        excerpt,
-        kind,
+        paragraphId: range?.pid || "selection",
+        question: `Explain: "${selectedText.slice(0, 120)}…"`,
+        excerpt: selectedText,
+        kind: "explain",
       })
     );
-    setAskingId(paragraphId);
+    setAskingId(range?.pid || null);
+    setSelection(null);
+  }
+
+  async function bookmarkHere() {
+    if (!document) return;
+    const idx =
+      viewMode === "pages"
+        ? Math.floor(
+            ((currentPage - 1) / Math.max(1, activeDocument.pageCount)) *
+              Math.max(1, words.length)
+          )
+        : appStore.getState().reader.wordIndex;
+    try {
+      await dispatch(
+        addAnnotation({
+          documentId: activeDocument.id,
+          kind: "bookmark",
+          wordStart: idx,
+          wordEnd: idx,
+          excerpt: words.slice(idx, idx + 14).join(" "),
+          page: viewMode === "pages" ? currentPage : undefined,
+        })
+      ).unwrap();
+      Toast.show({ type: "success", text1: "Bookmarked" });
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Bookmark failed", text2: error?.message });
+    }
+  }
+
+  // ---- ask / q&a -----------------------------------------------------------
+  function askAboutCursor() {
+    if (!document) return;
+    const idx = appStore.getState().reader.wordIndex;
+    const range =
+      ranges.find((r) => idx >= r.start && idx < r.end) || ranges[0];
+    if (!range) return;
+    const section = sections.find((s) => range.pid.startsWith(s.id));
+    const paraIndex = parseInt(range.pid.split("-").pop(), 10);
+    const paragraph = section?.paragraphs?.[paraIndex] || "";
+    dispatch(
+      requestReaderAnswer({
+        documentId: activeDocument.id,
+        paragraphId: range.pid,
+        question: "Summarise the current paragraph in plain language.",
+        excerpt: paragraph,
+      })
+    );
+    setAskingId(range.pid);
+  }
+
+  // ---- navigation helpers --------------------------------------------------
+  const jumpToSection = useCallback(
+    (index) => {
+      const span = sectionSpans[index];
+      if (playback.playing) {
+        stopSpeech();
+        dispatch(pauseReader());
+      }
+      if (span) dispatch(setReaderWord(span.start));
+      setActiveSection(index);
+      setTocOpen(false);
+    },
+    [sectionSpans, playback.playing, stopSpeech, dispatch]
+  );
+
+  function goToPage(page) {
+    const pageCount = Math.max(1, activeDocument.pageCount || 1);
+    const clamped = Math.max(1, Math.min(pageCount, page));
+    if (viewMode === "pages") {
+      pagesListRef.current?.scrollToIndex({ index: clamped - 1, animated: true });
+    } else if (words.length > 0) {
+      const idx = Math.floor(((clamped - 1) / pageCount) * words.length);
+      seekTo(idx);
+      const next = sectionSpans.findIndex((s) => idx >= s.start && idx < s.end);
+      if (next >= 0) setActiveSection(next);
+    }
+    setCurrentPage(clamped);
+    setGotoOpen(false);
   }
 
   const visibleSections =
-    sections.length > 1 ? [sections[Math.min(activeSection, sections.length - 1)]] : sections;
+    sections.length > 1
+      ? [sections[Math.min(activeSection, sections.length - 1)]]
+      : sections;
+
+  const currentHeading =
+    sections[Math.min(activeSection, Math.max(0, sections.length - 1))]?.heading ||
+    activeDocument.title;
+
+  const overflowItems = [
+    { icon: "school", label: "Study tools", onPress: () => setStudyOpen(true) },
+    ...(document && viewMode === "text"
+      ? [
+          {
+            icon: "border-color",
+            label: "Select & highlight",
+            onPress: () => {
+              armSelectRef.current = true;
+              Toast.show({
+                type: "info",
+                text1: "Tap a word to start selecting",
+                text2: "Tap another word to extend, then pick a color or Explain.",
+              });
+            },
+          },
+        ]
+      : []),
+    ...(document && document.type === "pdf" && document.pageCount > 0 && !USE_MOCK
+      ? [
+          {
+            icon: viewMode === "text" ? "auto-stories" : "subject",
+            label: viewMode === "text" ? "Original pages" : "Text reader",
+            onPress: () => setViewMode((m) => (m === "text" ? "pages" : "text")),
+          },
+        ]
+      : []),
+    ...(activeDocument.pageCount > 0
+      ? [{ icon: "tag", label: "Go to page…", onPress: () => setGotoOpen(true) }]
+      : []),
+    ...(document
+      ? [{ icon: "bookmark-add", label: "Bookmark here", onPress: bookmarkHere }]
+      : []),
+  ];
 
   return (
-    <View className="flex-1" style={{ flex: 1, backgroundColor: palette.surface }}>
-      <View style={{ height: 2, backgroundColor: palette.surfaceLow }}>
-        <View
-          style={{
-            height: "100%",
-            width: `${Math.round(progress * 100)}%`,
-            backgroundColor: palette.secondary,
-          }}
+    <View style={{ flex: 1, backgroundColor: palette.surface }}>
+      {viewMode === "pages" ? (
+        <PdfPagesView
+          listRef={pagesListRef}
+          documentId={activeDocument.id}
+          pageCount={activeDocument.pageCount}
+          onPageChange={setCurrentPage}
+          onTapPage={() => setChromeVisible((v) => !v)}
         />
-      </View>
+      ) : (
+        <ReaderBody
+          visibleSections={visibleSections}
+          sectionKey={activeSection}
+          currentWordIndex={playback.wordIndex}
+          ranges={ranges}
+          chat={chat}
+          askingId={askingId}
+          emptyNotice={emptyNotice}
+          onRetryText={textError ? retryTextFetch : null}
+          layout={readerLayout}
+          readerFontFamily={readerFontFamily}
+          readerFontSize={readerFontSize}
+          readerLineHeight={readerLineHeight}
+          readerExtraLetterSpacing={readerExtraLetterSpacing}
+          onWordPress={onWordPress}
+          onWordLongPress={onWordLongPress}
+          highlightsByPid={highlightsByPid}
+          selection={selection}
+          onSurfaceTap={() => setChromeVisible((v) => !v)}
+          equationColor={palette.onSurface}
+        />
+      )}
 
-      <ReaderHeader
-        document={activeDocument}
-        onBack={() => navigation.navigate("Library")}
-        onOpenGraph={() => setCitationOpen(true)}
-        onOpenStudy={document ? () => setStudyOpen(true) : null}
-        viewMode={viewMode}
-        onToggleView={
-          document && document.type === "pdf" && document.pageCount > 0 && !USE_MOCK
-            ? () => setViewMode((m) => (m === "text" ? "pages" : "text"))
-            : null
-        }
-      />
-
-      {viewMode === "text" && sections.length > 1 ? (
-        <PartNav
-          index={activeSection}
-          total={sections.length}
-          onChange={(next) => {
-            // Manual navigation wins over the voice: stop playback and move
-            // the cursor to the chosen part's start, so Play resumes there
-            // (and the auto-follow effect has nothing to fight).
-            if (playback.playing) {
-              stopSpeech();
-              dispatch(pauseReader());
-            }
-            const span = sectionSpans[next];
-            if (span) dispatch(setReaderWord(span.start));
-            setActiveSection(next);
-          }}
+      {chromeVisible ? (
+        <ReaderTopBar
+          title={activeDocument.title}
+          subtitle={
+            viewMode === "pages"
+              ? `Page ${currentPage} / ${activeDocument.pageCount}`
+              : currentHeading !== activeDocument.title
+                ? currentHeading
+                : null
+          }
+          onBack={() => navigation.navigate("Library")}
+          onToc={() => setTocOpen(true)}
+          onDisplay={() => setDisplayOpen(true)}
+          overflowItems={overflowItems}
         />
       ) : null}
 
-      {viewMode === "pages" ? (
-        <PdfPagesView
-          documentId={activeDocument.id}
-          pageCount={activeDocument.pageCount}
-        />
-      ) : (
-        <View style={{ flex: 1, flexDirection: "row" }}>
-          {readerLayout !== "paginated" ? (
-            <Minimap sections={activeDocument.sections || []} progress={progress} />
-          ) : null}
-          <ReaderBody
-            document={activeDocument}
-            visibleSections={visibleSections}
-            sectionKey={activeSection}
-            currentWordIndex={playback.wordIndex}
-            ranges={ranges}
-            chat={chat}
-            askingId={askingId}
-            emptyNotice={emptyNotice}
-            onRetryText={textError ? retryTextFetch : null}
-            layout={readerLayout}
-            readerFontFamily={readerFontFamily}
-            readerFontSize={readerFontSize}
-            readerLineHeight={readerLineHeight}
-            readerExtraLetterSpacing={readerExtraLetterSpacing}
-            onAsk={askAboutParagraph}
-            onWordPress={onWordPress}
-          />
+      {/* D10 — Ask as a translucent floating button, top-right */}
+      {chromeVisible && document ? (
+        <View
+          pointerEvents="box-none"
+          style={{ position: "absolute", top: 116, right: 14, zIndex: 15 }}
+        >
+          <Pressable
+            onPress={askAboutCursor}
+            accessibilityRole="button"
+            accessibilityLabel="Ask about this passage"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 999,
+              backgroundColor: withAlpha(palette.surfaceContainer, 0.75),
+              borderWidth: 1,
+              borderColor: withAlpha(palette.accent, 0.4),
+            }}
+          >
+            <MaterialIcons name="auto-awesome" size={15} color={palette.accent} />
+            <Text
+              style={{
+                marginLeft: 6,
+                color: palette.accent,
+                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontSize: 13,
+              }}
+            >
+              Ask
+            </Text>
+          </Pressable>
         </View>
-      )}
+      ) : null}
 
-      {viewMode === "pages" ? null : (
-      <PlaybackBar
-        playing={playback.playing}
-        wpm={wpm}
-        voice={voice}
-        onPlay={togglePlay}
-        onPrev={() => skipParagraph(-1)}
-        onNext={() => skipParagraph(1)}
-        onWpm={(value) => dispatch(setWpm(value))}
-        onVoice={(value) => dispatch(setVoice(value))}
-        onAsk={() => {
-          const firstRange = ranges[0];
-          const firstSection = activeDocument.sections?.[0];
-          const excerpt = firstSection?.paragraphs?.[0] || "";
-          askAboutParagraph(
-            firstRange?.pid || "doc",
-            "Summarise the current paragraph in plain language.",
-            excerpt
+      {selection ? (
+        <SelectionBar
+          wordCount={selection.end - selection.start + 1}
+          onHighlight={applyHighlight}
+          onExplain={explainSelection}
+          onCancel={() => setSelection(null)}
+        />
+      ) : null}
+
+      {chromeVisible && viewMode === "text" && words.length > 0 ? (
+        <TidalPlayer
+          playing={playback.playing}
+          wordIndex={playback.wordIndex}
+          totalWords={playback.totalWords}
+          sectionSpans={sectionSpans}
+          sectionHeading={currentHeading}
+          onSeek={seekTo}
+          onTogglePlay={togglePlay}
+          onPrev={() => skipParagraph(-1)}
+          onNext={() => skipParagraph(1)}
+          wpm={wpm}
+          onWpm={(value) => dispatch(setWpm(value))}
+          voice={voice}
+          onVoice={(value) => dispatch(setVoice(value))}
+        />
+      ) : null}
+
+      <TocSheet
+        visible={tocOpen}
+        onClose={() => setTocOpen(false)}
+        sections={sections}
+        activeSection={activeSection}
+        onJumpSection={jumpToSection}
+        bookmarks={bookmarks}
+        onJumpBookmark={(bm) => {
+          seekTo(bm.wordStart);
+          const next = sectionSpans.findIndex(
+            (s) => bm.wordStart >= s.start && bm.wordStart < s.end
           );
+          if (next >= 0) setActiveSection(next);
+          setTocOpen(false);
         }}
+        onDeleteBookmark={(bm) =>
+          dispatch(removeAnnotation({ annotationId: bm._id }))
+        }
       />
-      )}
 
-      <CitationGraphDialog
-        visible={citationOpen}
-        onClose={() => setCitationOpen(false)}
+      <DisplayOptionsSheet
+        visible={displayOpen}
+        onClose={() => setDisplayOpen(false)}
+      />
+
+      <GoToPageModal
+        visible={gotoOpen}
+        pageCount={activeDocument.pageCount}
+        onClose={() => setGotoOpen(false)}
+        onGo={goToPage}
       />
 
       <StudySheet
@@ -458,222 +705,114 @@ export function ReaderScreen() {
   );
 }
 
-// "Original pages" view — the actual PDF pages rendered server-side
-// (GET /documents/:id/page/:n). Equations, figures, and layout appear
-// exactly as printed; lazily loads pages as you scroll.
-function PdfPagesView({ documentId, pageCount }) {
+// ---------------------------------------------------------------------------
+// Go to page
+// ---------------------------------------------------------------------------
+
+function GoToPageModal({ visible, pageCount, onClose, onGo }) {
   const palette = usePalette();
-  const { width } = useWindowDimensions();
-  const pageWidth = Math.min(width - 16, 900);
-  const pageHeight = Math.round(pageWidth * 1.35);
-  const pages = useMemo(
-    () => Array.from({ length: pageCount }, (_, i) => i + 1),
-    [pageCount]
-  );
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    if (visible) setValue("");
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
-    <FlatList
-      data={pages}
-      keyExtractor={(n) => String(n)}
-      initialNumToRender={2}
-      maxToRenderPerBatch={3}
-      windowSize={5}
-      contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
-      renderItem={({ item: n }) => (
-        <View style={{ marginTop: 8, alignItems: "center" }}>
-          <Image
-            source={{ uri: documentPageUrl(documentId, n) }}
-            style={{
-              width: pageWidth,
-              height: pageHeight,
-              backgroundColor: "#FFFFFF",
-              borderRadius: 4,
-            }}
-            resizeMode="contain"
-            accessibilityLabel={`Page ${n}`}
-          />
-          <Text
-            style={{
-              color: palette.onSurfaceVariant,
-              fontFamily: "JetBrainsMono_400Regular",
-              fontSize: 10,
-              marginTop: 4,
-            }}
-          >
-            {n} / {pageCount}
-          </Text>
-        </View>
-      )}
-    />
-  );
-}
-
-function PartNav({ index, total, onChange }) {
-  const palette = usePalette();
-
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 14,
-        paddingVertical: 6,
-      }}
-    >
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <Pressable
-        onPress={() => onChange(Math.max(0, index - 1))}
-        disabled={index === 0}
-        accessibilityRole="button"
-        accessibilityLabel="Previous part"
-        style={{ padding: 6, opacity: index === 0 ? 0.3 : 1 }}
-      >
-        <MaterialIcons name="chevron-left" size={22} color={palette.onSurfaceVariant} />
-      </Pressable>
-      <Text
+        onPress={onClose}
         style={{
-          color: palette.onSurfaceVariant,
-          fontFamily: "JetBrainsMono_400Regular",
-          fontSize: 12,
-        }}
-      >
-        Part {index + 1} / {total}
-      </Text>
-      <Pressable
-        onPress={() => onChange(Math.min(total - 1, index + 1))}
-        disabled={index >= total - 1}
-        accessibilityRole="button"
-        accessibilityLabel="Next part"
-        style={{ padding: 6, opacity: index >= total - 1 ? 0.3 : 1 }}
-      >
-        <MaterialIcons name="chevron-right" size={22} color={palette.onSurfaceVariant} />
-      </Pressable>
-    </View>
-  );
-}
-
-function ReaderHeader({ document, onBack, onOpenGraph, onOpenStudy, viewMode, onToggleView }) {
-  const palette = usePalette();
-
-  return (
-    <View
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        flexDirection: "row",
-        alignItems: "center",
-      }}
-    >
-      <Pressable
-        onPress={onBack}
-        accessibilityLabel="Back to library"
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: palette.surfaceHigh,
+          flex: 1,
+          backgroundColor: withAlpha("#000000", 0.5),
           alignItems: "center",
           justifyContent: "center",
+          padding: 24,
         }}
       >
-        <MaterialIcons name="arrow-back" size={18} color={palette.accent} />
-      </Pressable>
-      <View style={{ width: 12 }} />
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
-            fontSize: 10,
-            letterSpacing: 2,
-          }}
-        >
-          SCIENTIFIC JOURNAL • {Math.max(1, Math.round(document.pageCount / 2))} MIN
-        </Text>
-        <Text
-          numberOfLines={2}
-          style={{
-            color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 18,
-            lineHeight: 22,
-          }}
-        >
-          {document.title}
-        </Text>
-      </View>
-      {onToggleView ? (
         <Pressable
-          onPress={onToggleView}
-          style={{ padding: 8 }}
-          accessibilityLabel={
-            viewMode === "text"
-              ? "Show original pages (equations and figures as printed)"
-              : "Show text reader"
-          }
-        >
-          <MaterialIcons
-            name={viewMode === "text" ? "auto-stories" : "subject"}
-            size={20}
-            color={viewMode === "pages" ? palette.accent : palette.onSurfaceVariant}
-          />
-        </Pressable>
-      ) : null}
-      {onOpenStudy ? (
-        <Pressable
-          onPress={onOpenStudy}
-          style={{ padding: 8 }}
-          accessibilityLabel="Open study tools: summary, quiz, cheatsheet"
-        >
-          <MaterialIcons name="school" size={20} color={palette.accent} />
-        </Pressable>
-      ) : null}
-      <Pressable
-        onPress={onOpenGraph}
-        style={{ padding: 8 }}
-        accessibilityLabel="Open citation graph"
-      >
-        <MaterialIcons name="hub" size={20} color={palette.onSurfaceVariant} />
-      </Pressable>
-    </View>
-  );
-}
-
-function Minimap({ sections, progress }) {
-  const palette = usePalette();
-
-  if (!sections.length) {
-    return <View style={{ width: 40 }} />;
-  }
-
-  return (
-    <View style={{ width: 88, paddingLeft: 16, paddingVertical: 16 }}>
-      <View style={{ flexDirection: "row", flex: 1 }}>
-        <View
+          onPress={() => {}}
           style={{
-            width: 4,
-            borderRadius: 2,
-            backgroundColor: withAlpha(palette.outlineVariant, 0.3),
-            overflow: "hidden",
+            width: "100%",
+            maxWidth: 320,
+            borderRadius: 18,
+            backgroundColor: withAlpha(palette.surfaceContainer, 0.98),
+            padding: 20,
           }}
         >
-          <View
+          <Text
             style={{
-              height: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`,
-              backgroundColor: palette.accent,
-              shadowColor: palette.accent,
-              shadowOpacity: 0.8,
-              shadowRadius: 10,
+              color: palette.onSurface,
+              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontSize: 16,
             }}
-          />
-        </View>
-      </View>
-    </View>
+          >
+            Go to page
+          </Text>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+            <TextInput
+              value={value}
+              onChangeText={setValue}
+              placeholder={`1 – ${pageCount || 1}`}
+              placeholderTextColor={palette.onSurfaceVariant}
+              keyboardType="number-pad"
+              autoFocus
+              onSubmitEditing={() => {
+                const n = parseInt(value, 10);
+                if (n > 0) onGo(n);
+              }}
+              accessibilityLabel="Page number"
+              style={{
+                flex: 1,
+                paddingHorizontal: 14,
+                paddingVertical: 11,
+                borderRadius: 12,
+                backgroundColor: palette.surfaceHigh,
+                color: palette.onSurface,
+                fontFamily: "JetBrainsMono_400Regular",
+                fontSize: 16,
+              }}
+            />
+            <Pressable
+              onPress={() => {
+                const n = parseInt(value, 10);
+                if (n > 0) onGo(n);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Go"
+              style={{
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: withAlpha(palette.accent, 0.16),
+                borderWidth: 1,
+                borderColor: withAlpha(palette.accent, 0.45),
+              }}
+            >
+              <Text
+                style={{
+                  color: palette.accent,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 14,
+                }}
+              >
+                Go
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Reading surface
+// ---------------------------------------------------------------------------
 
 function ReaderBody({
-  document,
   visibleSections,
   sectionKey,
   currentWordIndex,
@@ -687,16 +826,17 @@ function ReaderBody({
   readerFontSize,
   readerLineHeight,
   readerExtraLetterSpacing,
-  onAsk,
   onWordPress,
+  onWordLongPress,
+  highlightsByPid,
+  selection,
+  onSurfaceTap,
+  equationColor,
 }) {
   const palette = usePalette();
   const scrollRef = useRef(null);
-  const maxWidth =
-    layout === "focus" ? 520 : layout === "paginated" ? 680 : 720;
+  const maxWidth = layout === "focus" ? 520 : layout === "paginated" ? 680 : 720;
 
-  // New part → back to the top, otherwise the karaoke highlight lands at
-  // the old scroll offset, off-screen.
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [sectionKey]);
@@ -707,14 +847,19 @@ function ReaderBody({
       style={{ flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        paddingBottom: 220,
+        paddingHorizontal: 24,
+        paddingTop: 118, // clears the translucent top bar
+        paddingBottom: 240, // clears the docked player
+        alignItems: "center",
       }}
       showsVerticalScrollIndicator={false}
     >
-      <View style={{ maxWidth, width: "100%" }}>
-        {!document.sections?.length && emptyNotice ? (
+      <Pressable
+        onPress={onSurfaceTap}
+        accessibilityLabel="Toggle reader controls"
+        style={{ maxWidth, width: "100%" }}
+      >
+        {!visibleSections?.[0]?.paragraphs?.length && emptyNotice ? (
           <View style={{ marginTop: 28 }}>
             <Text
               accessibilityRole="alert"
@@ -756,15 +901,16 @@ function ReaderBody({
             ) : null}
           </View>
         ) : null}
-        {(visibleSections || document.sections || []).map((section) => (
+
+        {(visibleSections || []).map((section) => (
           <View key={section.id}>
             <Text
               style={{
                 color: palette.onSurface,
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 22,
-                marginTop: 28,
-                marginBottom: 14,
+                fontSize: 21,
+                marginTop: 8,
+                marginBottom: 16,
                 letterSpacing: -0.4,
               }}
             >
@@ -777,31 +923,28 @@ function ReaderBody({
                   start: 0,
                   end: 0,
                 };
+              const latex = blockMathOf(paragraph);
               const notesForParagraph = chat.filter(
                 (message) => message.paragraphId === paragraphId
               );
+              const paraHighlights = highlightsByPid.get(paragraphId) || null;
+              // clip the live selection to this paragraph (primitives → memo-safe)
+              let selFrom = -1;
+              let selTo = -1;
+              if (selection) {
+                selFrom = Math.max(selection.start, range.start);
+                selTo = Math.min(selection.end, range.end - 1);
+                if (selFrom > selTo) {
+                  selFrom = -1;
+                  selTo = -1;
+                }
+              }
 
               return (
-                <View key={paragraphId}>
-                  <Pressable
-                    onLongPress={() =>
-                      onAsk(
-                        paragraphId,
-                        `Explain: "${paragraph.slice(0, 120)}..."`,
-                        paragraph,
-                        "explain"
-                      )
-                    }
-                    style={{
-                      paddingLeft: 14,
-                      marginVertical: 10,
-                      borderLeftWidth: 2,
-                      borderLeftColor:
-                        askingId === paragraphId
-                          ? withAlpha(palette.accent, 0.6)
-                          : "transparent",
-                    }}
-                  >
+                <View key={paragraphId} style={{ marginVertical: 8 }}>
+                  {latex ? (
+                    <MathView latex={latex} color={equationColor} fontSize={17} />
+                  ) : (
                     <ParagraphText
                       text={paragraph}
                       firstWordIndex={range.start}
@@ -812,8 +955,13 @@ function ReaderBody({
                       lineHeight={readerFontSize * readerLineHeight}
                       letterSpacing={readerExtraLetterSpacing ? 0.6 : 0}
                       onWordPress={onWordPress}
+                      onWordLongPress={onWordLongPress}
+                      highlights={paraHighlights}
+                      selFrom={selFrom}
+                      selTo={selTo}
+                      askActive={askingId === paragraphId}
                     />
-                  </Pressable>
+                  )}
                   {layout === "split"
                     ? notesForParagraph.map((note) => (
                         <MarginNote key={note.id} note={note} />
@@ -824,15 +972,16 @@ function ReaderBody({
             })}
           </View>
         ))}
-      </View>
+      </Pressable>
     </ScrollView>
   );
 }
 
-// A real paper is thousands of words across hundreds of paragraphs; without
-// memoisation every word <Text> re-renders on every karaoke tick. Only the
-// cursor's position RELATIVE to this paragraph matters: clamp it to
-// [-1, wordCount] and skip the re-render when that value hasn't moved.
+// ---------------------------------------------------------------------------
+// Karaoke paragraph (word-level) — memoized; only re-renders when the read
+// cursor moves relative to it, its highlights change, or selection touches it.
+// ---------------------------------------------------------------------------
+
 function paragraphHighlightEqual(prev, next) {
   if (
     prev.text !== next.text ||
@@ -842,7 +991,12 @@ function paragraphHighlightEqual(prev, next) {
     prev.fontSize !== next.fontSize ||
     prev.lineHeight !== next.lineHeight ||
     prev.letterSpacing !== next.letterSpacing ||
-    prev.onWordPress !== next.onWordPress
+    prev.onWordPress !== next.onWordPress ||
+    prev.onWordLongPress !== next.onWordLongPress ||
+    prev.highlights !== next.highlights ||
+    prev.selFrom !== next.selFrom ||
+    prev.selTo !== next.selTo ||
+    prev.askActive !== next.askActive
   ) {
     return false;
   }
@@ -863,48 +1017,82 @@ const ParagraphText = memo(function ParagraphText({
   lineHeight,
   letterSpacing,
   onWordPress,
+  onWordLongPress,
+  highlights,
+  selFrom,
+  selTo,
+  askActive,
 }) {
   const palette = usePalette();
   const words = text.split(/\s+/);
 
   return (
-    <Text
-      selectable
+    <View
       style={{
-        fontFamily,
-        fontSize,
-        lineHeight,
-        letterSpacing,
-        color: palette.onSurface,
+        paddingLeft: 12,
+        borderLeftWidth: 2,
+        borderLeftColor: askActive ? withAlpha(palette.accent, 0.6) : "transparent",
       }}
     >
-      {words.map((word, index) => {
-        const globalIndex = firstWordIndex + index;
-        const isRead = globalIndex < currentWordIndex;
-        const isCurrent = globalIndex === currentWordIndex;
-        return (
-          <Text
-            key={`${word}-${index}`}
-            onPress={onWordPress ? () => onWordPress(globalIndex) : undefined}
-            style={{
-              color: isRead
-                ? withAlpha(palette.onSurfaceVariant, 0.55)
-                : palette.onSurface,
-              backgroundColor: isCurrent
-                ? withAlpha(palette.accent, 0.2)
-                : "transparent",
-              textDecorationLine: isCurrent ? "underline" : "none",
-              textDecorationColor: palette.accent,
-            }}
-          >
-            {word}
-            {index === words.length - 1 ? "" : " "}
-          </Text>
-        );
-      })}
-    </Text>
+      <Text
+        selectable={false}
+        style={{
+          fontFamily,
+          fontSize,
+          lineHeight,
+          letterSpacing,
+          color: palette.onSurface,
+        }}
+      >
+        {words.map((word, index) => {
+          const globalIndex = firstWordIndex + index;
+          const isRead = globalIndex < currentWordIndex;
+          const isCurrent = globalIndex === currentWordIndex;
+          const isSelected = selFrom >= 0 && globalIndex >= selFrom && globalIndex <= selTo;
+          let highlightColor = null;
+          if (highlights) {
+            for (const h of highlights) {
+              if (globalIndex >= h.s && globalIndex <= h.e) {
+                highlightColor = h.color;
+                break;
+              }
+            }
+          }
+          return (
+            <Text
+              key={`${word}-${index}`}
+              onPress={onWordPress ? () => onWordPress(globalIndex) : undefined}
+              onLongPress={
+                onWordLongPress ? () => onWordLongPress(globalIndex) : undefined
+              }
+              style={{
+                color: isRead
+                  ? withAlpha(palette.onSurfaceVariant, 0.55)
+                  : palette.onSurface,
+                backgroundColor: isCurrent
+                  ? withAlpha(palette.accent, 0.22)
+                  : isSelected
+                    ? withAlpha(palette.accent, 0.32)
+                    : highlightColor
+                      ? withAlpha(highlightColor, 0.3)
+                      : "transparent",
+                textDecorationLine: isCurrent ? "underline" : "none",
+                textDecorationColor: palette.accent,
+              }}
+            >
+              {word}
+              {index === words.length - 1 ? "" : " "}
+            </Text>
+          );
+        })}
+      </Text>
+    </View>
   );
 }, paragraphHighlightEqual);
+
+// ---------------------------------------------------------------------------
+// Q&A margin note (split layout)
+// ---------------------------------------------------------------------------
 
 function MarginNote({ note }) {
   const palette = usePalette();
@@ -955,7 +1143,7 @@ function MarginNote({ note }) {
       >
         {note.answer}
       </Text>
-      {note.citations.length ? (
+      {note.citations?.length ? (
         <View
           style={{
             flexDirection: "row",
@@ -991,284 +1179,67 @@ function MarginNote({ note }) {
   );
 }
 
-function PlaybackBar({ playing, wpm, voice, onPlay, onPrev, onNext, onWpm, onVoice, onAsk }) {
+// ---------------------------------------------------------------------------
+// Original pages view
+// ---------------------------------------------------------------------------
+
+function PdfPagesView({ listRef, documentId, pageCount, onPageChange, onTapPage }) {
   const palette = usePalette();
-
-  return (
-    <View
-      style={{
-        position: "absolute",
-        left: 12,
-        right: 12,
-        bottom: 90,
-      }}
-    >
-      <GlassPanel radius={28} style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Pressable
-            onPress={onPrev}
-            accessibilityLabel="Previous paragraph"
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: withAlpha(palette.onSurface, 0.04),
-            }}
-          >
-            <MaterialIcons
-              name="skip-previous"
-              size={22}
-              color={palette.onSurfaceVariant}
-            />
-          </Pressable>
-          <Pressable
-            onPress={onPlay}
-            accessibilityLabel={playing ? "Pause" : "Play"}
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              marginHorizontal: 4,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: palette.primary,
-              shadowColor: palette.accent,
-              shadowOpacity: 0.4,
-              shadowRadius: 18,
-            }}
-          >
-            <MaterialIcons
-              name={playing ? "pause" : "play-arrow"}
-              size={30}
-              color={palette.onPrimary}
-            />
-          </Pressable>
-          <Pressable
-            onPress={onNext}
-            accessibilityLabel="Next paragraph"
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: withAlpha(palette.onSurface, 0.04),
-            }}
-          >
-            <MaterialIcons
-              name="skip-next"
-              size={22}
-              color={palette.onSurfaceVariant}
-            />
-          </Pressable>
-
-          <View style={{ width: 10 }} />
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
-                fontSize: 10,
-                letterSpacing: 2,
-              }}
-            >
-              SPEED · {wpm} WPM
-            </Text>
-            <Slider
-              value={wpm}
-              minimumValue={120}
-              maximumValue={400}
-              step={10}
-              onValueChange={(value) => onWpm(Math.round(value))}
-              minimumTrackTintColor={palette.accent}
-              maximumTrackTintColor={withAlpha(palette.outlineVariant, 0.3)}
-              thumbTintColor={palette.accent}
-            />
-          </View>
-
-          <View style={{ width: 6 }} />
-          <View
-            style={{
-              flexDirection: "row",
-              backgroundColor: palette.surfaceLowest,
-              borderRadius: 12,
-              padding: 3,
-            }}
-          >
-            {["soft", "natural", "deep"].map((item) => {
-              const selected = item === voice;
-              return (
-                <Pressable
-                  key={item}
-                  onPress={() => onVoice(item)}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 10,
-                    backgroundColor: selected
-                      ? withAlpha(palette.accent, 0.14)
-                      : "transparent",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontSize: 11,
-                      fontFamily: "Inter_500Medium",
-                    }}
-                  >
-                    {item[0].toUpperCase() + item.slice(1)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={{ width: 6 }} />
-          <Pressable
-            onPress={onAsk}
-            accessibilityLabel="Ask about this text"
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              borderRadius: 14,
-              backgroundColor: withAlpha(palette.secondary, 0.1),
-              borderWidth: 1,
-              borderColor: withAlpha(palette.secondary, 0.3),
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
-            <MaterialIcons
-              name="auto-awesome"
-              size={14}
-              color={palette.secondary}
-            />
-            <View style={{ width: 6 }} />
-            <Text
-              style={{
-                color: palette.secondary,
-                fontFamily: "SpaceGrotesk_600SemiBold",
-                fontSize: 13,
-              }}
-            >
-              Ask
-            </Text>
-          </Pressable>
-        </View>
-      </GlassPanel>
-    </View>
+  const { width } = useWindowDimensions();
+  const pageWidth = Math.min(width - 16, 900);
+  const pageHeight = Math.round(pageWidth * 1.35);
+  const pages = useMemo(
+    () => Array.from({ length: pageCount }, (_, i) => i + 1),
+    [pageCount]
   );
-}
 
-function CitationGraphDialog({ visible, onClose }) {
-  const palette = usePalette();
-  const { width: viewportWidth } = useWindowDimensions();
-
-  if (!visible) {
-    return null;
-  }
-
-  const width = Math.min(viewportWidth - 32, 420);
-  const height = 280;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.35;
-  const nodes = Array.from({ length: 8 }).map((_, index) => {
-    const angle = (index / 8) * Math.PI * 2;
-    return {
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius,
-    };
-  });
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems?.length && onPageChange) {
+      onPageChange(viewableItems[0].item);
+    }
+  }).current;
 
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: withAlpha("#000000", 0.6),
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 16,
-        }}
-      >
-        <Pressable
-          onPress={() => {}}
-          style={{
-            width,
-            borderRadius: 24,
-            backgroundColor: palette.surfaceContainer,
-            padding: 20,
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <MaterialIcons name="hub" size={20} color={palette.accent} />
-            <View style={{ width: 8 }} />
-            <Text
-              style={{
-                flex: 1,
-                color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_600SemiBold",
-                fontSize: 18,
-              }}
-            >
-              Citation graph
-            </Text>
-            <Pressable onPress={onClose} accessibilityLabel="Close">
-              <MaterialIcons
-                name="close"
-                size={20}
-                color={palette.onSurfaceVariant}
-              />
-            </Pressable>
-          </View>
-          <View style={{ height: 12 }} />
-          <Svg width={width - 40} height={height}>
-            {nodes.map((node, index) => (
-              <Line
-                key={`edge-${index}`}
-                x1={centerX}
-                y1={centerY}
-                x2={node.x}
-                y2={node.y}
-                stroke={palette.accent}
-                strokeOpacity={0.35}
-                strokeWidth={1}
-              />
-            ))}
-            {nodes.map((node, index) => (
-              <Circle
-                key={`node-${index}`}
-                cx={node.x}
-                cy={node.y}
-                r={6}
-                fill={palette.accent}
-              />
-            ))}
-            <Circle cx={centerX} cy={centerY} r={10} fill={palette.accent} />
-          </Svg>
-          <View style={{ height: 8 }} />
+    <FlatList
+      ref={listRef}
+      data={pages}
+      keyExtractor={(n) => String(n)}
+      initialNumToRender={2}
+      maxToRenderPerBatch={3}
+      windowSize={5}
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={{ itemVisiblePercentThreshold: 55 }}
+      getItemLayout={(_, index) => ({
+        length: pageHeight + 34,
+        offset: (pageHeight + 34) * index,
+        index,
+      })}
+      contentContainerStyle={{ paddingTop: 108, paddingBottom: 60, alignItems: "center" }}
+      renderItem={({ item: n }) => (
+        <Pressable onPress={onTapPage} style={{ marginTop: 8, alignItems: "center" }}>
+          <Image
+            source={{ uri: documentPageUrl(documentId, n) }}
+            style={{
+              width: pageWidth,
+              height: pageHeight,
+              backgroundColor: "#FFFFFF",
+              borderRadius: 4,
+            }}
+            resizeMode="contain"
+            accessibilityLabel={`Page ${n}`}
+          />
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
-              fontSize: 13,
-              lineHeight: 20,
+              fontFamily: "JetBrainsMono_400Regular",
+              fontSize: 10,
+              marginTop: 4,
             }}
           >
-            Placeholder preview. Wire this to your document query backend when
-            the real citation graph service is available.
+            {n} / {pageCount}
           </Text>
         </Pressable>
-      </Pressable>
-    </Modal>
+      )}
+    />
   );
 }

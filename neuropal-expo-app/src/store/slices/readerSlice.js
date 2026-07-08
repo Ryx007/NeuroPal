@@ -3,6 +3,9 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { mockReaderMessages } from "../../data/mockData";
 import {
   askReaderQuestion,
+  createAnnotationApi,
+  deleteAnnotationApi,
+  fetchAnnotationsApi,
   fetchDocumentText,
   USE_MOCK,
 } from "../../services/network";
@@ -36,6 +39,30 @@ export const fetchReaderDocument = createAsyncThunk(
   async ({ documentId }) => {
     const data = await fetchDocumentText(documentId);
     return { documentId, title: data?.title, text: data?.text };
+  }
+);
+
+// Highlights + bookmarks live on the backend so they follow the document
+// across devices.
+export const loadAnnotations = createAsyncThunk(
+  "reader/loadAnnotations",
+  async ({ documentId }) => ({
+    documentId,
+    items: await fetchAnnotationsApi(documentId),
+  })
+);
+
+export const addAnnotation = createAsyncThunk(
+  "reader/addAnnotation",
+  async ({ documentId, ...payload }) =>
+    createAnnotationApi(documentId, payload)
+);
+
+export const removeAnnotation = createAsyncThunk(
+  "reader/removeAnnotation",
+  async ({ annotationId }) => {
+    await deleteAnnotationApi(annotationId);
+    return annotationId;
   }
 );
 
@@ -176,6 +203,8 @@ const initialState = {
   docSections: null,
   docLoading: false,
   docError: null,
+  // Highlights + bookmarks for the open document (backend-persisted).
+  annotations: [],
 };
 
 const readerSlice = createSlice({
@@ -240,6 +269,19 @@ const readerSlice = createSlice({
         state.docSections = null;
         state.docLoading = true;
         state.docError = null;
+        state.annotations = [];
+      })
+      .addCase(loadAnnotations.fulfilled, (state, action) => {
+        if (action.payload.documentId !== state.docId) return;
+        state.annotations = action.payload.items;
+      })
+      .addCase(addAnnotation.fulfilled, (state, action) => {
+        if (action.payload) state.annotations.push(action.payload);
+      })
+      .addCase(removeAnnotation.fulfilled, (state, action) => {
+        state.annotations = state.annotations.filter(
+          (a) => a._id !== action.payload
+        );
       })
       // Both settle handlers bail unless the response belongs to the LAST
       // requested document — a slow /text response for doc A must not land

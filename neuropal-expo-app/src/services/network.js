@@ -269,6 +269,127 @@ export async function requestFlashcards(documentId, count = 15) {
   }
 }
 
+// ---- Annotations (highlights + bookmarks) ---------------------------------
+
+export async function fetchAnnotationsApi(documentId) {
+  if (USE_MOCK) return [];
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get(`documents/${documentId}/annotations`);
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function createAnnotationApi(documentId, payload) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post(
+      `documents/${documentId}/annotations`,
+      payload
+    );
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function deleteAnnotationApi(annotationId) {
+  assertConfigured();
+  try {
+    await apiClient.delete(`annotations/${annotationId}`);
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// ---- Paper search (arXiv + Semantic Scholar) -------------------------------
+
+// GET /api/search/papers → { query, results:[{source,id,title,authors,year,
+// venue,abstract,pdfUrl,url,citationCount}], warnings:[] }
+export async function searchPapersApi(q, source = "all") {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get("search/papers", {
+      params: { q, source },
+      timeout: 30000,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// POST /api/search/papers/import — download the paper's PDF into the library
+// and start ingest. Returns the created Document.
+export async function importPaperApi(paper) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post(
+      "search/papers/import",
+      {
+        title: paper.title,
+        pdfUrl: paper.pdfUrl,
+        source: paper.source,
+        authors: paper.authors,
+        year: paper.year,
+        id: paper.id,
+      },
+      // download on the backend side can take a while for big PDFs
+      { timeout: 180000 }
+    );
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// POST /api/viz/spec — AI-generated visualization spec for the Visualizer.
+// Returns { title, blurb, sliders, drawJs, model, provider }.
+export async function generateVizApi(prompt) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post(
+      "viz/spec",
+      { prompt },
+      // LLM generation of ~100 lines of canvas code takes a while
+      { timeout: 300000 }
+    );
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// ---- Raw markdown/txt editing ----------------------------------------------
+
+export async function fetchRawDocumentApi(documentId) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get(`documents/${documentId}/raw`, {
+      timeout: 30000,
+    });
+    return data; // { id, title, type, text }
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function saveRawDocumentApi(documentId, text) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.put(
+      `documents/${documentId}/raw`,
+      { text },
+      { timeout: 60000 }
+    );
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
 // PATCH /api/documents/:id — rename from the library.
 export async function renameDocument(documentId, title) {
   assertConfigured();

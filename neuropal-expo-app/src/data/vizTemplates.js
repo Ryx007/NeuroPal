@@ -15,9 +15,16 @@ const BASE_CSS = `
     font-size:12px;color:#FF7F8E}
   h2{font-size:14px;margin:12px 16px 0;letter-spacing:1px;color:#FF7F8E}
   p{font-size:12px;color:#D0C6C8;margin:6px 16px;line-height:1.5}
+  .vizbtn{background:#1F2020;color:#E4E2E1;border:1px solid #534347;
+    border-radius:10px;padding:6px 14px;font-size:14px;cursor:pointer}
+  .presetrow{display:flex;gap:8px;padding:8px 16px;flex-wrap:wrap}
+  .presetrow button{background:#1F2020;color:#FFAFC1;border:1px solid #534347;
+    border-radius:99px;padding:6px 12px;font-size:13px;font-family:monospace;cursor:pointer}
+  .readout{font-family:monospace;font-size:12px;color:#F3C77B;
+    padding:6px 16px;white-space:pre-wrap}
 `;
 
-function page(title, blurb, sliders, script) {
+export function buildVizPage(title, blurb, sliders, script, extraHtml = "") {
   const sliderHtml = sliders
     .map(
       (s) => `
@@ -36,6 +43,7 @@ function page(title, blurb, sliders, script) {
 <canvas id="c"></canvas>
 <h2>${title.toUpperCase()}</h2>
 <p>${blurb}</p>
+${extraHtml}
 <div class="panel">${sliderHtml}</div>
 <script>
 const canvas = document.getElementById('c');
@@ -57,6 +65,8 @@ const H = () => canvas.height / devicePixelRatio;
 ${script}
 </script></body></html>`;
 }
+
+const page = buildVizPage;
 
 export const VIZ_TEMPLATES = [
   {
@@ -213,60 +223,192 @@ draw();`
     id: "bloch",
     title: "Bloch sphere",
     icon: "public",
-    blurb: "A single qubit |ψ⟩ = cos(θ/2)|0⟩ + e^{iφ}sin(θ/2)|1⟩ on the Bloch sphere, with optional Larmor precession.",
+    blurb:
+      "Qiskit-style single qubit |\u03c8\u27e9 = cos(\u03b8/2)|0\u27e9 + e^{i\u03c6}sin(\u03b8/2)|1\u27e9 \u2014 drag the state, scrub time, read \u27e8\u03c3\u27e9 live.",
     html: page(
       "Bloch sphere",
-      "Set θ and φ, or turn on precession (rotation about ẑ, like a spin in a magnetic field).",
+      "Drag directly on the sphere to move |\u03c8\u27e9. Presets jump to the six cardinal states; \u03c9 precesses about \u1e91 (Larmor).",
       [
-        { id: "theta", label: "θ (deg)", min: 0, max: 180, step: 5, value: 60 },
-        { id: "phi", label: "φ (deg)", min: 0, max: 360, step: 5, value: 30 },
-        { id: "omega", label: "Precession ω", min: 0, max: 3, step: 0.1, value: 0.8 },
+        { id: "theta", label: "\u03b8 (deg)", min: 0, max: 180, step: 1, value: 60 },
+        { id: "phi", label: "\u03c6 (deg)", min: 0, max: 360, step: 1, value: 30 },
+        { id: "omega", label: "Precession \u03c9", min: 0, max: 3, step: 0.1, value: 0 },
       ],
-      `
-let t = 0;
-function project(x, y, z, cx, cy, R){
-  // simple orthographic with slight tilt so the sphere reads as 3D
-  const tilt = 0.42;
-  const px = cx + R * x;
-  const py = cy - R * (z*Math.cos(tilt) - y*Math.sin(tilt));
-  const depth = y*Math.cos(tilt) + z*Math.sin(tilt);
-  return [px, py, depth];
+      String.raw`
+// ---- Qiskit-grade Bloch sphere ------------------------------------------
+// Dotted great-circle wireframe (back halves fainter), axis triad with
+// arrowheads, drag-to-set-state, cardinal presets, play/pause + time scrub,
+// dashed projection guides, live theta/phi/<sx><sy><sz> readout.
+let t = 0, playing = true;
+const TILT = 0.45;
+
+const readout = document.getElementById('readout');
+const presetRow = document.getElementById('presets');
+const playBtn = document.getElementById('play');
+const tScrub = document.getElementById('tscrub');
+
+const PRESETS = [
+  ['|0\u27e9', 0, 0], ['|1\u27e9', 180, 0],
+  ['|+\u27e9', 90, 0], ['|\u2212\u27e9', 90, 180],
+  ['|+i\u27e9', 90, 90], ['|\u2212i\u27e9', 90, 270],
+];
+PRESETS.forEach(([label, th, ph]) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.onclick = () => { setState(th, ph); t = 0; tScrub.value = 0; };
+  presetRow.appendChild(b);
+});
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '\u23f8' : '\u25b6'; };
+tScrub.addEventListener('input', () => { t = parseFloat(tScrub.value); });
+
+function setState(thDeg, phDeg){
+  P.theta = thDeg; P.phi = phDeg;
+  const thEl = document.getElementById('theta'), phEl = document.getElementById('phi');
+  thEl.value = thDeg; phEl.value = phDeg;
+  document.getElementById('theta-out').textContent = thDeg;
+  document.getElementById('phi-out').textContent = phDeg;
 }
-function draw(){
-  t += 0.016;
-  const w = W(), h = H(), cx = w/2, cy = h/2, R = Math.min(w,h)*0.36;
-  ctx.clearRect(0,0,w,h);
-  // sphere outline + equator
-  ctx.strokeStyle = '#534347'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
-  ctx.beginPath();
-  for (let a=0;a<=360;a+=6){
-    const r = a*Math.PI/180;
-    const [x,y] = project(Math.cos(r), Math.sin(r), 0, cx, cy, R);
-    if (a===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+
+function project(x, y, z, cx, cy, R){
+  return [
+    cx + R * x,
+    cy - R * (z*Math.cos(TILT) - y*Math.sin(TILT)),
+    y*Math.cos(TILT) + z*Math.sin(TILT), // depth: >0 toward viewer
+  ];
+}
+
+// Split a parametric great circle into front/back polyline segments so the
+// back half can render fainter — the classic textbook depth cue.
+function drawCircle(fn, cx, cy, R, frontStyle, backStyle){
+  for (const front of [false, true]) {
+    ctx.strokeStyle = front ? frontStyle : backStyle;
+    ctx.setLineDash([3,5]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let started = false;
+    for (let a = 0; a <= 360; a += 3){
+      const [x, y, z] = fn(a * Math.PI/180);
+      const [px, py, d] = project(x, y, z, cx, cy, R);
+      const vis = front ? d >= 0 : d < 0;
+      if (vis){ if (!started){ ctx.moveTo(px,py); started = true; } else ctx.lineTo(px,py); }
+      else started = false;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
-  ctx.stroke();
-  // axes
-  const axes = [[[0,0,1],'|0⟩'],[[0,0,-1],'|1⟩'],[[1,0,0],'x'],[[0,1,0],'y']];
+}
+
+function arrow(x1,y1,x2,y2,style,w){
+  ctx.strokeStyle = style; ctx.fillStyle = style; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const ang = Math.atan2(y2-y1, x2-x1), L = 4 + 2*w;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - L*Math.cos(ang - 0.4), y2 - L*Math.sin(ang - 0.4));
+  ctx.lineTo(x2 - L*Math.cos(ang + 0.4), y2 - L*Math.sin(ang + 0.4));
+  ctx.closePath(); ctx.fill();
+}
+
+// drag on the sphere sets theta/phi (invert the projection approximately:
+// use the screen offset as x/z' and clamp onto the sphere)
+let dragging = false;
+function pointerToState(e){
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.width/2, cy = rect.height/2, R = Math.min(rect.width, rect.height)*0.34;
+  const ex = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left - cx)/R;
+  const ey = (cy - ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top))/R;
+  // treat pointer as (x, z') on the visible disc; recover y from the sphere
+  const r2 = ex*ex + ey*ey;
+  const x = Math.max(-1, Math.min(1, ex));
+  const zc = Math.max(-1, Math.min(1, ey / Math.cos(TILT)));
+  let y = 1 - x*x - zc*zc;
+  y = y > 0 ? Math.sqrt(y) : 0; // front hemisphere
+  const th = Math.acos(Math.max(-1, Math.min(1, zc)));
+  let ph = Math.atan2(y, x) * 180/Math.PI;
+  const phTotal = ((ph % 360) + 360) % 360;
+  setState(Math.round(th*180/Math.PI), Math.round(phTotal));
+}
+canvas.addEventListener('mousedown', e => { dragging = true; pointerToState(e); });
+addEventListener('mousemove', e => { if (dragging) pointerToState(e); });
+addEventListener('mouseup', () => { dragging = false; });
+canvas.addEventListener('touchstart', e => { dragging = true; pointerToState(e); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove', e => { if (dragging){ pointerToState(e); e.preventDefault(); } }, {passive:false});
+addEventListener('touchend', () => { dragging = false; });
+
+function draw(){
+  if (playing && !dragging) { t += 0.016; if (t > 20) t = 0; tScrub.value = t.toFixed(2); }
+  const w = W(), h = H(), cx = w/2, cy = h/2, R = Math.min(w,h)*0.34;
+  ctx.clearRect(0,0,w,h);
+
+  // silhouette
+  ctx.strokeStyle = '#534347'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
+
+  // dotted wireframe: equator + two meridians + two latitude circles
+  drawCircle(a => [Math.cos(a), Math.sin(a), 0], cx, cy, R, 'rgba(208,198,200,0.55)', 'rgba(208,198,200,0.18)');
+  drawCircle(a => [Math.cos(a), 0, Math.sin(a)], cx, cy, R, 'rgba(208,198,200,0.4)', 'rgba(208,198,200,0.14)');
+  drawCircle(a => [0, Math.cos(a), Math.sin(a)], cx, cy, R, 'rgba(208,198,200,0.4)', 'rgba(208,198,200,0.14)');
+  for (const zl of [0.5, -0.5]) {
+    const rl = Math.sqrt(1 - zl*zl);
+    drawCircle(a => [rl*Math.cos(a), rl*Math.sin(a), zl], cx, cy, R, 'rgba(208,198,200,0.22)', 'rgba(208,198,200,0.08)');
+  }
+
+  // axis triad
+  const AXES = [
+    [[1.25,0,0], 'x\u0302', '#8FB58F'],
+    [[0,1.25,0], 'y\u0302', '#7FA8D0'],
+    [[0,0,1.25], '', '#D0C6C8'],
+    [[0,0,-1.25], '', '#D0C6C8'],
+  ];
+  for (const [v, label, col] of AXES){
+    const [px, py] = project(v[0], v[1], v[2], cx, cy, R);
+    arrow(cx, cy, px, py, col, 1);
+    if (label){ ctx.fillStyle = col; ctx.font = 'italic 13px serif'; ctx.fillText(label, px + 4, py + 4); }
+  }
   ctx.fillStyle = '#D0C6C8'; ctx.font = '13px monospace';
-  axes.forEach(([v,label]) => {
-    const [x,y] = project(v[0],v[1],v[2],cx,cy,R*1.12);
-    ctx.fillText(label, x-6, y+4);
-  });
-  // state vector
-  const th = P.theta*Math.PI/180;
-  const ph = P.phi*Math.PI/180 + P.omega*t;
+  const [zx, zy] = project(0, 0, 1.38, cx, cy, R);
+  ctx.fillText('|0\u27e9', zx - 10, zy);
+  const [zx2, zy2] = project(0, 0, -1.38, cx, cy, R);
+  ctx.fillText('|1\u27e9', zx2 - 10, zy2 + 8);
+
+  // state vector (+ precession)
+  const th = P.theta * Math.PI/180;
+  const ph = P.phi * Math.PI/180 + P.omega * t;
   const sx = Math.sin(th)*Math.cos(ph), sy = Math.sin(th)*Math.sin(ph), sz = Math.cos(th);
-  const [px,py,depth] = project(sx,sy,sz,cx,cy,R);
-  ctx.strokeStyle = depth < 0 ? 'rgba(255,127,142,0.45)' : '#FF7F8E';
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(px,py); ctx.stroke();
-  ctx.fillStyle = '#F3C77B'; ctx.beginPath(); ctx.arc(px,py,6,0,7); ctx.fill();
-  ctx.fillStyle = '#D0C6C8'; ctx.font = '12px monospace';
-  ctx.fillText('⟨σz⟩ = ' + sz.toFixed(2) + '   φ(t) = ' + ((ph*180/Math.PI)%360).toFixed(0) + '°', 16, 24);
+  const [px, py, depth] = project(sx, sy, sz, cx, cy, R);
+
+  // dashed projection guides (tip -> equator plane -> z axis), Qiskit-style
+  const [ex, ey] = project(sx, sy, 0, cx, cy, R);
+  const [ax, ay] = project(0, 0, sz, cx, cy, R);
+  ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(243,199,123,0.5)';
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(ax,ay); ctx.stroke();
+  ctx.strokeStyle = 'rgba(243,199,123,0.3)';
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // the ket itself
+  arrow(cx, cy, px, py, depth < 0 ? 'rgba(255,127,142,0.5)' : '#FF7F8E', 3);
+  ctx.fillStyle = '#F3C77B'; ctx.beginPath(); ctx.arc(px, py, 6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#0E0E0E'; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, 7); ctx.fill();
+
+  // live readout
+  const phiNow = ((ph*180/Math.PI) % 360 + 360) % 360;
+  readout.textContent =
+    '\u03b8 = ' + (th*180/Math.PI).toFixed(1) + '\u00b0    ' +
+    '\u03c6(t) = ' + phiNow.toFixed(1) + '\u00b0    ' +
+    '\u27e8\u03c3x\u27e9 = ' + sx.toFixed(3) + '    ' +
+    '\u27e8\u03c3y\u27e9 = ' + sy.toFixed(3) + '    ' +
+    '\u27e8\u03c3z\u27e9 = ' + sz.toFixed(3);
   requestAnimationFrame(draw);
 }
-draw();`
+draw();`,
+      `<div class="row" style="padding:0 16px">
+        <button id="play" class="vizbtn" aria-label="Play or pause precession">\u23f8</button>
+        <input type="range" id="tscrub" min="0" max="20" step="0.01" value="0" aria-label="Time scrub" style="flex:1;accent-color:#F3C77B">
+      </div>
+      <div id="presets" class="presetrow"></div>
+      <div id="readout" class="readout" aria-live="polite"></div>`
     ),
   },
 ];

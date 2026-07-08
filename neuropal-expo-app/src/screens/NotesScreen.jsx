@@ -10,7 +10,16 @@ import {
   View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import Toast from "react-native-toast-message";
 
+import { ColorPickerSheet } from "../components/notes/ColorPickerSheet";
+import {
+  buildNoteSvg,
+  exportNoteImage,
+  exportNotePdf,
+  exportNoteSvg,
+  strokeToPath,
+} from "../utils/noteExport";
 import {
   createNote,
   deleteNote,
@@ -20,8 +29,9 @@ import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
 // Handwritten notes — S-pen/stylus/finger ink on an SVG canvas.
-// v1 scope: freehand pen (3 colors × 3 widths), stroke eraser, undo, clear,
-// multiple notes with titles, everything persisted locally on the device.
+// Freehand pen (3 quick colors + full wheel/hex picker, 3 widths), stroke
+// eraser, undo, clear, multiple titled notes persisted locally, and export
+// to PDF / PNG / SVG via the share sheet (download on web).
 
 export function NotesScreen() {
   const [openId, setOpenId] = useState(null);
@@ -161,24 +171,6 @@ function NotesList({ onOpen }) {
 
 const WIDTHS = [2, 4, 8];
 
-function strokeToPath(points) {
-  if (points.length === 0) return "";
-  if (points.length === 1) {
-    const [x, y] = points[0];
-    return `M ${x} ${y} L ${x + 0.1} ${y + 0.1}`;
-  }
-  // Midpoint-quadratic smoothing — turns jittery touch samples into ink.
-  let d = `M ${points[0][0]} ${points[0][1]}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const [x1, y1] = points[i];
-    const [x2, y2] = points[i + 1];
-    d += ` Q ${x1} ${y1} ${(x1 + x2) / 2} ${(y1 + y2) / 2}`;
-  }
-  const last = points[points.length - 1];
-  d += ` L ${last[0]} ${last[1]}`;
-  return d;
-}
-
 function NoteEditor({ noteId, onBack }) {
   const palette = usePalette();
   const dispatch = useDispatch();
@@ -189,17 +181,23 @@ function NoteEditor({ noteId, onBack }) {
   const [live, setLive] = useState(null); // in-progress stroke points
   const [tool, setTool] = useState("pen"); // 'pen' | 'eraser'
   const [colorKey, setColorKey] = useState("ink");
+  const [customColor, setCustomColor] = useState("#4FC3F7");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [width, setWidth] = useState(4);
   const [title, setTitle] = useState(note?.title || "");
   const liveRef = useRef(null);
+  const canvasRef = useRef(null);
+  const canvasSize = useRef({ w: 800, h: 600 });
 
   const COLORS = useMemo(
     () => ({
       ink: palette.onSurface,
       accent: palette.accent,
       gold: palette.tertiary,
+      custom: customColor,
     }),
-    [palette]
+    [palette, customColor]
   );
 
   const persist = useCallback(
@@ -271,6 +269,32 @@ function NoteEditor({ noteId, onBack }) {
     });
   }
 
+  async function runExport(kind) {
+    setExportOpen(false);
+    const { w, h } = canvasSize.current;
+    const svg = buildNoteSvg({
+      strokes,
+      width: w,
+      height: h,
+      background: palette.surfaceLowest,
+    });
+    try {
+      if (kind === "pdf") {
+        await exportNotePdf({ svg, title });
+      } else if (kind === "png") {
+        await exportNoteImage({ svg, width: w, height: h, title, viewShotRef: canvasRef });
+      } else {
+        await exportNoteSvg({ svg, title });
+      }
+      Toast.show({ type: "success", text1: "Note exported" });
+    } catch (error) {
+      // user backing out of the share sheet is not an error
+      if (!/cancell?ed|dismissed/i.test(error?.message || "")) {
+        Toast.show({ type: "error", text1: "Export failed", text2: error?.message });
+      }
+    }
+  }
+
   if (!note) {
     onBack();
     return null;
@@ -312,6 +336,13 @@ function NoteEditor({ noteId, onBack }) {
             paddingVertical: 6,
           }}
         />
+        <Pressable
+          onPress={() => setExportOpen(true)}
+          accessibilityLabel="Export note"
+          style={{ padding: 8 }}
+        >
+          <MaterialIcons name="ios-share" size={20} color={palette.onSurfaceVariant} />
+        </Pressable>
         <Pressable onPress={undo} accessibilityLabel="Undo last stroke" style={{ padding: 8 }}>
           <MaterialIcons name="undo" size={20} color={palette.onSurfaceVariant} />
         </Pressable>
@@ -322,6 +353,12 @@ function NoteEditor({ noteId, onBack }) {
 
       {/* canvas */}
       <View
+        ref={canvasRef}
+        collapsable={false}
+        onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout;
+          canvasSize.current = { w: Math.round(w), h: Math.round(h) };
+        }}
         {...touchHandlers}
         style={{
           flex: 1,
@@ -375,7 +412,13 @@ function NoteEditor({ noteId, onBack }) {
               setColorKey(key);
               setTool("pen");
             }}
-            accessibilityLabel={`${key} pen`}
+            onLongPress={
+              key === "custom" ? () => setPickerOpen(true) : undefined
+            }
+            accessibilityLabel={key === "custom" ? "Custom pen color" : `${key} pen`}
+            accessibilityHint={
+              key === "custom" ? "Tap to use, long-press to change the color" : undefined
+            }
             style={{
               width: 34,
               height: 34,
@@ -383,9 +426,29 @@ function NoteEditor({ noteId, onBack }) {
               backgroundColor: value,
               borderWidth: colorKey === key && tool === "pen" ? 3 : 0,
               borderColor: palette.surfaceHighest,
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
+          >
+            {key === "custom" ? (
+              <MaterialIcons name="palette" size={16} color={palette.surface} />
+            ) : null}
+          </Pressable>
         ))}
+        <Pressable
+          onPress={() => setPickerOpen(true)}
+          accessibilityLabel="Open color wheel"
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.surfaceHigh,
+          }}
+        >
+          <MaterialIcons name="colorize" size={17} color={palette.onSurfaceVariant} />
+        </Pressable>
         <View style={{ width: 8 }} />
         {WIDTHS.map((w) => (
           <Pressable
@@ -433,6 +496,87 @@ function NoteEditor({ noteId, onBack }) {
           />
         </Pressable>
       </View>
+
+      <ColorPickerSheet
+        visible={pickerOpen}
+        initialColor={customColor}
+        onClose={() => setPickerOpen(false)}
+        onPick={(hex) => {
+          setCustomColor(hex);
+          setColorKey("custom");
+          setTool("pen");
+          setPickerOpen(false);
+        }}
+      />
+
+      {exportOpen ? (
+        <ExportSheet onClose={() => setExportOpen(false)} onExport={runExport} />
+      ) : null}
     </View>
+  );
+}
+
+// Small share menu: PDF / image / SVG.
+function ExportSheet({ onClose, onExport }) {
+  const palette = usePalette();
+  const OPTIONS = [
+    ["pdf", "picture-as-pdf", "Export as PDF"],
+    ["png", "image", "Export as image (PNG)"],
+    ["svg", "polyline", "Export as SVG (vector)"],
+  ];
+  return (
+    <Pressable
+      onPress={onClose}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: withAlpha("#000000", 0.5),
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <Pressable
+        onPress={() => {}}
+        style={{
+          width: "100%",
+          maxWidth: 340,
+          borderRadius: 20,
+          backgroundColor: palette.surfaceContainer,
+          padding: 12,
+        }}
+      >
+        {OPTIONS.map(([kind, icon, label]) => (
+          <Pressable
+            key={kind}
+            onPress={() => onExport(kind)}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              paddingHorizontal: 14,
+              paddingVertical: 14,
+              borderRadius: 12,
+            }}
+          >
+            <MaterialIcons name={icon} size={20} color={palette.accent} />
+            <Text
+              style={{
+                color: palette.onSurface,
+                fontFamily: "Inter_500Medium",
+                fontSize: 15,
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </Pressable>
+    </Pressable>
   );
 }

@@ -22,6 +22,8 @@ import {
   USE_MOCK,
 } from "../services/network";
 import { apiConfigured } from "../store/ApiLink";
+import { MarkdownEditorModal } from "../components/library/MarkdownEditorModal";
+import { PaperSearch } from "../components/library/PaperSearch";
 import { useApiRequest } from "../store/ApiRequest";
 import { selectDocuments } from "../store/selectors";
 import {
@@ -76,6 +78,7 @@ export function LibraryScreen() {
   const documents = useSelector(selectDocuments);
   const [activeFilter, setActiveFilter] = useState(0);
   const [actionDoc, setActionDoc] = useState(null); // long-pressed card → rename/delete sheet
+  const [editingDoc, setEditingDoc] = useState(null); // md/txt source editor
   const [connectionError, setConnectionError] = useState(
     !apiConfigured && !USE_MOCK
       ? "No backend configured — set EXPO_PUBLIC_API_BASE_URL in .env and restart expo start."
@@ -131,7 +134,15 @@ export function LibraryScreen() {
           "application/pdf",
           "application/epub+zip",
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
           "text/plain",
+          "text/markdown",
+          "image/vnd.djvu",
+          "image/x-djvu",
+          // .md and .djvu often report as octet-stream on Android providers;
+          // without this they'd be greyed out in the picker. The backend
+          // routes by file extension, so this is safe.
+          "application/octet-stream",
         ],
         copyToCacheDirectory: true,
         multiple: false,
@@ -269,6 +280,10 @@ export function LibraryScreen() {
           </View>
         ) : null}
 
+        {!USE_MOCK && apiConfigured ? (
+          <PaperSearch onImported={refresh} />
+        ) : null}
+
         <ScrollView
           horizontal
           contentInsetAdjustmentBehavior="automatic"
@@ -352,7 +367,22 @@ export function LibraryScreen() {
           setActionDoc(null);
           refresh();
         }}
+        onEdit={(doc) => {
+          setActionDoc(null);
+          setEditingDoc(doc);
+        }}
       />
+
+      {editingDoc ? (
+        <MarkdownEditorModal
+          document={editingDoc}
+          onClose={() => setEditingDoc(null)}
+          onSaved={() => {
+            setEditingDoc(null);
+            refresh();
+          }}
+        />
+      ) : null}
 
       <Pressable
         onPress={pickDocument}
@@ -380,8 +410,8 @@ export function LibraryScreen() {
   );
 }
 
-// Long-press sheet: rename or delete a library document.
-function DocActionsSheet({ document, onClose, onChanged }) {
+// Long-press sheet: rename, delete, or (md/txt) edit a library document.
+function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
   const palette = usePalette();
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -488,6 +518,33 @@ function DocActionsSheet({ document, onClose, onChanged }) {
             }}
           />
 
+          {(document.type === "md" || document.type === "txt") && !USE_MOCK ? (
+            <Pressable
+              onPress={() => onEdit?.(document)}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Edit document content"
+              style={{
+                marginTop: 14,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor: withAlpha(palette.tertiary, 0.14),
+                borderWidth: 1,
+                borderColor: withAlpha(palette.tertiary, 0.4),
+                opacity: busy ? 0.4 : 1,
+              }}
+            >
+              <MaterialIcons name="edit-note" size={18} color={palette.tertiary} />
+              <Text style={{ color: palette.tertiary, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                Edit content
+              </Text>
+            </Pressable>
+          ) : null}
+
           <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
             <Pressable
               onPress={saveRename}
@@ -555,24 +612,27 @@ function DocActionsSheet({ document, onClose, onChanged }) {
 function DocCard({ document, onPress, onLongPress }) {
   const palette = usePalette();
   const typeTint =
-    document.type === "pdf"
-      ? palette.primary
-      : document.type === "epub"
-        ? palette.secondary
-        : document.type === "docx"
-          ? palette.tertiary
-          : palette.onSurfaceVariant;
+    {
+      pdf: palette.primary,
+      djvu: palette.primary,
+      epub: palette.secondary,
+      arxiv: palette.secondary,
+      docx: palette.tertiary,
+      pptx: palette.tertiary,
+      md: palette.tertiary,
+    }[document.type] || palette.onSurfaceVariant;
 
   const icon =
-    document.type === "pdf"
-      ? "picture-as-pdf"
-      : document.type === "epub"
-        ? "menu-book"
-        : document.type === "docx"
-          ? "description"
-          : document.type === "txt"
-            ? "text-snippet"
-            : "science";
+    {
+      pdf: "picture-as-pdf",
+      epub: "menu-book",
+      docx: "description",
+      pptx: "co-present",
+      md: "edit-note",
+      txt: "text-snippet",
+      djvu: "auto-stories",
+      arxiv: "science",
+    }[document.type] || "description";
 
   return (
     <Pressable
