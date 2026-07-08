@@ -1,3 +1,6 @@
+// Dark base — Ruby Red family (owner's pick, 2026-07-08): ruby accent with
+// rose secondary and gold tertiary. Neutral greys got warmed slightly so
+// the old blue-tinted text colors don't fight the red accent.
 const dark = {
   surface: "#131313",
   surfaceLow: "#1B1C1C",
@@ -6,18 +9,18 @@ const dark = {
   surfaceHighest: "#353535",
   surfaceLowest: "#0E0E0E",
   onSurface: "#E4E2E1",
-  onSurfaceVariant: "#C3C6D6",
-  outline: "#8D909F",
-  outlineVariant: "#434653",
-  primary: "#B1C5FF",
-  primaryContainer: "#0051C3",
-  onPrimary: "#002C71",
-  secondary: "#A6E6FF",
-  tertiary: "#D6BAFF",
+  onSurfaceVariant: "#D0C6C8",
+  outline: "#9F8D91",
+  outlineVariant: "#534347",
+  primary: "#FF7F8E",
+  primaryContainer: "#8E1030",
+  onPrimary: "#4A0316",
+  secondary: "#FFAFC1",
+  tertiary: "#F3C77B",
   error: "#FFB4AB",
   warn: "#FFD27A",
-  accent: "#B1C5FF",
-  accentGlow: "rgba(177,197,255,0.25)",
+  accent: "#FF7F8E",
+  accentGlow: "rgba(255,127,142,0.25)",
 };
 
 const sepia = {
@@ -100,6 +103,7 @@ export function resolvePalette(theme, accent) {
     return base;
   }
 
+  // Default (and "ruby", and any legacy persisted "blue") → the ruby base.
   switch (accent) {
     case "cyan":
       return {

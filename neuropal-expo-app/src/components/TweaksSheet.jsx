@@ -125,7 +125,7 @@ export function TweaksSheet({ visible, onClose }) {
             label="Accent hue"
             value={tweaks.accent}
             entries={[
-              ["blue", "Blue"],
+              ["ruby", "Ruby"],
               ["cyan", "Cyan"],
               ["purple", "Purple"],
               ["green", "Green"],

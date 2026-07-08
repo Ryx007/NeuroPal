@@ -2,7 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   theme: "dark",
-  accent: "blue",
+  accent: "ruby",
   readerFont: "inter",
   readerLayout: "split",
   density: "calm",

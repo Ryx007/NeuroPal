@@ -24,6 +24,9 @@ export function HomeScreen() {
   const nervous = useSelector(selectNervousState);
   const nextAnchor = useSelector(selectNextAnchor);
   const resume = useSelector(selectResumeDocument);
+  // Real name comes from the backend's LOCAL_MODE user via /auth/me;
+  // single-user app, so the owner's name is the offline fallback too.
+  const userName = useSelector((s) => s.auth.userName);
 
   return (
     <ScrollView
@@ -44,7 +47,7 @@ export function HomeScreen() {
           letterSpacing: -0.8,
         }}
       >
-        Hello, Alex
+        Hello, {userName || "Ryx"}
       </Text>
       <Text
         style={{
