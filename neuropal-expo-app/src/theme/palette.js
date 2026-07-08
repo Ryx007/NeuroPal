@@ -96,45 +96,108 @@ const THEMES = {
   contrast,
 };
 
+// Accent variants per theme. Every theme except `contrast` (whose colors
+// are fixed for maximum legibility) honors the accent choice; the dark base
+// is already ruby, and any legacy persisted "blue" resolves to the default.
+const ACCENT_VARIANTS = {
+  dark: {
+    cyan: {
+      accent: "#A6E6FF",
+      accentGlow: "rgba(166,230,255,0.25)",
+      primary: "#A6E6FF",
+      primaryContainer: "#00566B",
+      onPrimary: "#003543",
+    },
+    purple: {
+      accent: "#D6BAFF",
+      accentGlow: "rgba(214,186,255,0.25)",
+      primary: "#D6BAFF",
+      primaryContainer: "#5F07BC",
+      onPrimary: "#280057",
+    },
+    green: {
+      accent: "#B9E6A8",
+      accentGlow: "rgba(185,230,168,0.22)",
+      primary: "#B9E6A8",
+      primaryContainer: "#1F5A12",
+      onPrimary: "#0F2D08",
+    },
+  },
+  light: {
+    ruby: {
+      accent: "#B00030",
+      accentGlow: "rgba(176,0,48,0.12)",
+      primary: "#B00030",
+      primaryContainer: "#FFD9DD",
+      onPrimary: "#FFFFFF",
+      secondary: "#8E3A50",
+      tertiary: "#8A6D1F",
+    },
+    cyan: {
+      accent: "#006A7A",
+      accentGlow: "rgba(0,106,122,0.12)",
+      primary: "#006A7A",
+      primaryContainer: "#B8EAF5",
+      onPrimary: "#FFFFFF",
+    },
+    purple: {
+      accent: "#6B2FBF",
+      accentGlow: "rgba(107,47,191,0.12)",
+      primary: "#6B2FBF",
+      primaryContainer: "#E9DDFF",
+      onPrimary: "#FFFFFF",
+    },
+    green: {
+      accent: "#2E6B1F",
+      accentGlow: "rgba(46,107,31,0.12)",
+      primary: "#2E6B1F",
+      primaryContainer: "#CDEEC0",
+      onPrimary: "#FFFFFF",
+    },
+  },
+  sepia: {
+    ruby: {
+      accent: "#8E1030",
+      accentGlow: "rgba(142,16,48,0.14)",
+      primary: "#8E1030",
+      primaryContainer: "#E8B9C2",
+      onPrimary: "#FFFFFF",
+      secondary: "#7A3B4C",
+      tertiary: "#7A5A1F",
+    },
+    cyan: {
+      accent: "#0F5E6B",
+      accentGlow: "rgba(15,94,107,0.14)",
+      primary: "#0F5E6B",
+      primaryContainer: "#BFDDE2",
+      onPrimary: "#FFFFFF",
+    },
+    purple: {
+      accent: "#5E3A8E",
+      accentGlow: "rgba(94,58,142,0.14)",
+      primary: "#5E3A8E",
+      primaryContainer: "#D9CCE8",
+      onPrimary: "#FFFFFF",
+    },
+    green: {
+      accent: "#4A6B2A",
+      accentGlow: "rgba(74,107,42,0.14)",
+      primary: "#4A6B2A",
+      primaryContainer: "#D2E2BE",
+      onPrimary: "#FFFFFF",
+    },
+  },
+};
+
 export function resolvePalette(theme, accent) {
   const base = THEMES[theme];
+  if (theme === "contrast") return base;
 
-  if (theme !== "dark") {
-    return base;
-  }
-
-  // Default (and "ruby", and any legacy persisted "blue") → the ruby base.
-  switch (accent) {
-    case "cyan":
-      return {
-        ...base,
-        accent: "#A6E6FF",
-        accentGlow: "rgba(166,230,255,0.25)",
-        primary: "#A6E6FF",
-        primaryContainer: "#00566B",
-        onPrimary: "#003543",
-      };
-    case "purple":
-      return {
-        ...base,
-        accent: "#D6BAFF",
-        accentGlow: "rgba(214,186,255,0.25)",
-        primary: "#D6BAFF",
-        primaryContainer: "#5F07BC",
-        onPrimary: "#280057",
-      };
-    case "green":
-      return {
-        ...base,
-        accent: "#B9E6A8",
-        accentGlow: "rgba(185,230,168,0.22)",
-        primary: "#B9E6A8",
-        primaryContainer: "#1F5A12",
-        onPrimary: "#0F2D08",
-      };
-    default:
-      return base;
-  }
+  const variants = ACCENT_VARIANTS[theme] || {};
+  // Dark's base IS ruby; light/sepia bases are neutral-blue, so ruby is an
+  // explicit variant there. Unknown/legacy accents fall back to ruby.
+  const chosen = variants[accent] || (accent === "ruby" ? null : variants.ruby) || null;
+  return chosen ? { ...base, ...chosen } : { ...base, ...(variants.ruby || {}) };
 }
 
 export const DEFAULT_PALETTE = dark;

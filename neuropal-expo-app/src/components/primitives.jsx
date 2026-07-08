@@ -33,18 +33,30 @@ export function GlassPanel({
           overflow: "hidden",
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: withAlpha(palette.outlineVariant, 0.15),
-          backgroundColor: withAlpha(
-            tintColor || palette.surfaceContainer,
-            0.65
-          ),
         },
         style,
       ]}
     >
+      {/* Real blur on every platform: Android renders nothing without the
+          experimental method (the old panel was just 65% color — content
+          showed straight through). The tint layer above the blur keeps the
+          background a "dispersed idea", not a window. */}
       <BlurView
         intensity={intensity}
         tint={resolvedTint}
+        experimentalBlurMethod="dimezisBlurView"
         style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: withAlpha(
+              tintColor || palette.surfaceContainer,
+              0.82
+            ),
+          },
+        ]}
       />
       {children}
     </View>

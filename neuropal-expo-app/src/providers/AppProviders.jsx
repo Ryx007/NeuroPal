@@ -9,10 +9,12 @@ import {
   serializeDocuments,
   serializeMessages,
 } from "../store/serializers";
+import { hydrateFocus } from "../store/slices/focusSlice";
 import { hydrateHome } from "../store/slices/homeSlice";
 import { hydrateLibrary } from "../store/slices/librarySlice";
 import { hydrateOnboarding } from "../store/slices/onboardingSlice";
 import { hydrateReader } from "../store/slices/readerSlice";
+import { hydrateReminders } from "../store/slices/remindersSlice";
 import { hydrateUi } from "../store/slices/uiSlice";
 
 const STORAGE_KEYS = {
@@ -21,6 +23,8 @@ const STORAGE_KEYS = {
   home: "np.home.v2",
   library: "np.library.v2",
   reader: "np.reader.v2",
+  focus: "np.focus.v1",
+  reminders: "np.reminders.v1",
 };
 
 const CRASH_KEY = "np.lastCrash";
@@ -96,6 +100,8 @@ function getPersistedSlices(state) {
     [STORAGE_KEYS.reader]: JSON.stringify({
       messages: serializeMessages(state.reader.messages),
     }),
+    [STORAGE_KEYS.focus]: JSON.stringify(state.focus),
+    [STORAGE_KEYS.reminders]: JSON.stringify({ items: state.reminders.items }),
   };
 }
 
@@ -142,6 +148,16 @@ export function AppProviders({ children }) {
             hydrateReader({
               messages: deserializeMessages(parsed.messages),
             })
+          );
+        }
+
+        if (persisted[STORAGE_KEYS.focus]) {
+          appStore.dispatch(hydrateFocus(JSON.parse(persisted[STORAGE_KEYS.focus])));
+        }
+
+        if (persisted[STORAGE_KEYS.reminders]) {
+          appStore.dispatch(
+            hydrateReminders(JSON.parse(persisted[STORAGE_KEYS.reminders]))
           );
         }
       } catch {
