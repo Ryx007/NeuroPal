@@ -7,7 +7,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -27,7 +27,6 @@ import { AnchorsScreen } from "../screens/AnchorsScreen";
 import { EmergencyScreen } from "../screens/EmergencyScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LibraryScreen } from "../screens/LibraryScreen";
-import { LoginScreen } from "../screens/LoginScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReaderScreen } from "../screens/ReaderScreen";
@@ -280,32 +279,6 @@ function useAuthBootstrap(loggedIn) {
   }, [loggedIn, boot]);
 }
 
-function LoadingGate() {
-  const palette = usePalette();
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: palette.surface,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 14,
-      }}
-    >
-      <ActivityIndicator size="large" color={palette.accent} />
-      <Text
-        style={{
-          color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
-          fontSize: 14,
-        }}
-      >
-        Loading NeuroPal…
-      </Text>
-    </View>
-  );
-}
-
 export function AppNavigator() {
   const palette = usePalette();
   const completed = useSelector(selectOnboardingCompleted);
@@ -328,26 +301,15 @@ export function AppNavigator() {
     };
   }, [palette]);
 
-  // Three render gates, in order:
-  //   loggedIn === null  → still booting, show loader
-  //   loggedIn === false → render Login (no nav container needed yet)
-  //   loggedIn === true  → existing tree (onboarding vs tabs based on `completed`)
-  if (loggedIn === null) {
-    return <LoadingGate />;
-  }
-
+  // No auth gate: this is a single-user local app (Build Brief §2.7 — "no
+  // login screen friction"). The bootstrap above hydrates the user's
+  // name/tweaks in the background when the backend answers; when it
+  // doesn't, the app still opens and the Library banner / boot toast say
+  // exactly what's wrong. (LoginScreen still exists in src/screens for a
+  // future LOCAL_MODE=false build — it's just never routed to.)
   return (
     <NavigationContainer theme={navigationTheme}>
-      {loggedIn === false ? (
-        <RootStack.Navigator
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: palette.surface },
-          }}
-        >
-          <RootStack.Screen name="Login" component={LoginScreen} />
-        </RootStack.Navigator>
-      ) : completed ? (
+      {completed ? (
         <RootStack.Navigator
           screenOptions={{
             headerShown: false,

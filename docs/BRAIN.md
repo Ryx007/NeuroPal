@@ -135,6 +135,10 @@ ingest. The library's poll shows it appear on its own.
 changing). `services/network.js` is the reader/study client (opt-in mock via
 `EXPO_PUBLIC_USE_MOCK=true`, NEVER silent fallback — unreachable backend must
 be a visible error: Library banner + Retry, reader error notes, boot toast).
+**There is NO login screen** (removed 2026-07-08 per owner): the navigator
+renders onboarding/tabs unconditionally; the auth bootstrap only hydrates
+name/tweaks in the background. `src/screens/LoginScreen.jsx` still exists
+but is never routed to — re-gate it only for a future LOCAL_MODE=false build.
 `store/ApiRequest.js` is the screens' hook (toasts, 401 logout, `rethrow`
 opt-in). Reader: backend docs carry no `sections` → `fetchReaderDocument`
 pulls `/text` **only once status is `ready`** (mojibake guard), splits into
