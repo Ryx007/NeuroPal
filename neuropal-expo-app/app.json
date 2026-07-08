@@ -53,7 +53,8 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "reactCompiler": true

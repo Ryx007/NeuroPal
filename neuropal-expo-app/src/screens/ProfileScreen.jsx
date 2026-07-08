@@ -18,7 +18,7 @@ export function ProfileScreen() {
       contentContainerStyle={{
         paddingHorizontal: 24,
         paddingTop: 20,
-        paddingBottom: 160,
+        paddingBottom: 40,
       }}
     >
       <Text

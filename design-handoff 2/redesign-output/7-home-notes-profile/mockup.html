@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Home · Notes · Profile (re-render only)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#131313;--surface-lowest:#0E0E0E;--surface-low:#1B1C1C;--surface-container:#1F2020;
+  --surface-high:#2A2A2A;--surface-highest:#353535;--on-surface:#E4E2E1;--on-surface-variant:#D0C6C8;
+  --outline:#9F8D91;--outline-variant:#534347;--primary:#FF7F8E;--primary-container:#8E1030;--on-primary:#4A0316;
+  --accent:#FF7F8E;--accent-glow:rgba(255,127,142,0.25);--secondary:#FFAFC1;--tertiary:#F3C77B;--error:#FFB4AB;--warn:#FFD27A;--hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;--font-body:"Inter",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:1320px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:900px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:1320px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;background:linear-gradient(180deg,#1c1416,#191315);color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+.appbar{position:absolute;top:46px;left:0;right:0;height:56px;z-index:35;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--hairline)}
+.iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--accent);cursor:pointer}
+.wordmark{display:flex;align-items:center;gap:9px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px 1px var(--accent-glow)}
+.wordmark .name{font-family:var(--font-display);font-weight:700;font-size:19px;color:var(--accent);letter-spacing:-.4px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--surface-high);border:2px solid rgba(255,127,142,.28);display:grid;place-items:center;color:var(--on-surface-variant);margin-left:auto}
+.content{position:absolute;inset:0;overflow-y:auto;padding:114px 20px 40px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.h1{font-family:var(--font-display);font-weight:700;font-size:34px;letter-spacing:-.8px;margin:6px 0 2px}
+.sub{color:var(--on-surface-variant);font-size:16px;margin:0 0 4px}
+
+/* Home */
+.card{border-radius:26px;padding:20px;margin-top:22px}
+.card.low{background:var(--surface-low)}
+.q{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--on-surface-variant);margin:0 0 14px}
+.state{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;background:var(--surface-container);border:1px solid transparent;margin-bottom:10px}
+.state:last-child{margin-bottom:0}
+.state .tile{width:44px;height:44px;border-radius:12px;display:grid;place-items:center}
+.state .lbl{font-weight:600;font-size:15px;flex:1}
+.state.sel{background:rgba(255,175,193,.08);border-color:rgba(255,175,193,.4)}
+.sec{display:flex;align-items:center;margin:28px 4px 12px}
+.sec .l{font-family:var(--font-display);font-weight:500;font-size:16px;color:var(--on-surface-variant)}
+.sec .t{margin-left:auto;font-size:11px;letter-spacing:2px;color:rgba(255,127,142,.7);text-transform:uppercase}
+.task{display:flex;align-items:center;gap:14px;padding:14px;border-radius:20px;background:var(--surface-high);margin-bottom:10px}
+.chk{width:32px;height:32px;border-radius:10px;border:2px solid rgba(255,127,142,.35);display:grid;place-items:center;flex-shrink:0}
+.chk.on{background:var(--accent);border-color:var(--accent);color:var(--on-primary)}
+.task .tt{font-weight:600;font-size:15px}
+.task .ts{color:var(--on-surface-variant);font-size:12px}
+.task.done .tt{color:var(--on-surface-variant);text-decoration:line-through}
+.anchor{position:relative;margin-top:24px;border-radius:26px;padding:20px;background:rgba(142,16,48,.28);overflow:hidden}
+.anchor .blob{position:absolute;right:-30px;bottom:-30px;width:150px;height:150px;border-radius:50%;background:rgba(255,175,193,.10)}
+.ey{font-size:11px;letter-spacing:3px;color:rgba(255,127,142,.75);font-weight:500}
+.anchor .big{font-family:var(--font-display);font-weight:700;font-size:20px;margin-top:6px}
+.anchor .meta{display:flex;align-items:center;gap:5px;color:var(--on-surface-variant);font-size:13px;margin-top:8px}
+.anchor .ic{width:60px;height:60px;border-radius:16px;background:rgba(255,127,142,.18);display:grid;place-items:center;color:var(--accent)}
+.resume{margin-top:16px;padding:16px;border-radius:22px;background:var(--surface-container)}
+.resume .bar{height:6px;border-radius:3px;background:var(--surface-high);overflow:hidden;margin-top:12px}
+.resume .bar > i{display:block;height:100%;width:38%;background:var(--accent)}
+
+/* Notes */
+.note{display:flex;align-items:center;gap:12px;padding:16px;border-radius:18px;background:var(--surface-container);margin-bottom:12px}
+.note .nt{font-family:var(--font-display);font-weight:600;font-size:16px}
+.note .nm{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant);margin-top:3px}
+.note .del{margin-left:auto;color:var(--on-surface-variant);cursor:pointer}
+.fab{position:absolute;right:20px;bottom:26px;width:60px;height:60px;border-radius:18px;background:var(--primary);display:grid;place-items:center;color:var(--on-primary);z-index:36;box-shadow:0 14px 30px -8px var(--accent-glow)}
+
+/* Profile */
+.pcard{display:flex;align-items:center;gap:12px;padding:16px;border-radius:16px;background:var(--surface-container);margin-bottom:10px}
+.pcard .pk{font-family:var(--font-body);font-weight:500;font-size:11px;letter-spacing:2px;color:var(--on-surface-variant);text-transform:uppercase}
+.pcard .pv{font-weight:600;font-size:15px;margin-top:4px}
+.pcard .edit{margin-left:auto;color:var(--outline)}
+.psec{font-family:var(--font-display);font-weight:500;font-size:16px;color:var(--on-surface-variant);margin:24px 4px 10px}
+.privacy{padding:18px;border-radius:20px;background:var(--surface-container)}
+.privacy .ph{font-family:var(--font-display);font-weight:600;font-size:16px}
+.privacy .pp{color:var(--on-surface-variant);font-size:13px;line-height:1.5;margin-top:6px}
+.ghost{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(83,67,71,.5);background:transparent;color:var(--accent);font-family:var(--font-display);font-weight:600;font-size:13px;padding:11px 16px;border-radius:14px;margin-top:12px;margin-right:10px;cursor:pointer}
+
+.legend{max-width:1320px;margin:40px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Home · Notes · Profile &nbsp;<span class="pill">re-render only</span></h1>
+  <p>These are <span class="tagline">not redesigns</span>. Each is re-rendered inside the new shell (D1 drawer header, D3 material, D4 safe area + tinted status bar) with its <b>current content and layout kept as-is</b> — the bottom tab bar is simply removed. Any deeper rework (mock Home data, dead Profile buttons) is out of scope for this pass.</p>
+</div>
+
+<div class="frames">
+  <!-- ===== HOME ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <h1 class="h1">Hello, Ryx</h1>
+          <p class="sub">One step at a time today.</p>
+          <div class="card low">
+            <p class="q">How are you feeling right now?</p>
+            <div class="state sel">
+              <div class="tile" style="background:rgba(255,175,193,.12);color:var(--secondary)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14c1 1.3 2.4 2 4 2s3-.7 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></div>
+              <span class="lbl">I feel okay</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+            </div>
+            <div class="state">
+              <div class="tile" style="background:rgba(243,199,123,.12);color:var(--tertiary)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 15h8" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></div>
+              <span class="lbl">Feeling a bit off</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+            </div>
+            <div class="state">
+              <div class="tile" style="background:rgba(255,180,171,.12);color:var(--error)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 16c1-1.3 2.4-2 4-2s3 .7 4 2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></div>
+              <span class="lbl">Help, I'm overwhelmed</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+            </div>
+          </div>
+          <div class="sec"><span class="l">Minimum viable day</span><span class="t">2 tasks remaining</span></div>
+          <div class="task done"><div class="chk on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m5 12 5 5 9-11"/></svg></div><div><div class="tt">Read 1 section of Kolobov</div><div class="ts">Ch. 3 — Quantum imaging</div></div></div>
+          <div class="task"><div class="chk"></div><div><div class="tt">Re-derive the CPI visibility bound</div><div class="ts">Derivation journal · 15 min</div></div></div>
+          <div class="anchor"><div class="blob"></div><div style="display:flex;align-items:center;gap:14px"><div style="flex:1"><div class="ey">NEXT ANCHOR</div><div class="big">Deep work block at 2:00 PM</div><div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>In 40 minutes</div></div><div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="5" r="2.4"/><path d="M12 7.4V21M6 12H4a8 8 0 0 0 16 0h-2"/></svg></div></div></div>
+          <div class="resume"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(255,127,142,.12);display:grid;place-items:center;color:var(--accent)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h7v15H4zM13 5h7v15h-7z"/></svg></div><div><div class="ey" style="letter-spacing:2px">RESUME READING</div><div style="font-family:var(--font-display);font-weight:600;font-size:16px;margin-top:3px">Sub-shot-noise quantum imaging with entangled photons</div></div></div><div class="bar"><i></i></div></div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Home</b> — same content (greeting, mood check, minimum-viable-day, next anchor, resume reading), new shell. Bindings unchanged.</div>
+  </div>
+
+  <!-- ===== NOTES ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <h1 class="h1">Notes</h1>
+          <p class="sub">Ink first, organize never.</p>
+          <div style="margin-top:20px">
+            <div class="note"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"><path d="M4 18c3-1 4-9 7-9s2 5 4 5 2-3 4-3"/></svg><div><div class="nt">Schmidt decomposition</div><div class="nm">42 strokes · Jul 8, 9:12 AM</div></div><span class="del"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke-linecap="round"/></svg></span></div>
+            <div class="note"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"><path d="M4 18c3-1 4-9 7-9s2 5 4 5 2-3 4-3"/></svg><div><div class="nt">CPI derivation — visibility bound</div><div class="nm">118 strokes · Jul 7, 6:40 PM</div></div><span class="del"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke-linecap="round"/></svg></span></div>
+            <div class="note"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"><path d="M4 18c3-1 4-9 7-9s2 5 4 5 2-3 4-3"/></svg><div><div class="nt">Lab meeting — action items</div><div class="nm">27 strokes · Jul 5, 11:02 AM</div></div><span class="del"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke-linecap="round"/></svg></span></div>
+          </div>
+        </div>
+        <div class="fab" aria-label="New note"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Notes</b> — same ink-note list (title, N strokes · updated, delete, FAB +), new shell. S-Pen editor + ink model unchanged.</div>
+  </div>
+
+  <!-- ===== PROFILE ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <h1 class="h1">Profile</h1>
+          <div style="height:8px"></div>
+          <div class="pcard"><div><div class="pk">Conditions</div><div class="pv">AUTISM · ADHD · BPD · PTSD</div></div><span class="edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L18 10l-4-4L4 16z"/></svg></span></div>
+          <div class="pcard"><div><div class="pk">Energy pattern</div><div class="pv">Peaks late morning &amp; night</div></div><span class="edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L18 10l-4-4L4 16z"/></svg></span></div>
+          <div class="pcard"><div><div class="pk">Primary use</div><div class="pv">Research papers &amp; PhD study</div></div><span class="edit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L18 10l-4-4L4 16z"/></svg></span></div>
+
+          <div class="psec">Privacy</div>
+          <div class="privacy">
+            <div class="ph">Your data stays private and local-first.</div>
+            <div class="pp">NeuroPal uses persisted local state for this prototype. API requests route through a shared axios module and can point at your backend when EXPO_PUBLIC_API_BASE_URL is configured.</div>
+            <div><button class="ghost"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v10m0 0 4-4m-4 4-4-4M5 20h14" stroke-linecap="round"/></svg>Export my data</button><button class="ghost"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke-linecap="round"/></svg>Delete account</button></div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Profile</b> — same cards (Conditions / Energy / Primary use) + Privacy + Export/Delete, new shell. (Edit pencils + those buttons are still stubs — wiring them is out of this pass.)</div>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>What changed / mapping for the dev</h2>
+  <ul>
+    <li><b>Re-render only (D1/D3/D4)</b>: new drawer header, tinted status bar, safe area, no bottom tab bar. <b>No content or layout redesign</b> — everything keeps its current structure and bindings.</li>
+    <li><b>Home</b>: `selectTasks`/`toggleTask`, `selectNervousState`/`setNervousState`, `selectNextAnchor`, `selectResumeDocument`, `auth.userName` — unchanged. (Home is still mostly mock data by design; not in scope to rewire.)</li>
+    <li><b>Notes</b>: `s.notes.items`, `createNote`/`saveNote`/`deleteNote`, SVG ink model — unchanged. Editor not reworked.</li>
+    <li><b>Profile</b>: `selectOnboardingState` values shown; edit pencils + Export/Delete remain stubs (`02` flags them) — wiring is explicitly out of scope for this pass.</li>
+  </ul>
+</div>
+</body>
+</html>

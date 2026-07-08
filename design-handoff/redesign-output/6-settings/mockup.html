@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Settings (D2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Atkinson+Hyperlegible:wght@400;700&family=Lora:ital@0;1&family=Fraunces:opsz,wght@9..144,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#131313;--surface-lowest:#0E0E0E;--surface-low:#1B1C1C;--surface-container:#1F2020;
+  --surface-high:#2A2A2A;--surface-highest:#353535;--on-surface:#E4E2E1;--on-surface-variant:#D0C6C8;
+  --outline:#9F8D91;--outline-variant:#534347;--primary:#FF7F8E;--primary-container:#8E1030;--on-primary:#4A0316;
+  --accent:#FF7F8E;--accent-glow:rgba(255,127,142,0.25);--secondary:#FFAFC1;--tertiary:#F3C77B;--error:#FFB4AB;--warn:#FFD27A;--hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;--font-body:"Inter",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:960px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:840px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:960px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;background:linear-gradient(180deg,#1c1416,#191315);color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+.appbar{position:absolute;top:46px;left:0;right:0;height:56px;z-index:35;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--hairline)}
+.iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--accent);cursor:pointer}
+.htxt{font-family:var(--font-display);font-weight:700;font-size:18px}
+.content{position:absolute;inset:0;overflow-y:auto;padding:114px 20px 40px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.h1{font-family:var(--font-display);font-weight:700;font-size:34px;letter-spacing:-.8px;margin:2px 0 14px}
+
+.group{background:var(--surface-container);border-radius:20px;padding:16px 16px 6px;margin-bottom:16px;border:1px solid rgba(255,255,255,.04)}
+.gh{font-family:var(--font-display);font-weight:600;font-size:12px;letter-spacing:2px;color:var(--accent);opacity:.85;margin:0 2px 12px}
+.ctl{margin-bottom:16px}
+.clab{font-family:var(--font-body);font-weight:500;font-size:11px;letter-spacing:1.6px;color:var(--on-surface-variant);text-transform:uppercase;margin:0 2px 8px;display:flex}
+.clab .v{margin-left:auto;font-family:var(--font-mono);color:var(--accent);letter-spacing:0}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.seg .o{padding:9px 14px;border-radius:13px;background:var(--surface-high);border:1px solid transparent;color:var(--on-surface);font-size:13px;font-weight:500;cursor:pointer}
+.seg .o.on{background:rgba(255,127,142,.14);border-color:rgba(255,127,142,.4);color:var(--accent);font-weight:600}
+.accents{display:flex;gap:12px}
+.sw{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;cursor:pointer;border:2px solid transparent}
+.sw.on{border-color:#fff}
+.sw span{width:22px;height:22px;border-radius:50%}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--accent) 0%,var(--accent) var(--fill,50%),var(--surface-high) var(--fill,50%));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,127,142,.3);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border:none;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,127,142,.3)}
+.preview{background:var(--surface-lowest);border:1px solid var(--hairline);border-radius:14px;padding:16px;margin:4px 2px 12px}
+.preview .pl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:2px;color:var(--on-surface-variant);margin-bottom:8px}
+#pvtext{font-family:var(--font-reader);color:#EBE7E4}
+.a11y{display:flex;gap:10px;align-items:flex-start;background:rgba(255,175,193,.06);border:1px solid rgba(255,175,193,.22);border-radius:14px;padding:14px;margin-top:4px}
+.a11y svg{color:var(--secondary);flex-shrink:0;margin-top:1px}
+.a11y p{margin:0;font-size:12px;color:var(--on-surface-variant);line-height:1.5}
+.legend{max-width:960px;margin:40px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Settings &nbsp;<span class="pill">D2</span></h1>
+  <p>The old <b>Tweaks sheet</b> content moves to a <span class="tagline">Settings destination in the drawer</span> (no longer opened by the header hamburger, which now opens the drawer). Presented as a <span class="tagline">full screen</span> so every accessibility-critical control fits. <b>Every control and its dispatch is kept.</b> Drag the size/spacing sliders — the live preview responds.</p>
+</div>
+
+<div class="frames">
+  <!-- ===== S1 ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <div class="h1">Settings</div>
+
+          <div class="group">
+            <div class="gh">APPEARANCE</div>
+            <div class="ctl">
+              <div class="clab">Theme</div>
+              <div class="seg"><span class="o on">Dark</span><span class="o">Sepia</span><span class="o">Light</span><span class="o">Contrast</span></div>
+            </div>
+            <div class="ctl">
+              <div class="clab">Accent hue</div>
+              <div class="accents">
+                <span class="sw on" title="Ruby"><span style="background:#FF7F8E"></span></span>
+                <span class="sw" title="Cyan"><span style="background:#A6E6FF"></span></span>
+                <span class="sw" title="Purple"><span style="background:#D6BAFF"></span></span>
+                <span class="sw" title="Green"><span style="background:#B9E6A8"></span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="gh">READING — TYPOGRAPHY</div>
+            <div class="ctl">
+              <div class="clab">Reader font</div>
+              <div class="seg" id="fontseg"><span class="o on" data-f='Inter'>Inter</span><span class="o" data-f='Atkinson Hyperlegible'>Atkinson</span><span class="o" data-f='Atkinson Hyperlegible'>Dyslexic</span><span class="o" data-f='Lora'>Lora</span><span class="o" data-f='Fraunces'>Fraunces</span></div>
+            </div>
+            <div class="preview">
+              <div class="pl">LIVE PREVIEW</div>
+              <div id="pvtext" style="font-size:19px;line-height:1.75">The biphoton amplitude carries the spatial information of both arms simultaneously — a correlation with no classical analogue.</div>
+            </div>
+            <div class="ctl">
+              <div class="clab">Font size <span class="v" id="l-size">19 pt</span></div>
+              <input type="range" id="s-size" min="14" max="28" value="19" style="--fill:36%">
+            </div>
+            <div class="ctl">
+              <div class="clab">Line spacing <span class="v" id="l-space">1.75</span></div>
+              <input type="range" id="s-space" min="130" max="220" value="175" style="--fill:50%">
+            </div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn" aria-label="Open menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <span class="htxt">Settings</span>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Settings · appearance + typography</b> — Theme, Accent (swatches), Reader font, Font size, Line spacing — with a live reading preview. Reached from Drawer → Settings.</div>
+  </div>
+
+  <!-- ===== S2 ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <div class="h1">Settings</div>
+
+          <div class="group">
+            <div class="gh">READING — LAYOUT</div>
+            <div class="ctl">
+              <div class="clab">Reader layout</div>
+              <div class="seg"><span class="o">Split</span><span class="o on">Focus</span><span class="o">Paginated</span></div>
+            </div>
+            <div class="ctl">
+              <div class="clab">Density</div>
+              <div class="seg"><span class="o on">Calm</span><span class="o">Dense</span></div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="gh">AUDIO — TEXT TO SPEECH</div>
+            <div class="ctl">
+              <div class="clab">Words per minute <span class="v">240 wpm</span></div>
+              <input type="range" min="120" max="400" value="240" style="--fill:43%">
+            </div>
+            <div class="ctl">
+              <div class="clab">Voice profile</div>
+              <div class="seg"><span class="o">Soft</span><span class="o on">Natural</span><span class="o">Deep</span></div>
+            </div>
+          </div>
+
+          <div class="a11y">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="4.5" r="1.6" fill="currentColor" stroke="none"/><path d="M4 8h16M12 8v8m0 0-3 4m3-4 3 4" stroke-linecap="round"/></svg>
+            <p><b style="color:var(--on-surface)">Accessibility-critical.</b> Dyslexia font, contrast theme, and adjustable size/spacing/WPM are surfaced here and (for font/size/theme) in the Reader’s Display options. Every control keeps its screen-reader label.</p>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <span class="htxt">Settings</span>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Settings · layout + audio</b> — Reader layout, Density, WPM, Voice, plus the accessibility note. All 9 Tweaks controls preserved across the two views.</div>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>What changed / mapping for the dev</h2>
+  <ul>
+    <li><b>D2 — Tweaks → Settings drawer destination</b>. Same content, now a full screen reached via <b>Drawer → Settings</b> (D1), not the header hamburger.</li>
+    <li><b>Every control + dispatch preserved (→ `02` Tweaks table)</b>: Theme→`setTheme`, Accent→`setAccent`, Reader font→`setReaderFont` (5 faces incl. Atkinson + Dyslexic), Reader layout→`setReaderLayout`, Density→`setDensity`, Font size→`setFontSize`, Line spacing→`setLineSpacing`, WPM→`setWpm`, Voice→`setVoice`. Data from `selectUiState`.</li>
+    <li><b>Surfaced more prominently</b> (per `02`): theme, reader font, and size also appear in the Reader’s “Display options” (D8) — same store, two entry points.</li>
+    <li><b>Accessibility</b>: dyslexia font, contrast theme, size/spacing/WPM are the reason these are their own screen; every control keeps its `accessibilityLabel`. D6 applies to any field.</li>
+  </ul>
+</div>
+
+<script>
+  const size=document.getElementById('s-size'), space=document.getElementById('s-space');
+  const pv=document.getElementById('pvtext');
+  function upd(){
+    const sz=+size.value, sp=+space.value/100;
+    document.getElementById('l-size').textContent=sz+' pt';
+    document.getElementById('l-space').textContent=sp.toFixed(2);
+    pv.style.fontSize=sz+'px'; pv.style.lineHeight=sp;
+    size.style.setProperty('--fill',((sz-14)/14*100)+'%');
+    space.style.setProperty('--fill',((space.value-130)/90*100)+'%');
+  }
+  size.addEventListener('input',upd); space.addEventListener('input',upd); upd();
+  document.querySelectorAll('#fontseg .o').forEach(o=>o.addEventListener('click',()=>{
+    document.querySelectorAll('#fontseg .o').forEach(x=>x.classList.remove('on'));
+    o.classList.add('on'); pv.style.fontFamily='"'+o.getAttribute('data-f')+'", sans-serif';
+  }));
+  document.querySelectorAll('.seg').forEach(seg=>{if(seg.id==='fontseg')return;
+    seg.querySelectorAll('.o').forEach(o=>o.addEventListener('click',()=>{seg.querySelectorAll('.o').forEach(x=>x.classList.remove('on'));o.classList.add('on');}));});
+  document.querySelectorAll('.accents .sw').forEach(s=>s.addEventListener('click',()=>{document.querySelectorAll('.accents .sw').forEach(x=>x.classList.remove('on'));s.classList.add('on');}));
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Global Shell (D1 · D3 · D4 · D5)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ===== Semantic tokens (Dark + Ruby) — mirrors _shared/tokens.css ===== */
+:root{
+  --surface:#131313; --surface-lowest:#0E0E0E; --surface-low:#1B1C1C;
+  --surface-container:#1F2020; --surface-high:#2A2A2A; --surface-highest:#353535;
+  --on-surface:#E4E2E1; --on-surface-variant:#D0C6C8; --outline:#9F8D91; --outline-variant:#534347;
+  --primary:#FF7F8E; --primary-container:#8E1030; --on-primary:#4A0316;
+  --accent:#FF7F8E; --accent-glow:rgba(255,127,142,0.25); --secondary:#FFAFC1;
+  --tertiary:#F3C77B; --error:#FFB4AB; --warn:#FFD27A; --hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;
+  --font-body:"Inter",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  margin:0; font-family:var(--font-body);
+  background:
+    radial-gradient(1200px 700px at 15% -10%, #241417 0%, transparent 55%),
+    radial-gradient(1000px 700px at 100% 0%, #1a1113 0%, transparent 50%),
+    #0b0b0c;
+  color:var(--on-surface); padding:40px 24px 72px;
+}
+.board-head{max-width:1180px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.5;max-width:820px}
+.tagline{color:var(--accent);font-weight:600}
+.frames{display:flex;gap:56px;flex-wrap:wrap;justify-content:center;max-width:1180px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);
+  border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+
+/* ===== Phone frame ===== */
+.phone{
+  position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);
+  overflow:hidden;border:1px solid rgba(255,255,255,.06);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.85), 0 0 0 10px #050505, 0 0 0 11px #1b1b1c;
+}
+.screen{position:absolute;inset:0}
+
+/* ---- D4: safe area + tinted "colored-out" status bar ---- */
+.statusbar{
+  position:absolute;top:0;left:0;right:0;height:46px;z-index:40;
+  display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;
+  background:linear-gradient(180deg, #1c1416 0%, #191315 100%); /* solid theme tint, not transparent */
+  color:var(--on-surface);
+}
+.statusbar .time{font-family:var(--font-mono);font-size:13px;letter-spacing:.5px}
+.statusbar .sysicons{display:flex;gap:7px;align-items:center;opacity:.9}
+.statusbar svg{display:block}
+
+/* ---- AppHeader (glass, D3), sits inside safe area under status bar ---- */
+.appbar{
+  position:absolute;top:46px;left:0;right:0;height:56px;z-index:35;
+  display:flex;align-items:center;gap:10px;padding:0 14px;
+}
+.glass{
+  background:linear-gradient(135deg, rgba(255,127,142,.10), rgba(142,16,48,.16)), rgba(28,28,29,.60);
+  -webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 24px 60px -24px rgba(0,0,0,.75);
+}
+.glass--deep{background:linear-gradient(160deg, rgba(255,127,142,.13), rgba(142,16,48,.22)), rgba(22,22,23,.66);}
+.appbar{border-bottom:1px solid var(--hairline)}
+.iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--accent);cursor:pointer}
+.iconbtn:hover{background:rgba(255,127,142,.10)}
+.wordmark{display:flex;align-items:center;gap:9px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px 1px var(--accent-glow);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.35);opacity:1}}
+.wordmark .name{font-family:var(--font-display);font-weight:700;font-size:19px;color:var(--accent);letter-spacing:-.4px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--surface-high);border:2px solid rgba(255,127,142,.28);display:grid;place-items:center;color:var(--on-surface-variant);margin-left:auto;cursor:pointer}
+
+/* ---- Content scroll (starts under bars; scrolls beneath glass so blur shows) ---- */
+.content{position:absolute;inset:0;overflow-y:auto;padding:118px 20px 40px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.h1{font-family:var(--font-display);font-weight:700;font-size:34px;letter-spacing:-.8px;margin:6px 0 2px}
+.sub{color:var(--on-surface-variant);font-size:16px;margin:0 0 4px}
+
+.card{border-radius:26px;padding:20px;margin-top:22px}
+.card.low{background:var(--surface-low)}
+.card.container{background:var(--surface-container)}
+.q{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--on-surface-variant);margin:0 0 14px}
+.state{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;background:var(--surface-container);border:1px solid transparent;margin-bottom:10px}
+.state:last-child{margin-bottom:0}
+.state .tile{width:44px;height:44px;border-radius:12px;display:grid;place-items:center}
+.state .lbl{font-family:var(--font-body);font-weight:600;font-size:15px;flex:1}
+.state.sel-green{background:rgba(255,175,193,.08);border-color:rgba(255,175,193,.4)}
+
+.sec{display:flex;align-items:center;margin:28px 4px 12px}
+.sec .l{font-family:var(--font-display);font-weight:500;font-size:16px;color:var(--on-surface-variant)}
+.sec .t{margin-left:auto;font-size:11px;letter-spacing:2px;color:rgba(255,127,142,.7);text-transform:uppercase;font-weight:500}
+.task{display:flex;align-items:center;gap:14px;padding:14px;border-radius:20px;background:var(--surface-high);margin-bottom:10px}
+.chk{width:32px;height:32px;border-radius:10px;border:2px solid rgba(255,127,142,.35);display:grid;place-items:center;flex-shrink:0}
+.chk.on{background:var(--accent);border-color:var(--accent);color:var(--on-primary)}
+.task .tt{font-weight:600;font-size:15px}
+.task .ts{color:var(--on-surface-variant);font-size:12px}
+.task.done .tt{color:var(--on-surface-variant);text-decoration:line-through}
+.anchor{position:relative;margin-top:24px;border-radius:26px;padding:20px;background:rgba(142,16,48,.28);overflow:hidden}
+.anchor .blob{position:absolute;right:-30px;bottom:-30px;width:150px;height:150px;border-radius:50%;background:rgba(255,175,193,.10)}
+.ey{font-size:11px;letter-spacing:3px;color:rgba(255,127,142,.75);font-weight:500}
+.anchor .big{font-family:var(--font-display);font-weight:700;font-size:20px;margin-top:6px}
+.anchor .meta{display:flex;align-items:center;gap:5px;color:var(--on-surface-variant);font-size:13px;margin-top:8px}
+.anchor .ic{width:60px;height:60px;border-radius:16px;background:rgba(255,127,142,.18);display:grid;place-items:center;color:var(--accent)}
+.resume{margin-top:16px;padding:16px;border-radius:22px;background:var(--surface-container)}
+.resume .bar{height:6px;border-radius:3px;background:var(--surface-high);overflow:hidden;margin-top:12px}
+.resume .bar > i{display:block;height:100%;width:38%;background:var(--accent)}
+
+/* edge-swipe affordance (drawer opens by swipe-right from left edge) */
+.edgehint{position:absolute;left:0;top:52%;width:5px;height:64px;border-radius:0 6px 6px 0;background:linear-gradient(var(--accent),transparent);opacity:.5;z-index:20}
+
+/* ===== D1 Drawer ===== */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:50;opacity:0;visibility:hidden;transition:opacity .28s ease}
+.drawer{
+  position:absolute;top:0;bottom:0;left:0;width:300px;z-index:60;
+  transform:translateX(-104%);transition:transform .3s cubic-bezier(.22,.61,.36,1);
+  border-right:1px solid rgba(255,255,255,.07);border-radius:0 26px 26px 0;
+  display:flex;flex-direction:column;padding:56px 14px 18px;
+}
+.phone.open .scrim{opacity:1;visibility:visible}
+.phone.open .drawer{transform:translateX(0)}
+.drawer .brand{display:flex;align-items:center;gap:9px;padding:8px 12px 4px}
+.drawer .brand .name{font-family:var(--font-display);font-weight:700;font-size:20px;color:var(--accent)}
+.drawer .who{padding:6px 12px 16px;border-bottom:1px solid var(--hairline);margin-bottom:12px}
+.drawer .who .n{font-family:var(--font-display);font-weight:600;font-size:15px}
+.drawer .who .e{color:var(--on-surface-variant);font-size:12px;font-family:var(--font-mono)}
+.ditem{display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:16px;color:var(--on-surface-variant);cursor:pointer;position:relative;font-weight:500;font-size:15px}
+.ditem:hover{background:rgba(255,255,255,.04)}
+.ditem svg{opacity:.85}
+.ditem.active{background:rgba(255,127,142,.14);color:var(--accent)}
+.ditem.active::before{content:"";position:absolute;left:-14px;top:9px;bottom:9px;width:4px;border-radius:0 4px 4px 0;background:var(--accent)}
+.ditem.active svg{opacity:1}
+.dsep{height:1px;background:var(--hairline);margin:10px 12px}
+.drawer .foot{margin-top:auto;padding:12px 14px 4px;color:var(--on-surface-variant);font-size:11px;font-family:var(--font-mono);opacity:.7}
+
+/* ===== D5 Toast ===== */
+.toastwrap{position:absolute;top:56px;left:0;right:0;z-index:70;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 14px;pointer-events:none}
+.toast{pointer-events:auto;width:100%;border-radius:18px;padding:14px 12px 14px 14px;display:flex;gap:12px;align-items:flex-start;position:relative;overflow:hidden;touch-action:pan-y;cursor:grab}
+.toast .tic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex-shrink:0}
+.toast.err .tic{background:rgba(255,180,171,.16);color:var(--error)}
+.toast.ok .tic{background:rgba(255,175,193,.16);color:var(--secondary)}
+.toast .tx1{font-family:var(--font-display);font-weight:600;font-size:14px}
+.toast .tx2{color:var(--on-surface-variant);font-size:12.5px;margin-top:2px;line-height:1.35}
+.toast.err .tx1{color:var(--error)}
+.toast .x{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;border:none;background:transparent;color:var(--on-surface-variant);cursor:pointer}
+.toast .x:hover{background:rgba(255,255,255,.06)}
+.toast .life{position:absolute;left:0;bottom:0;height:3px;background:var(--error);width:100%;transform-origin:left}
+.toast.ok .life{background:var(--secondary)}
+.toast.run .life{animation:life 5s linear forwards}
+@keyframes life{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+.toast.dismiss{transition:transform .25s ease, opacity .25s ease;transform:translateX(120%);opacity:0}
+
+.demobtn{margin-top:18px;display:inline-flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--primary),var(--primary-container));
+  color:var(--on-primary);border:none;border-radius:12px;padding:11px 16px;font-family:var(--font-display);font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 8px 24px -8px var(--accent-glow)}
+.legend{max-width:1180px;margin:44px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Global Shell &nbsp;<span class="pill">D1</span><span class="pill">D3</span><span class="pill">D4</span><span class="pill">D5</span></h1>
+  <p>The floating 7-tab bottom bar is <b>gone</b>. Navigation is a <span class="tagline">left slide-in drawer</span> (hamburger or swipe-right from the edge), the app-wide material is <span class="tagline">tinted liquid glass</span>, every screen sits inside the <span class="tagline">safe area with a colored-out status bar</span>, and error toasts are <span class="tagline">dismissible + swipe-away + auto-hide after 5s</span>. Tap the hamburger ▤ to open the drawer; tap “Replay toast” to watch the 5-second auto-hide.</p>
+</div>
+
+<div class="frames">
+  <!-- ============ FRAME 1: closed + toast ============ -->
+  <div class="frame-wrap">
+    <div class="phone" id="phone1">
+      <div class="screen">
+        <div class="content home-slot"></div>
+        <div class="edgehint"></div>
+        <div class="statusbar sb-slot"></div>
+        <div class="appbar glass ab-slot"></div>
+        <div class="toastwrap" id="toastwrap1"></div>
+        <!-- drawer + scrim -->
+        <div class="scrim" onclick="closeDrawer('phone1')"></div>
+        <div class="drawer glass--deep dr-slot"></div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Home · drawer closed</b> — new AppHeader (glass), tinted status bar, no bottom bar. A live <b>error toast</b> is showing its 5s countdown; ✕, swipe, or 5s clears it.</div>
+    <button class="demobtn" onclick="showToast('toastwrap1','err')">↺ Replay toast</button>
+  </div>
+
+  <!-- ============ FRAME 2: drawer open ============ -->
+  <div class="frame-wrap">
+    <div class="phone open" id="phone2">
+      <div class="screen">
+        <div class="content home-slot"></div>
+        <div class="statusbar sb-slot"></div>
+        <div class="appbar glass ab-slot"></div>
+        <div class="scrim" onclick="closeDrawer('phone2')"></div>
+        <div class="drawer glass--deep dr-slot"></div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Drawer open</b> — tinted liquid-glass panel, full height inside the safe area. Order: Home · Library · Reader · Notes · Visualizer · <b>Toolbox</b> · Profile · <b>Settings</b>. Active = accent bar + tint.</div>
+    <button class="demobtn" onclick="toggleDrawer('phone2')">▤ Toggle drawer</button>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>What changed / mapping for the dev</h2>
+  <ul>
+    <li><b>D1 — Drawer nav</b>: <code>AppTabBar</code> removed; <code>TAB_CONFIG</code> becomes the drawer list (adds <b>Toolbox</b> D7 + <b>Settings</b> D2). Opens via hamburger (was: opened Tweaks) or edge-swipe-right; closes on scrim tap / swipe-left / destination select. Every destination stays <code>navigation.navigate(routeName)</code>.</li>
+    <li><b>D3 — Liquid glass</b>: <code>.glass/.glass--deep</code> = real blur + ruby tint + specular top edge = the extended <code>GlassPanel</code> (was 0.82 flat tint). Applies to header, drawer, toast (and player/sheets on other screens).</li>
+    <li><b>D4 — Safe area + status bar</b>: content wrapped in safe insets; status strip filled with a solid theme tint (never transparent over content); light icons on dark.</li>
+    <li><b>D5 — Toasts</b>: ✕ dismiss + swipe-to-dismiss + 5s auto-hide (progress line). Maps to every <code>Toast.show(...)</code>; success toasts may auto-hide faster.</li>
+    <li><b>Preserved</b>: <code>● NeuroPal</code> wordmark (live <code>DataPulse</code> dot), profile avatar → Profile, all accessibility labels. No new color roles introduced.</li>
+  </ul>
+</div>
+
+<!-- ================= templates ================= -->
+<template id="tpl-sb">
+  <span class="time">9:41</span>
+  <span class="sysicons">
+    <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="7" width="3" height="5" rx="1" fill="currentColor"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1" fill="currentColor"/><rect x="9" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="currentColor" opacity=".45"/></svg>
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M8 11.2 1 4.3a9.7 9.7 0 0 1 14 0L8 11.2Z" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="8" cy="9.2" r="1.3" fill="currentColor"/></svg>
+    <svg width="24" height="12" viewBox="0 0 24 12" fill="none"><rect x="1" y="1.4" width="20" height="9.2" rx="2.6" stroke="currentColor" stroke-width="1.2"/><rect x="2.6" y="3" width="14" height="6" rx="1.4" fill="currentColor"/><rect x="22" y="4.2" width="1.6" height="3.6" rx=".8" fill="currentColor"/></svg>
+  </span>
+</template>
+
+<template id="tpl-ab">
+  <button class="iconbtn" aria-label="Open navigation menu" onclick="toggleDrawer(this.closest('.phone').id)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+  <div class="avatar" aria-label="Open profile">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+  </div>
+</template>
+
+<template id="tpl-drawer">
+  <div class="brand"><span class="dot"></span><span class="name">NeuroPal</span></div>
+  <div class="who"><div class="n">Ryx</div><div class="e">ryx@neuropal.app</div></div>
+  <div class="ditem active" aria-current="page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg>Home</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h9a2 2 0 0 1 2 2v14l-5.5-3L5 20z"/><path d="M16 6h3v14"/></svg>Library</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H3z"/><path d="M21 5h-7a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h7z"/></svg>Reader</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18c3-1 4-9 7-9s2 5 4 5 2-3 4-3"/></svg>Notes</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19V5"/><path d="M4 15l5-5 4 3 6-7"/></svg>Visualizer</div>
+  <div class="dsep"></div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m14 6 4 4"/><path d="M11 9 4 16v4h4l7-7"/><path d="m13 7 4 4"/></svg>Toolbox</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>Profile</div>
+  <div class="ditem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2"/></svg>Settings</div>
+  <div class="foot">v0.9 · single-user · offline-first</div>
+</template>
+
+<template id="tpl-home">
+  <h1 class="h1">Hello, Ryx</h1>
+  <p class="sub">One step at a time today.</p>
+
+  <div class="card low">
+    <p class="q">How are you feeling right now?</p>
+    <div class="state sel-green">
+      <div class="tile" style="background:rgba(255,175,193,.12);color:var(--secondary)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14c1 1.3 2.4 2 4 2s3-.7 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <span class="lbl">I feel okay</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+    </div>
+    <div class="state">
+      <div class="tile" style="background:rgba(243,199,123,.12);color:var(--tertiary)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 15h8" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <span class="lbl">Feeling a bit off</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+    </div>
+    <div class="state">
+      <div class="tile" style="background:rgba(255,180,171,.12);color:var(--error)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 16c1-1.3 2.4-2 4-2s3 .7 4 2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <span class="lbl">Help, I'm overwhelmed</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--outline-variant)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+    </div>
+  </div>
+
+  <div class="sec"><span class="l">Minimum viable day</span><span class="t">2 tasks remaining</span></div>
+  <div class="task done"><div class="chk on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m5 12 5 5 9-11"/></svg></div><div><div class="tt">Read 1 section of Kolobov</div><div class="ts">Ch. 3 — Quantum imaging</div></div></div>
+  <div class="task"><div class="chk"></div><div><div class="tt">Re-derive the CPI visibility bound</div><div class="ts">Derivation journal · 15 min</div></div></div>
+  <div class="task"><div class="chk"></div><div><div class="tt">One Pomodoro of focused reading</div><div class="ts">Toolbox · 25 / 5</div></div></div>
+
+  <div class="anchor">
+    <div class="blob"></div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="flex:1">
+        <div class="ey">NEXT ANCHOR</div>
+        <div class="big">Deep work block at 2:00 PM</div>
+        <div class="meta"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>In 40 minutes</div>
+      </div>
+      <div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="5" r="2.4"/><path d="M12 7.4V21M6 12H4a8 8 0 0 0 16 0h-2M12 21c-3 0-6-1-8-3M12 21c3 0 6-1 8-3"/></svg></div>
+    </div>
+  </div>
+
+  <div class="resume">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(255,127,142,.12);display:grid;place-items:center;color:var(--accent)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h7v15H4zM13 5h7v15h-7z"/></svg>
+      </div>
+      <div>
+        <div class="ey" style="letter-spacing:2px">RESUME READING</div>
+        <div style="font-family:var(--font-display);font-weight:600;font-size:16px;margin-top:3px">Sub-shot-noise quantum imaging with entangled photons</div>
+      </div>
+    </div>
+    <div class="bar"><i></i></div>
+  </div>
+</template>
+
+<script>
+  // hydrate templates into every slot
+  function fill(sel, tpl){document.querySelectorAll(sel).forEach(s=>s.appendChild(document.getElementById(tpl).content.cloneNode(true)));}
+  fill('.sb-slot','tpl-sb'); fill('.ab-slot','tpl-ab'); fill('.dr-slot','tpl-drawer'); fill('.home-slot','tpl-home');
+  // drawer item select closes drawer
+  document.querySelectorAll('.dr-slot .ditem').forEach(it=>it.addEventListener('click',e=>{
+    const ph=e.target.closest('.phone'); ph.querySelectorAll('.ditem').forEach(d=>d.classList.remove('active'));
+    e.currentTarget.classList.add('active'); setTimeout(()=>ph.classList.remove('open'),120);
+  }));
+  function toggleDrawer(id){document.getElementById(id).classList.toggle('open');}
+  function closeDrawer(id){document.getElementById(id).classList.remove('open');}
+
+  // ---- D5 toast: build, run 5s life, ✕ dismiss, swipe-to-dismiss ----
+  function showToast(wrapId, kind){
+    const wrap=document.getElementById(wrapId); wrap.innerHTML='';
+    const t=document.createElement('div'); t.className='toast glass '+(kind==='err'?'err':'ok');
+    t.innerHTML = (kind==='err'
+      ? `<div class="tic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v5" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.1" fill="currentColor" stroke="none"/><path d="M10.3 3.8 2.4 18a1.9 1.9 0 0 0 1.7 2.9h15.8A1.9 1.9 0 0 0 21.6 18L13.7 3.8a1.9 1.9 0 0 0-3.4 0Z"/></svg></div>
+         <div><div class="tx1">Cannot reach the backend</div><div class="tx2">Showing your offline cache. Retrying automatically…</div></div>`
+      : `<div class="tic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m5 12 5 5 9-11"/></svg></div>
+         <div><div class="tx1">Reminder set</div><div class="tx2">Tomorrow · 9:00 AM</div></div>`)
+      + `<button class="x" aria-label="Dismiss" onclick="dismiss(this.parentElement)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+         <div class="life"></div>`;
+    wrap.appendChild(t);
+    // start the 5s auto-hide
+    requestAnimationFrame(()=>t.classList.add('run'));
+    const life=t.querySelector('.life');
+    life.addEventListener('animationend',()=>dismiss(t));
+    enableSwipe(t);
+  }
+  function dismiss(t){t.classList.add('dismiss');setTimeout(()=>t.remove(),240);}
+  function enableSwipe(t){
+    let x0=null,dx=0;
+    t.addEventListener('pointerdown',e=>{x0=e.clientX;t.style.transition='none';t.setPointerCapture(e.pointerId);});
+    t.addEventListener('pointermove',e=>{if(x0===null)return;dx=e.clientX-x0;t.style.transform=`translateX(${dx}px)`;t.style.opacity=String(Math.max(0,1-Math.abs(dx)/220));});
+    t.addEventListener('pointerup',()=>{if(x0===null)return;if(Math.abs(dx)>90){t.style.transition='transform .2s, opacity .2s';t.style.transform=`translateX(${dx>0?400:-400}px)`;t.style.opacity='0';setTimeout(()=>t.remove(),200);}else{t.style.transition='transform .2s, opacity .2s';t.style.transform='';t.style.opacity='1';}x0=null;dx=0;});
+  }
+  // show one error toast on frame 1 at load
+  showToast('toastwrap1','err');
+</script>
+</body>
+</html>

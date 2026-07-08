@@ -35,7 +35,7 @@ export function HomeScreen() {
       contentContainerStyle={{
         paddingHorizontal: 20,
         paddingTop: 20,
-        paddingBottom: 160,
+        paddingBottom: 40,
       }}
       showsVerticalScrollIndicator={false}
     >

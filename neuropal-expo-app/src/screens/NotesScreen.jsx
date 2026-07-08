@@ -51,7 +51,7 @@ function NotesList({ onOpen }) {
     <View style={{ flex: 1 }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 160 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 110 }}
       >
         <Text
           style={{
@@ -139,7 +139,7 @@ function NotesList({ onOpen }) {
         style={{
           position: "absolute",
           right: 20,
-          bottom: 110,
+          bottom: 28,
           width: 60,
           height: 60,
           borderRadius: 18,

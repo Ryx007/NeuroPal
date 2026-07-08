@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Reader Player · Variation B (D10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#131313;--surface-lowest:#0E0E0E;--surface-low:#1B1C1C;--surface-container:#1F2020;
+  --surface-high:#2A2A2A;--surface-highest:#353535;--on-surface:#E4E2E1;--on-surface-variant:#D0C6C8;
+  --outline:#9F8D91;--outline-variant:#534347;--primary:#FF7F8E;--primary-container:#8E1030;--on-primary:#4A0316;
+  --accent:#FF7F8E;--accent-glow:rgba(255,127,142,0.25);--secondary:#FFAFC1;--tertiary:#F3C77B;--error:#FFB4AB;--warn:#FFD27A;--hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;--font-body:"Inter",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,monospace;--font-reader:"Atkinson Hyperlegible","Inter",sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:960px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:820px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:960px;margin:0 auto;align-items:flex-start}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.glass--deep{background:linear-gradient(160deg,rgba(255,127,142,.13),rgba(142,16,48,.22)),rgba(22,22,23,.72)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+
+/* dim reading backdrop */
+.readbg{position:absolute;inset:0;background:var(--surface-lowest);padding:104px 26px;filter:brightness(.32)}
+.readbg .t{font-family:var(--font-display);font-weight:700;font-size:22px;margin-bottom:14px}
+.readbg p{font-family:var(--font-reader);font-size:17px;line-height:1.7;color:#EBE7E4;opacity:.7}
+
+/* full now-playing panel */
+.np{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;padding:52px 22px 30px}
+.np-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.np-top .grip{flex:1;display:flex;flex-direction:column;align-items:center}
+.np-top .grip .bar{width:38px;height:4px;border-radius:2px;background:rgba(208,198,200,.4)}
+.np-top .grip .lab{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--on-surface-variant);margin-top:8px}
+.icbtn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--on-surface);cursor:pointer}
+.icbtn:hover{background:rgba(255,255,255,.06)}
+.askB{display:flex;gap:7px;align-items:center;padding:9px 15px;border-radius:999px;color:var(--accent);font-family:var(--font-display);font-weight:600;font-size:13px;cursor:pointer}
+
+.cover{margin:14px auto 8px;width:236px;height:236px;border-radius:26px;position:relative;overflow:hidden;display:grid;place-items:center;
+  background:linear-gradient(150deg,#2a0f18,#8E1030 60%,#FF7F8E);box-shadow:0 30px 60px -20px rgba(142,16,48,.6)}
+.cover .wm{position:absolute;inset:0;opacity:.25;background:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 2px,transparent 2px 7px)}
+.cover .glyph{font-family:var(--font-display);font-weight:700;font-size:64px;color:#fff;text-shadow:0 4px 20px rgba(0,0,0,.4)}
+.meta{text-align:center;margin-top:10px}
+.meta .tt{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.3px}
+.meta .au{color:var(--on-surface-variant);font-size:13px;margin-top:3px}
+.meta .ch{display:inline-flex;gap:6px;align-items:center;margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--accent);background:rgba(255,127,142,.1);border:1px solid rgba(255,127,142,.3);border-radius:999px;padding:4px 10px}
+
+.bigscrub{margin-top:20px}
+.btrack{position:relative;height:18px;display:flex;align-items:center;cursor:pointer}
+.btrack .rail{position:absolute;left:0;right:0;height:5px;border-radius:3px;background:var(--surface-high)}
+.btrack .fill{position:absolute;left:0;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--primary-container),var(--accent));width:42%}
+.btrack .tick{position:absolute;top:-3px;width:2px;height:11px;background:rgba(208,198,200,.5);border-radius:1px}
+.btrack .thumb{position:absolute;left:42%;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 5px rgba(255,127,142,.3);transform:translateX(-50%)}
+.times{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant);margin-top:8px}
+.times .a{color:var(--accent)}
+
+.bigtransport{display:flex;align-items:center;justify-content:center;gap:34px;margin:22px 0 8px}
+.bt{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;border:none;background:transparent;color:var(--on-surface);cursor:pointer;position:relative}
+.bt:hover{background:rgba(255,255,255,.06)}
+.bt small{position:absolute;bottom:2px;font-family:var(--font-mono);font-size:8px;color:var(--on-surface-variant)}
+.bt.play{width:78px;height:78px;background:var(--accent);color:var(--on-primary);box-shadow:0 14px 36px -8px var(--accent-glow)}
+
+.controls{margin-top:auto;display:flex;flex-direction:column;gap:14px}
+.ctl-row{display:flex;align-items:center;justify-content:space-between}
+.ctl-lab{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--on-surface-variant)}
+.tone{display:flex;gap:5px;background:rgba(0,0,0,.28);border-radius:999px;padding:5px}
+.tone button{border:none;background:transparent;color:var(--on-surface-variant);font-family:var(--font-body);font-weight:600;font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer}
+.tone button.on{background:rgba(255,127,142,.18);color:var(--accent)}
+.wpm{display:flex;align-items:center;gap:14px;background:rgba(0,0,0,.28);border-radius:999px;padding:6px 10px}
+.wpm button{width:30px;height:30px;border-radius:50%;border:none;background:var(--surface-high);color:var(--on-surface);font-size:18px;cursor:pointer;display:grid;place-items:center}
+.wpm .v{font-family:var(--font-mono);font-size:13px;color:var(--accent);min-width:74px;text-align:center}
+
+.legend{max-width:960px;margin:40px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Reader Player — Variation B &nbsp;<span class="pill">D10</span></h1>
+  <p>The <span class="tagline">expandable full-screen “now-playing”</span> player — reached by tapping the docked mini-player’s handle/scrubber in <code>mockup.html</code>. Same contract, more room: <span class="tagline">scrubber on top</span> (with chapter ticks + elapsed/remaining) → <span class="tagline">◀ ⏯ ▶ centered</span> → <span class="tagline">tone/voice at the bottom</span>, WPM as a stepper, and <span class="tagline">“Ask” translucent top-right</span>. <b>Variation A (docked, recommended default) is in <code>mockup.html</code>.</b></p>
+</div>
+
+<div class="frames">
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="readbg">
+          <div class="t">Correlation-Plenoptic Imaging</div>
+          <p>The measured correlation visibility remains positive because the correlation term survives even when each arm is separately incoherent…</p>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="np glass--deep">
+          <div class="np-top">
+            <button class="icbtn icbtn" aria-label="Collapse to mini player"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="grip"><div class="bar"></div><div class="lab">NOW PLAYING</div></div>
+            <div class="askB glass" aria-label="Ask about this document"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>Ask</div>
+          </div>
+
+          <div class="cover"><div class="wm"></div><div class="glyph">Ψ</div></div>
+          <div class="meta">
+            <div class="tt">CPI with Entangled Photons</div>
+            <div class="au">D'Angelo, Pepe · QuOT Lab</div>
+            <div class="ch"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7" stroke-linecap="round"/></svg>Chapter 3 of 6 · Quantum Imaging</div>
+          </div>
+
+          <div class="bigscrub">
+            <div class="btrack" id="btrk">
+              <div class="rail"></div><div class="fill" id="bfill"></div>
+              <div class="tick" style="left:18%"></div><div class="tick" style="left:35%"></div><div class="tick" style="left:58%"></div><div class="tick" style="left:78%"></div>
+              <div class="thumb" id="bthumb"></div>
+            </div>
+            <div class="times"><span class="a">18:24 elapsed</span><span>12:06 left</span></div>
+          </div>
+
+          <div class="bigtransport">
+            <button class="bt" aria-label="Jump back"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M11 6 4 12l7 6zM20 6l-7 6 7 6z"/></svg></button>
+            <button class="bt play" id="ppB" aria-label="Pause"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+            <button class="bt" aria-label="Skip ahead"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
+          </div>
+
+          <div class="controls">
+            <div class="ctl-row">
+              <span class="ctl-lab">Voice / tone</span>
+              <div class="tone"><button>Soft</button><button class="on">Natural</button><button>Deep</button></div>
+            </div>
+            <div class="ctl-row">
+              <span class="ctl-lab">Reading speed</span>
+              <div class="wpm"><button aria-label="Slower">−</button><span class="v">240 wpm · 1.0×</span><button aria-label="Faster">+</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Variation B — full-screen now-playing</b> — the docked player expands to this. Everything is bigger and thumb-reachable; identical controls & data bindings.</div>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>A vs B — which to ship</h2>
+  <ul>
+    <li><b>Variation A (docked mini-player, in <code>mockup.html</code>) — recommended default.</b> Stays out of the way, hides on center-tap, keeps you in the text. Best for reading-with-listen.</li>
+    <li><b>Variation B (this file).</b> The optional expanded now-playing for long listening sessions / eyes-off. Reached by tapping the mini-player handle or scrubber; collapse chevron returns to A.</li>
+    <li><b>Both keep the D10 contract</b>: scrubber-on-top with chapter ticks, ◀ ⏯ ▶ centered (jump-back / play / skip-ahead), tone selector (Soft/Natural/Deep) at the bottom, WPM as a compact control, Ask as a translucent top-right glass button, whole surface tinted liquid glass (D3), hides with reader chrome (D8).</li>
+    <li><b>Suggested behavior:</b> ship <b>A</b> as the default player and make <b>B</b> the expand state — one component, two heights.</li>
+  </ul>
+</div>
+
+<script>
+  function wire(id,fillId,thumbId){const t=document.getElementById(id);if(!t)return;const f=document.getElementById(fillId),th=document.getElementById(thumbId);
+    let d=false;function s(e){const r=t.getBoundingClientRect();let p=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));f.style.width=(p*100)+'%';th.style.left=(p*100)+'%';}
+    t.addEventListener('pointerdown',e=>{d=true;t.setPointerCapture(e.pointerId);s(e);});t.addEventListener('pointermove',e=>{if(d)s(e);});t.addEventListener('pointerup',()=>d=false);}
+  wire('btrk','bfill','bthumb');
+  const b=document.getElementById('ppB');
+  if(b)b.addEventListener('click',()=>{const on=b.getAttribute('data-on')!=='0';b.setAttribute('data-on',on?'0':'1');
+    b.innerHTML=on?'<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+    b.setAttribute('aria-label',on?'Play':'Pause');});
+</script>
+</body>
+</html>

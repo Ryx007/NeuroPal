@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Library + arXiv search (D11)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#131313;--surface-lowest:#0E0E0E;--surface-low:#1B1C1C;--surface-container:#1F2020;
+  --surface-high:#2A2A2A;--surface-highest:#353535;--on-surface:#E4E2E1;--on-surface-variant:#D0C6C8;
+  --outline:#9F8D91;--outline-variant:#534347;--primary:#FF7F8E;--primary-container:#8E1030;--on-primary:#4A0316;
+  --accent:#FF7F8E;--accent-glow:rgba(255,127,142,0.25);--secondary:#FFAFC1;--tertiary:#F3C77B;--error:#FFB4AB;--warn:#FFD27A;--hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;--font-body:"Inter",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:1320px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:900px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:1320px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;background:linear-gradient(180deg,#1c1416,#191315);color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+.statusbar .sysicons{display:flex;gap:7px;opacity:.9}
+.appbar{position:absolute;top:46px;left:0;right:0;height:56px;z-index:35;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--hairline)}
+.iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--accent);cursor:pointer}
+.iconbtn:hover{background:rgba(255,127,142,.10)}
+.wordmark{display:flex;align-items:center;gap:9px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px 1px var(--accent-glow)}
+.wordmark .name{font-family:var(--font-display);font-weight:700;font-size:19px;color:var(--accent);letter-spacing:-.4px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--surface-high);border:2px solid rgba(255,127,142,.28);display:grid;place-items:center;color:var(--on-surface-variant);margin-left:auto}
+.content{position:absolute;inset:0;overflow-y:auto;padding:114px 18px 100px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.htitle{display:flex;align-items:flex-end}
+.htitle .tx h1{font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.6px;margin:0}
+.htitle .tx p{color:var(--on-surface-variant);font-size:13px;margin:4px 0 0}
+.searchbtn{margin-left:auto;width:44px;height:44px;border-radius:14px;background:var(--surface-high);display:grid;place-items:center;color:var(--accent);border:1px solid var(--hairline);cursor:pointer}
+.searchbtn.on{background:rgba(255,127,142,.16);border-color:rgba(255,127,142,.4)}
+
+/* filter chips */
+.chips{display:flex;gap:8px;overflow-x:auto;margin:16px 0 6px;padding-bottom:4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:8px 14px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--on-surface-variant);background:var(--surface-high);border:1px solid transparent;white-space:nowrap;cursor:pointer}
+.chip.on{background:rgba(255,127,142,.14);border-color:rgba(255,127,142,.4);color:var(--accent)}
+
+/* connection banner */
+.errbanner{display:flex;align-items:center;gap:10px;background:rgba(255,180,171,.08);border:1px solid rgba(255,180,171,.35);border-radius:14px;padding:12px 12px;margin:8px 0 4px}
+.errbanner .tx{flex:1;font-size:12.5px;color:var(--error)}
+.errbanner .tx b{font-family:var(--font-display)}
+.errbanner button{border:none;background:rgba(255,180,171,.16);color:var(--error);font-family:var(--font-display);font-weight:600;font-size:12px;padding:8px 12px;border-radius:10px;cursor:pointer}
+
+/* ===== restyled shelf grid ===== */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+.doc{background:var(--surface-container);border-radius:20px;padding:12px;position:relative}
+.cover{height:132px;border-radius:14px;position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:12px}
+.cover .spine{position:absolute;left:0;top:0;bottom:0;width:8px}
+.cover .badge{position:absolute;top:10px;right:10px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:1px;padding:3px 7px;border-radius:6px;background:rgba(0,0,0,.35);color:#fff}
+.cover .glyph{font-family:var(--font-display);font-weight:700;font-size:34px;color:rgba(255,255,255,.92);text-shadow:0 3px 12px rgba(0,0,0,.5)}
+.cover.pdf{background:linear-gradient(150deg,#2a0f18,#8E1030)}
+.cover.pdf .spine{background:var(--accent)}
+.cover.epub{background:linear-gradient(150deg,#2a2413,#8a6d1f)}
+.cover.epub .spine{background:var(--tertiary)}
+.cover.arxiv{background:linear-gradient(150deg,#161a1b,#33474a)}
+.cover.arxiv .spine{background:var(--secondary)}
+.doc .dt{font-family:var(--font-display);font-weight:600;font-size:13.5px;line-height:1.25;margin:10px 2px 2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.doc .ds{font-size:11px;color:var(--on-surface-variant);margin:0 2px}
+.doc .foot{display:flex;align-items:center;gap:6px;margin:10px 2px 2px}
+.doc .pg{font-family:var(--font-mono);font-size:10.5px;color:var(--on-surface-variant)}
+.ring{margin-left:auto;width:26px;height:26px;border-radius:50%;background:conic-gradient(var(--accent) var(--p),rgba(255,255,255,.1) 0);display:grid;place-items:center}
+.ring::after{content:"";width:18px;height:18px;border-radius:50%;background:var(--surface-container)}
+.ring i{position:absolute;font-family:var(--font-mono);font-size:8px;color:var(--accent)}
+.ready{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--secondary);display:flex;align-items:center;gap:4px}
+.menu{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;background:rgba(0,0,0,.25);z-index:2;cursor:pointer}
+/* ingesting card */
+.ingbar{height:5px;border-radius:3px;background:var(--surface-high);overflow:hidden;margin:10px 2px 2px}
+.ingbar > i{display:block;height:100%;width:43%;background:var(--accent)}
+.inglabel{font-family:var(--font-mono);font-size:10px;color:var(--accent);margin:6px 2px 0}
+/* upload tile */
+.upload{border:1.5px dashed rgba(159,141,145,.4);background:transparent;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--on-surface-variant);min-height:196px;cursor:pointer}
+.upload svg{color:var(--accent)}
+.upload .u1{font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--on-surface)}
+.upload .u2{font-size:11px}
+.fab{position:absolute;right:18px;bottom:26px;width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,var(--primary),var(--primary-container));display:grid;place-items:center;color:var(--on-primary);z-index:36;box-shadow:0 14px 30px -8px var(--accent-glow);cursor:pointer}
+
+/* ===== arXiv search panel ===== */
+.searchpanel{margin-top:14px;border-radius:20px;overflow:hidden}
+.searchpanel .field{display:flex;align-items:center;gap:10px;padding:14px;background:var(--surface-lowest);border:1px solid var(--hairline);border-radius:16px}
+.searchpanel .field svg{color:var(--on-surface-variant);flex-shrink:0}
+.searchpanel .field input,.searchpanel .field .fake{flex:1;border:none;background:transparent;color:var(--on-surface);font-family:var(--font-body);font-size:15px;outline:none}
+.searchpanel .field .fake{color:var(--on-surface)}
+.searchpanel .field .fake .cursor{display:inline-block;width:2px;height:16px;background:var(--accent);vertical-align:-3px;margin-left:1px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.searchpanel .field .clr{color:var(--on-surface-variant);cursor:pointer}
+.searchfilters{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.sf{font-size:11.5px;padding:6px 11px;border-radius:999px;background:var(--surface-high);color:var(--on-surface-variant);border:1px solid transparent}
+.sf.on{background:rgba(255,127,142,.14);border-color:rgba(255,127,142,.35);color:var(--accent)}
+.searchhint{font-size:11px;color:var(--on-surface-variant);margin:10px 2px 0;display:flex;align-items:center;gap:6px}
+
+/* results */
+.res{background:var(--surface-container);border-radius:16px;padding:14px;margin-top:12px}
+.res .rt{font-family:var(--font-display);font-weight:600;font-size:14px;line-height:1.3}
+.res .ra{font-size:11.5px;color:var(--on-surface-variant);margin-top:4px}
+.res .rab{font-size:12px;color:var(--on-surface-variant);margin-top:8px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.res .rmeta{display:flex;align-items:center;gap:8px;margin-top:10px}
+.res .id{font-family:var(--font-mono);font-size:10.5px;color:var(--secondary);background:rgba(255,175,193,.1);border:1px solid rgba(255,175,193,.25);border-radius:6px;padding:3px 7px}
+.res .yr{font-family:var(--font-mono);font-size:10.5px;color:var(--on-surface-variant)}
+.addbtn{margin-left:auto;display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,var(--primary),var(--primary-container));color:var(--on-primary);font-family:var(--font-display);font-weight:600;font-size:12px;padding:9px 13px;border-radius:11px;cursor:pointer}
+.addbtn.added{background:rgba(255,127,142,.14);color:var(--accent);box-shadow:none}
+.reshead{display:flex;align-items:center;margin:16px 2px 2px}
+.reshead .l{font-family:var(--font-display);font-weight:600;font-size:14px}
+.reshead .c{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant)}
+
+.extra{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:1320px;margin:40px auto 0}
+.legend{max-width:1320px;margin:24px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Library — arXiv search &nbsp;<span class="pill">D11</span></h1>
+  <p>A <span class="tagline">search icon in the header expands a collapsible arXiv search</span> (title / author / arXiv id), returns <span class="tagline">results with title · authors · abstract · id · year</span>, and each has <span class="tagline">“Add to Library”</span> → downloads + ingests, appearing on its card with the normal ingesting→ready progress. The document shelf is restyled to a book-cover grid. Click the header 🔍 in the first frame to expand the search live.</p>
+</div>
+
+<div class="frames">
+  <!-- ===== L1: shelf, collapsed search ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <div class="htitle">
+            <div class="tx"><h1>Document Library</h1><p>18 documents · 2 ingesting</p></div>
+            <button class="searchbtn" id="sbtn" aria-label="Search arXiv" onclick="toggleSearch()">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+
+          <!-- collapsible arXiv panel (starts collapsed; JS expands) -->
+          <div id="spanel" style="max-height:0;overflow:hidden;transition:max-height .32s ease">
+            <div class="searchpanel">
+              <div class="field">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+                <input placeholder="Search arXiv — title, author, or arXiv id" aria-label="arXiv search query">
+                <span class="clr">esc</span>
+              </div>
+              <div class="searchfilters"><span class="sf on">All</span><span class="sf">quant-ph</span><span class="sf">Author</span><span class="sf">Recent</span></div>
+              <div class="searchhint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h10M7 11h.01M11 11h.01M15 11h.01"/></svg>Field floats above the keyboard (D6)</div>
+            </div>
+          </div>
+
+          <div class="chips">
+            <span class="chip on">All</span><span class="chip">In progress</span><span class="chip">Unread</span><span class="chip">PDF</span><span class="chip">EPUB</span><span class="chip">arXiv</span>
+          </div>
+
+          <div class="grid">
+            <div class="doc">
+              <div class="menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+              <div class="cover pdf"><span class="spine"></span><span class="badge">PDF</span><span class="glyph">Ψ</span></div>
+              <div class="dt">Sub-shot-noise quantum imaging with entangled photons</div>
+              <div class="ds">Brida, Genovese · 24 pp</div>
+              <div class="foot"><span class="pg">p. 11 / 24</span><span class="ring" style="--p:157deg"><i>44%</i></span></div>
+            </div>
+            <div class="doc">
+              <div class="menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+              <div class="cover epub"><span class="spine"></span><span class="badge">EPUB</span><span class="glyph">Q</span></div>
+              <div class="dt">Quantum Optics — Walls &amp; Milburn</div>
+              <div class="ds">Textbook · 456 pp</div>
+              <div class="foot"><span class="pg">p. 92 / 456</span><span class="ready"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m5 12 5 5 9-11"/></svg>Ready</span></div>
+            </div>
+            <div class="doc">
+              <div class="menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+              <div class="cover arxiv"><span class="spine"></span><span class="badge">arXiv</span><span class="glyph">∂</span></div>
+              <div class="dt">Correlation Plenoptic Imaging</div>
+              <div class="ds">D'Angelo et al.</div>
+              <div class="ingbar"><i></i></div>
+              <div class="inglabel">Ingesting 43%…</div>
+            </div>
+            <div class="upload">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 16V4M7 9l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 20h14"/></svg>
+              <div class="u1">Upload a document</div>
+              <div class="u2">PDF · EPUB · DOCX · TXT</div>
+            </div>
+          </div>
+        </div>
+        <div class="fab" aria-label="Upload"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="statusbar"><span class="time">9:41</span><span class="sysicons"><svg width="24" height="12" viewBox="0 0 24 12"><rect x="1" y="1.4" width="20" height="9.2" rx="2.6" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2.6" y="3" width="14" height="6" rx="1.4" fill="currentColor"/></svg></span></div>
+        <div class="appbar glass">
+          <button class="iconbtn" aria-label="Open menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Shelf · search collapsed</b> — restyled book-cover grid (type badge, title, reading-progress ring, Ready / ingesting bar, long-press ⋮ menu), filter chips, Upload tile + FAB. <b>Click the header 🔍 to expand the arXiv search.</b></div>
+  </div>
+
+  <!-- ===== L2: search expanded (typing) ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <div class="htitle">
+            <div class="tx"><h1>Document Library</h1><p>Search arXiv</p></div>
+            <button class="searchbtn on" aria-label="Close search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="searchpanel">
+            <div class="field">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+              <span class="fake">entangled photon imaging<span class="cursor"></span></span>
+              <span class="clr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="searchfilters"><span class="sf on">All</span><span class="sf on">quant-ph</span><span class="sf">Author</span><span class="sf">Recent</span></div>
+            <div class="searchhint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h10M7 11h.01M11 11h.01M15 11h.01"/></svg>Field floats above the keyboard (D6) · Enter to search</div>
+          </div>
+          <div style="text-align:center;color:var(--on-surface-variant);font-size:12.5px;margin-top:60px">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="opacity:.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+            <div style="margin-top:12px">Searching arXiv…</div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn" aria-label="Open menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Search expanded</b> — the collapsible box animates open, field focused (keyboard-aware, D6), optional category filters (quant-ph, Author, Recent). Tapping 🔍 again or “esc” collapses it.</div>
+  </div>
+
+  <!-- ===== L3: results + Add to Library ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <div class="htitle">
+            <div class="tx"><h1>Document Library</h1><p>Search arXiv</p></div>
+            <button class="searchbtn on" aria-label="Close search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="searchpanel">
+            <div class="field">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+              <span class="fake">entangled photon imaging</span>
+              <span class="clr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round"/></svg></span>
+            </div>
+          </div>
+          <div class="reshead"><span class="l">arXiv results</span><span class="c">3 of 214</span></div>
+
+          <div class="res">
+            <div class="rt">Correlation Plenoptic Imaging with Entangled Photons</div>
+            <div class="ra">M. D'Angelo, F. V. Pepe, A. Garuccio, G. Scarcelli</div>
+            <div class="rab">We propose a novel imaging protocol combining plenoptic imaging with the correlation properties of entangled photon pairs to overcome the standard trade-off between resolution and depth of field…</div>
+            <div class="rmeta"><span class="id">arXiv:1601.05036</span><span class="yr">2016</span>
+              <button class="addbtn" onclick="addToLib(this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>
+          </div>
+
+          <div class="res">
+            <div class="rt">Sub-shot-noise wide-field imaging</div>
+            <div class="ra">N. Samantaray, I. Ruo-Berchera, A. Meda, M. Genovese</div>
+            <div class="rab">We report the realization of a sub-shot-noise wide-field microscope based on spatially multimode non-classical photon-number correlations in twin beams…</div>
+            <div class="rmeta"><span class="id">arXiv:1702.08103</span><span class="yr">2017</span>
+              <button class="addbtn added"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 8v8M8 12h8"/></svg>Ingesting…</button></div>
+          </div>
+
+          <div class="res">
+            <div class="rt">Imaging with quantum states of light</div>
+            <div class="ra">P.-A. Moreau, E. Toninelli, T. Gregory, M. J. Padgett</div>
+            <div class="rab">Review of quantum imaging techniques exploiting photonic entanglement and squeezed light for enhanced resolution, sensitivity, and low-light performance…</div>
+            <div class="rmeta"><span class="id">arXiv:1812.01572</span><span class="yr">2019</span>
+              <button class="addbtn" onclick="addToLib(this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn" aria-label="Open menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Results · Add to Library</b> — each result: title · authors · abstract snippet · arXiv id · year. “Add” downloads + ingests (row 2 shows the just-added → “Ingesting…”, which then appears on a shelf card).</div>
+  </div>
+</div>
+
+<div class="extra">
+  <div class="legend" style="flex:1;min-width:340px;max-width:560px;margin-top:0">
+    <h2>Connection error state (must stay prominent)</h2>
+    <div class="errbanner" style="margin:0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2"><path d="M12 8v5" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1" fill="var(--error)" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>
+      <div class="tx"><b>Can’t reach the backend.</b> Showing cached documents.</div>
+      <button>Retry</button>
+    </div>
+    <p style="color:var(--on-surface-variant);font-size:12.5px;margin:12px 0 0">Restyled, still prominent (product principle: never fail silently). Also covers the “no backend configured” state.</p>
+  </div>
+  <div class="legend" style="flex:1;min-width:340px;max-width:560px;margin-top:0">
+    <h2>What changed / mapping for the dev</h2>
+    <ul>
+      <li><b>D11 — arXiv search</b>: header 🔍 → collapsible box (title/author/id) → results (title·authors·abstract·id·year) → <b>Add to Library</b> → download + ingest → appears on a card with ingesting→ready. <b>Backend arXiv fetch/ingest endpoint is a later push</b> — designed as if it works.</li>
+      <li><b>Restyle only</b> for existing shelf: `DocCard` → book-cover tile (type badge, ingest bar vs reading-progress ring kept distinct), Upload card + FAB, filter chips (visual today), connection banner + Retry — all keep their bindings from `02`.</li>
+      <li><b>Preserved</b>: card tap → Reader; long-press ⋮ → `DocActionsSheet` (rename/delete-with-confirm); `uploadDocument` picker; ingest % ≠ reading %; accessibility labels.</li>
+      <li>D6 keyboard-aware on the search + rename fields.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  function toggleSearch(){
+    const p=document.getElementById('spanel'), b=document.getElementById('sbtn');
+    const open=p.style.maxHeight && p.style.maxHeight!=='0px';
+    p.style.maxHeight = open ? '0px' : '190px';
+    b.classList.toggle('on', !open);
+  }
+  function addToLib(btn){
+    btn.classList.add('added');
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 8v8M8 12h8"/></svg>Ingesting…';
+  }
+</script>
+</body>
+</html>

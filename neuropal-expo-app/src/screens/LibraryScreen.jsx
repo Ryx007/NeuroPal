@@ -143,7 +143,6 @@ export function LibraryScreen() {
         type: "error",
         text1: "File picker failed",
         text2: error?.message || "Unknown picker error",
-        visibilityTime: 8000,
       });
       return;
     }
@@ -160,7 +159,6 @@ export function LibraryScreen() {
         type: "error",
         text1: "Upload failed",
         text2: error?.message || "Unknown error",
-        visibilityTime: 8000,
       });
       return;
     }
@@ -180,7 +178,7 @@ export function LibraryScreen() {
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 20,
-          paddingBottom: 160,
+          paddingBottom: 40,
         }}
       >
         <Text
@@ -362,7 +360,7 @@ export function LibraryScreen() {
         style={{
           position: "absolute",
           right: 20,
-          bottom: 110,
+          bottom: 28,
           width: 60,
           height: 60,
           borderRadius: 18,

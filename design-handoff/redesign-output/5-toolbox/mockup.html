@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Toolbox (D7)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#131313;--surface-lowest:#0E0E0E;--surface-low:#1B1C1C;--surface-container:#1F2020;
+  --surface-high:#2A2A2A;--surface-highest:#353535;--on-surface:#E4E2E1;--on-surface-variant:#D0C6C8;
+  --outline:#9F8D91;--outline-variant:#534347;--primary:#FF7F8E;--primary-container:#8E1030;--on-primary:#4A0316;
+  --accent:#FF7F8E;--accent-glow:rgba(255,127,142,0.25);--secondary:#FFAFC1;--tertiary:#F3C77B;--error:#FFB4AB;--warn:#FFD27A;--hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif;--font-body:"Inter",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:960px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:840px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:960px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;background:linear-gradient(180deg,#1c1416,#191315);color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+.appbar{position:absolute;top:46px;left:0;right:0;height:56px;z-index:35;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--hairline)}
+.iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--accent);cursor:pointer}
+.wordmark{display:flex;align-items:center;gap:9px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px 1px var(--accent-glow)}
+.wordmark .name{font-family:var(--font-display);font-weight:700;font-size:19px;color:var(--accent);letter-spacing:-.4px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--surface-high);border:2px solid rgba(255,127,142,.28);display:grid;place-items:center;color:var(--on-surface-variant);margin-left:auto}
+.content{position:absolute;inset:0;overflow-y:auto;padding:114px 20px 40px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.h1{font-family:var(--font-display);font-weight:700;font-size:34px;letter-spacing:-.8px;margin:2px 0 2px}
+.sub{color:var(--on-surface-variant);font-size:16px;margin:0}
+
+.card{border-radius:24px;background:var(--surface-container);padding:20px;margin-top:22px;border:1px solid rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.clabel{display:flex;align-items:center;gap:8px}
+.clabel .l{flex:1;font-family:var(--font-body);font-weight:600;font-size:12px;letter-spacing:1.6px;color:var(--on-surface-variant)}
+.clabel .done{font-family:var(--font-mono);font-size:12px;color:var(--on-surface-variant)}
+.timer{font-family:var(--font-mono);font-size:64px;text-align:center;margin:16px 0;letter-spacing:2px}
+.tctrl{display:flex;justify-content:center;gap:12px}
+.tbtn{width:64px;height:64px;border-radius:32px;display:grid;place-items:center;border:none;cursor:pointer}
+.tbtn.play{background:var(--accent);color:var(--on-primary)}
+.tbtn.playbreak{background:var(--tertiary);color:#2a2413}
+.tbtn.rst{background:var(--surface-high);color:var(--on-surface-variant)}
+.steppers{display:flex;justify-content:space-between;margin-top:20px}
+.stp{display:flex;flex-direction:column;align-items:center}
+.stp .sl{font-family:var(--font-body);font-weight:500;font-size:11px;letter-spacing:1.2px;color:var(--on-surface-variant)}
+.stp .sr{display:flex;align-items:center;gap:2px;margin-top:6px}
+.stp .sr button{width:34px;height:34px;border:none;background:transparent;color:var(--on-surface-variant);font-size:18px;cursor:pointer;border-radius:8px}
+.stp .sr .val{font-family:var(--font-mono);font-size:16px;min-width:56px;text-align:center}
+
+.rfield{margin-top:14px;display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;background:var(--surface-high)}
+.rfield input{flex:1;border:none;background:transparent;color:var(--on-surface);font-family:var(--font-body);font-size:15px;outline:none}
+.rfield input::placeholder{color:var(--on-surface-variant)}
+.qchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.qc{padding:9px 14px;border-radius:999px;background:rgba(255,127,142,.12);border:1px solid rgba(255,127,142,.35);color:var(--accent);font-weight:600;font-size:13px;cursor:pointer}
+.qcustom{display:flex;align-items:center;border-radius:999px;background:var(--surface-high);padding:0 10px 0 12px}
+.qcustom input{width:40px;border:none;background:transparent;color:var(--on-surface);font-family:var(--font-mono);font-size:13px;padding:9px 0;outline:none}
+.qcustom button{border:none;background:transparent;color:var(--accent);cursor:pointer;display:grid;place-items:center;padding:6px}
+.rlist{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.ritem{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:var(--surface-high)}
+.ritem.done{opacity:.5}
+.ritem .rc{color:var(--on-surface-variant);display:grid;place-items:center}
+.ritem.done .rc{color:var(--accent)}
+.ritem .rt{flex:1}
+.ritem .rt .n{font-family:var(--font-body);font-weight:500;font-size:14px}
+.ritem.done .rt .n{text-decoration:line-through}
+.ritem .rt .d{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant);margin-top:2px}
+.ritem .rt .d.over{color:var(--warn)}
+.ritem .del{border:none;background:transparent;color:var(--on-surface-variant);cursor:pointer;padding:4px}
+
+.legend{max-width:960px;margin:40px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Toolbox &nbsp;<span class="pill">D7</span></h1>
+  <p>“Anchors” is <span class="tagline">renamed “Toolbox”</span> everywhere (drawer label, screen title, route). <b>Same contents</b> — Pomodoro + Reminders — just re-rendered inside the new shell (drawer header, safe area, tinted status bar) on the new material. The name signals it’s the home for study tools (timers, reminders, future tools).</p>
+</div>
+
+<div class="frames">
+  <!-- ===== T1: idle ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <h1 class="h1">Toolbox</h1>
+          <p class="sub">Structure the session, then let go of the clock.</p>
+
+          <div class="card">
+            <div class="clabel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6" stroke-linecap="round"/></svg>
+              <span class="l">FOCUS · POMODORO</span>
+              <span class="done">3 done</span>
+            </div>
+            <div class="timer">25:00</div>
+            <div class="tctrl">
+              <button class="tbtn play" aria-label="Start timer"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+              <button class="tbtn rst" aria-label="Reset timer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5"/></svg></button>
+            </div>
+            <div class="steppers">
+              <div class="stp"><span class="sl">FOCUS</span><div class="sr"><button>−</button><span class="val">25 min</span><button>+</button></div></div>
+              <div class="stp"><span class="sl">BREAK</span><div class="sr"><button>−</button><span class="val">5 min</span><button>+</button></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="clabel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0" stroke-linecap="round"/></svg>
+              <span class="l">REMINDERS</span>
+            </div>
+            <div class="rfield">
+              <input placeholder="Remind me to…" aria-label="Reminder text">
+            </div>
+            <div class="qchips">
+              <span class="qc">15m</span><span class="qc">30m</span><span class="qc">1h</span><span class="qc">3h</span><span class="qc">Tmrw 9:00</span>
+              <span class="qcustom"><input placeholder="min" aria-label="Custom minutes"><button aria-label="Set custom reminder"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3l18 9-18 9 4-9z"/></svg></button></span>
+            </div>
+            <div class="rlist">
+              <div class="ritem">
+                <span class="rc" aria-label="Mark done"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></span>
+                <div class="rt"><div class="n">Email Prof. D'Angelo re: CPI draft</div><div class="d">Today · 3:00 PM</div></div>
+                <button class="del" aria-label="Delete"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              </div>
+              <div class="ritem">
+                <span class="rc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></span>
+                <div class="rt"><div class="n">Take meds</div><div class="d over">Overdue · 1:00 PM</div></div>
+                <button class="del"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              </div>
+              <div class="ritem done">
+                <span class="rc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9" opacity=".4"/><path d="m8 12 3 3 5-6"/></svg></span>
+                <div class="rt"><div class="n">Re-read Schmidt decomposition notes</div><div class="d">Tomorrow · 9:00 AM</div></div>
+                <button class="del"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Toolbox · idle</b> — same Pomodoro (MM:SS mono, FOCUS·POMODORO, N done, start/reset, Focus/Break steppers) and Reminders (field, quick chips, custom min, list with overdue in warn) — new material + shell.</div>
+  </div>
+
+  <!-- ===== T2: running ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="content">
+          <h1 class="h1">Toolbox</h1>
+          <p class="sub">Structure the session, then let go of the clock.</p>
+
+          <div class="card" style="border-color:rgba(255,127,142,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 0 40px -18px var(--accent-glow)">
+            <div class="clabel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6" stroke-linecap="round"/></svg>
+              <span class="l" style="color:var(--accent)">FOCUS · POMODORO</span>
+              <span class="done">3 done</span>
+            </div>
+            <div class="timer" style="color:#fff">18:42</div>
+            <div class="tctrl">
+              <button class="tbtn play" aria-label="Pause timer"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+              <button class="tbtn rst" aria-label="Reset timer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5"/></svg></button>
+            </div>
+            <div class="steppers" style="opacity:.4">
+              <div class="stp"><span class="sl">FOCUS</span><div class="sr"><button>−</button><span class="val">25 min</span><button>+</button></div></div>
+              <div class="stp"><span class="sl">BREAK</span><div class="sr"><button>−</button><span class="val">5 min</span><button>+</button></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="clabel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0" stroke-linecap="round"/></svg>
+              <span class="l">REMINDERS</span>
+            </div>
+            <div class="rfield"><input placeholder="Remind me to…"></div>
+            <div class="qchips">
+              <span class="qc">15m</span><span class="qc">30m</span><span class="qc">1h</span><span class="qc">3h</span><span class="qc">Tmrw 9:00</span>
+            </div>
+            <div class="rlist">
+              <div class="ritem">
+                <span class="rc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg></span>
+                <div class="rt"><div class="n">Stretch + water</div><div class="d">In 25 min · break</div></div>
+                <button class="del"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- D5 success toast: reminder set -->
+        <div class="statusbar"><span class="time">9:41</span></div>
+        <div style="position:absolute;top:56px;left:14px;right:14px;z-index:60">
+          <div class="glass" style="border-radius:16px;padding:12px 12px 12px 14px;display:flex;gap:12px;align-items:center;position:relative;overflow:hidden">
+            <div style="width:32px;height:32px;border-radius:9px;background:rgba(255,175,193,.16);color:var(--secondary);display:grid;place-items:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m5 12 5 5 9-11"/></svg></div>
+            <div style="flex:1"><div style="font-family:var(--font-display);font-weight:600;font-size:14px">Reminder set</div><div style="color:var(--on-surface-variant);font-size:12px">Today · 10:15 AM</div></div>
+            <button style="border:none;background:transparent;color:var(--on-surface-variant);cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            <div style="position:absolute;left:0;bottom:0;height:3px;background:var(--secondary);width:60%"></div>
+          </div>
+        </div>
+        <div class="appbar glass">
+          <button class="iconbtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="wordmark"><span class="dot"></span><span class="name">NeuroPal</span></div>
+          <div class="avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Toolbox · timer running</b> — active state (accent glow, play→pause, steppers locked) + a D5 success toast (“Reminder set”). Notification scheduling behavior unchanged.</div>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>What changed / mapping for the dev</h2>
+  <ul>
+    <li><b>D7 — rename only</b>: “Anchors” → “Toolbox” in the drawer label (D1), screen title, and route name (`TAB_CONFIG`/`AnchorsScreen`). Contents unchanged.</li>
+    <li><b>Re-render</b> on the new shell (drawer header, safe area, tinted status bar) + material polish. No behavior change.</li>
+    <li><b>Preserved (contract, → `02`)</b>: Pomodoro MM:SS derived from `focus.endsAt` (survives restart), start/pause/reset + notification scheduling, phase + cycle count, Focus/Break steppers (`setDurations`); Reminders field, quick chips + custom min (`add(minutes)`→`scheduleAt`), list rows done toggle / delete / overdue in `warn`.</li>
+    <li><b>D6</b>: the reminder field + custom-min use keyboard-aware scrolling. <b>D5</b>: reminder toasts get ✕ + swipe + auto-hide.</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+Drop current-state screenshots here (see 00-README.md → "Screenshots").
+
+Fastest capture: open http://192.168.3.169:4000/ on the Mac Mini in Chrome,
+DevTools (Cmd+Opt+I) -> device toolbar (Cmd+Shift+M) -> 412px wide -> screenshot
+each screen. Or just screenshot on your S24.
+
+Capture at least:
+  home.png
+  library.png
+  reader-text.png
+  reader-pages.png
+  reader-study-cards.png
+  notes-list.png
+  notes-editor.png
+  visualizer-gallery.png
+  visualizer-bloch.png
+  anchors-pomodoro.png
+  profile.png
+  tweaks-sheet.png

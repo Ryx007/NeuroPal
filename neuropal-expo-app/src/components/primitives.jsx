@@ -58,6 +58,18 @@ export function GlassPanel({
           },
         ]}
       />
+      {/* D3 — soft specular top edge, the liquid-glass signature */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1,
+          backgroundColor: withAlpha("#FFFFFF", 0.09),
+        }}
+      />
       {children}
     </View>
   );

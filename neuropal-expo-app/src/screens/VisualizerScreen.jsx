@@ -45,7 +45,7 @@ export function VisualizerScreen() {
             {active.title}
           </Text>
         </View>
-        <View style={{ flex: 1, marginBottom: 88 }}>
+        <View style={{ flex: 1, marginBottom: 0 }}>
           <VizView html={active.html} />
         </View>
       </View>

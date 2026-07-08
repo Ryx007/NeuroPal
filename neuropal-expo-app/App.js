@@ -36,23 +36,36 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import { toastConfig, TOAST_VISIBILITY_MS } from "./src/components/AppToast";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { AppProviders } from "./src/providers/AppProviders";
 import { MuiProvider } from "./src/providers/MuiProvider";
-import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
+import { ThemeProvider, usePalette, useTheme } from "./src/theme/ThemeProvider";
 
 SplashScreen.preventAutoHideAsync();
 
 function AppChrome() {
   const { isLight } = useTheme();
+  const palette = usePalette();
 
   return (
     <>
-      <StatusBar style={isLight ? "dark" : "light"} />
+      {/* D4 — the status-bar strip is colored out with the theme surface,
+          never transparent over content. */}
+      <StatusBar
+        style={isLight ? "dark" : "light"}
+        backgroundColor={palette.surface}
+        translucent={false}
+      />
       <AppNavigator />
       {/* Toast must sit OUTSIDE the navigator so it floats above every
-          screen. ApiRequest.js calls Toast.show({...}) from anywhere. */}
-      <Toast />
+          screen. ApiRequest.js calls Toast.show({...}) from anywhere.
+          D5: custom config = ✕ + swipe-to-dismiss + 5s auto-hide. */}
+      <Toast
+        config={toastConfig}
+        visibilityTime={TOAST_VISIBILITY_MS}
+        topOffset={64}
+      />
     </>
   );
 }

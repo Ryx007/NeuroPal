@@ -3,7 +3,7 @@ import {
   DarkTheme,
   NavigationContainer,
 } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -11,45 +11,43 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
-import { TweaksSheet } from "../components/TweaksSheet";
 import { DataPulse, GlassPanel, withAlpha } from "../components/primitives";
 import { useApiRequest } from "../store/ApiRequest";
 import { clearSession } from "../store/ApiLink";
 import { describeNetworkError, USE_MOCK } from "../services/network";
-import {
-  hydrateUser,
-  updateLogin,
-} from "../store/slices/authSlice";
-import { selectOnboardingCompleted, selectTweaksOpen } from "../store/selectors";
-import { setTweaksOpen } from "../store/slices/uiSlice";
+import { hydrateUser, updateLogin } from "../store/slices/authSlice";
+import { selectOnboardingCompleted } from "../store/selectors";
 import { usePalette } from "../theme/ThemeProvider";
-import { AnchorsScreen } from "../screens/AnchorsScreen";
 import { EmergencyScreen } from "../screens/EmergencyScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LibraryScreen } from "../screens/LibraryScreen";
 import { NotesScreen } from "../screens/NotesScreen";
-import { VisualizerScreen } from "../screens/VisualizerScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReaderScreen } from "../screens/ReaderScreen";
+import { SettingsScreen } from "../screens/SettingsScreen";
+import { ToolboxScreen } from "../screens/ToolboxScreen";
+import { VisualizerScreen } from "../screens/VisualizerScreen";
 
 const RootStack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
-const TAB_CONFIG = {
-  Home: { label: "Home", icon: "home" },
-  Library: { label: "Library", icon: "menu-book" },
-  Reader: { label: "Reader", icon: "chrome-reader-mode" },
-  Notes: { label: "Notes", icon: "gesture" },
-  Viz: { label: "Viz", icon: "insights" },
-  Anchors: { label: "Anchors", icon: "anchor" },
-  Profile: { label: "Profile", icon: "person" },
-};
+// D1 — drawer destinations, in the locked order. `Viz` keeps its short route
+// name (deep links / code references) but reads "Visualizer" in the drawer.
+const DRAWER_CONFIG = [
+  { route: "Home", label: "Home", icon: "home", component: HomeScreen },
+  { route: "Library", label: "Library", icon: "menu-book", component: LibraryScreen },
+  { route: "Reader", label: "Reader", icon: "chrome-reader-mode", component: ReaderScreen },
+  { route: "Notes", label: "Notes", icon: "gesture", component: NotesScreen },
+  { route: "Viz", label: "Visualizer", icon: "insights", component: VisualizerScreen },
+  { route: "Toolbox", label: "Toolbox", icon: "handyman", component: ToolboxScreen },
+  { route: "Profile", label: "Profile", icon: "person", component: ProfileScreen },
+  { route: "Settings", label: "Settings", icon: "tune", component: SettingsScreen },
+];
 
 function AppHeader({ navigation }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const dispatch = useDispatch();
 
   return (
     <GlassPanel
@@ -69,9 +67,9 @@ function AppHeader({ navigation }) {
         }}
       >
         <Pressable
-          onPress={() => dispatch(setTweaksOpen(true))}
+          onPress={() => navigation.openDrawer()}
           style={{ padding: 6 }}
-          accessibilityLabel="Open tweaks menu"
+          accessibilityLabel="Open navigation menu"
         >
           <MaterialIcons name="menu" size={22} color={palette.accent} />
         </Pressable>
@@ -114,126 +112,134 @@ function AppHeader({ navigation }) {
   );
 }
 
-function AppTabBar({ state, navigation }) {
+// D1 — the drawer itself: tinted liquid glass, wordmark header, destinations
+// with an accent bar on the active one, safe-area padded.
+function DrawerContent({ navigation, state }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const currentRouteName = state.routes[state.index]?.name;
-
-  if (currentRouteName === "Reader") {
-    return null;
-  }
+  const activeRoute = state.routes[state.index]?.name;
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-      }}
-    >
+    <GlassPanel radius={0} intensity={60} style={{ flex: 1, borderRadius: 0 }}>
       <View
         style={{
+          flex: 1,
+          paddingTop: insets.top + 18,
+          paddingBottom: insets.bottom + 18,
           paddingHorizontal: 12,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
-          paddingTop: 8,
         }}
       >
-        <GlassPanel radius={28} style={{ borderRadius: 28 }}>
-          <View
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 12,
+            marginBottom: 22,
+          }}
+        >
+          <DataPulse />
+          <View style={{ width: 10 }} />
+          <Text
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingHorizontal: 10,
-              paddingVertical: 8,
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 22,
+              color: palette.accent,
+              letterSpacing: -0.5,
             }}
           >
-            {state.routes.map((route, index) => {
-              const config = TAB_CONFIG[route.name];
-              const focused = state.index === index;
+            NeuroPal
+          </Text>
+        </View>
 
-              return (
-                <Pressable
-                  key={route.key}
-                  onPress={() => navigation.navigate(route.name)}
-                  style={{
-                    flex: 1,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingVertical: 8,
-                    borderRadius: 18,
-                    backgroundColor: focused
-                      ? withAlpha(palette.accent, 0.12)
-                      : "transparent",
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={config.label}
-                >
-                  <MaterialIcons
-                    name={config.icon}
-                    size={20}
-                    color={
-                      focused
-                        ? palette.accent
-                        : withAlpha(palette.onSurfaceVariant, 0.7)
-                    }
-                  />
-                  <Text
-                    style={{
-                      marginTop: 4,
-                      fontSize: 11,
-                      fontFamily: "Inter_500Medium",
-                      color: focused
-                        ? palette.accent
-                        : withAlpha(palette.onSurfaceVariant, 0.7),
-                    }}
-                  >
-                    {config.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </GlassPanel>
+        {DRAWER_CONFIG.map((item) => {
+          const focused = activeRoute === item.route;
+          return (
+            <Pressable
+              key={item.route}
+              onPress={() => navigation.navigate(item.route)}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{ selected: focused }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingVertical: 13,
+                paddingHorizontal: 14,
+                marginVertical: 2,
+                borderRadius: 14,
+                backgroundColor: focused
+                  ? withAlpha(palette.accent, 0.14)
+                  : "transparent",
+                borderLeftWidth: 3,
+                borderLeftColor: focused ? palette.accent : "transparent",
+              }}
+            >
+              <MaterialIcons
+                name={item.icon}
+                size={20}
+                color={focused ? palette.accent : palette.onSurfaceVariant}
+              />
+              <Text
+                style={{
+                  marginLeft: 14,
+                  fontSize: 15,
+                  fontFamily: focused ? "Inter_600SemiBold" : "Inter_500Medium",
+                  color: focused ? palette.accent : palette.onSurface,
+                }}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        <View style={{ flex: 1 }} />
+        <Text
+          style={{
+            paddingHorizontal: 14,
+            color: withAlpha(palette.onSurfaceVariant, 0.6),
+            fontFamily: "JetBrainsMono_400Regular",
+            fontSize: 10,
+          }}
+        >
+          local-first · private
+        </Text>
       </View>
-    </View>
+    </GlassPanel>
   );
 }
 
-function TabsChrome() {
+function DrawerChrome() {
   const palette = usePalette();
-  const tweaksOpen = useSelector(selectTweaksOpen);
-  const dispatch = useDispatch();
 
   return (
-    <>
-      <Tab.Navigator
-        screenOptions={({ route, navigation }) => ({
-          header:
-            route.name === "Reader"
-              ? () => null
-              : () => <AppHeader navigation={navigation} />,
-          sceneStyle: {
-            backgroundColor: palette.surface,
-          },
-        })}
-        tabBar={(props) => <AppTabBar {...props} />}
-      >
-        <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Library" component={LibraryScreen} />
-        <Tab.Screen name="Reader" component={ReaderScreen} />
-        <Tab.Screen name="Notes" component={NotesScreen} />
-        <Tab.Screen name="Viz" component={VisualizerScreen} />
-        <Tab.Screen name="Anchors" component={AnchorsScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
-      </Tab.Navigator>
-      <TweaksSheet
-        visible={tweaksOpen}
-        onClose={() => dispatch(setTweaksOpen(false))}
-      />
-    </>
+    <Drawer.Navigator
+      drawerContent={(props) => <DrawerContent {...props} />}
+      screenOptions={({ route, navigation }) => ({
+        header:
+          route.name === "Reader"
+            ? () => null // immersive reader owns its chrome (D8)
+            : () => <AppHeader navigation={navigation} />,
+        sceneStyle: { backgroundColor: palette.surface },
+        drawerType: "front",
+        drawerStyle: {
+          width: 300,
+          backgroundColor: "transparent",
+        },
+        overlayColor: withAlpha("#000000", 0.5),
+        swipeEnabled: true,
+        swipeEdgeWidth: 60, // D1: swipe right from the left edge opens it
+      })}
+    >
+      {DRAWER_CONFIG.map((item) => (
+        <Drawer.Screen
+          key={item.route}
+          name={item.route}
+          component={item.component}
+          options={{ drawerLabel: item.label }}
+        />
+      ))}
+    </Drawer.Navigator>
   );
 }
 
@@ -270,7 +276,6 @@ function useAuthBootstrap(loggedIn) {
           type: "error",
           text1: "Cannot reach the backend",
           text2: describeNetworkError(error),
-          visibilityTime: 8000,
         });
       } else {
         await clearSession().catch(() => {});
@@ -322,7 +327,7 @@ export function AppNavigator() {
             contentStyle: { backgroundColor: palette.surface },
           }}
         >
-          <RootStack.Screen name="Tabs" component={TabsChrome} />
+          <RootStack.Screen name="Main" component={DrawerChrome} />
           <RootStack.Screen name="Emergency" component={EmergencyScreen} />
         </RootStack.Navigator>
       ) : (

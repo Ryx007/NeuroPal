@@ -71,7 +71,6 @@ async function reportLastCrash() {
         type: "error",
         text1: "The app crashed last time",
         text2: crash.message,
-        visibilityTime: 8000,
       });
     }, 2000);
   } catch (e) {

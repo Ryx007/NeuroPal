@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroPal — Reader (D8 · D9 · D10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+:root{
+  --surface:#131313; --surface-lowest:#0E0E0E; --surface-low:#1B1C1C;
+  --surface-container:#1F2020; --surface-high:#2A2A2A; --surface-highest:#353535;
+  --on-surface:#E4E2E1; --on-surface-variant:#D0C6C8; --outline:#9F8D91; --outline-variant:#534347;
+  --primary:#FF7F8E; --primary-container:#8E1030; --on-primary:#4A0316;
+  --accent:#FF7F8E; --accent-glow:rgba(255,127,142,0.25); --secondary:#FFAFC1;
+  --tertiary:#F3C77B; --error:#FFB4AB; --warn:#FFD27A; --hairline:rgba(83,67,71,0.5);
+  --font-display:"Space Grotesk",system-ui,sans-serif; --font-body:"Inter",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace; --font-reader:"Atkinson Hyperlegible","Inter",sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-body);color:var(--on-surface);padding:40px 24px 72px;
+  background:radial-gradient(1200px 700px at 15% -10%,#241417 0,transparent 55%),radial-gradient(1000px 700px at 100% 0,#1a1113 0,transparent 50%),#0b0b0c}
+.board-head{max-width:1320px;margin:0 auto 30px}
+.board-head h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0 0 6px;letter-spacing:-.5px}
+.board-head p{color:var(--on-surface-variant);margin:0;font-size:14px;line-height:1.55;max-width:900px}
+.tagline{color:var(--accent);font-weight:600}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(255,127,142,.35);background:rgba(255,127,142,.10);border-radius:999px;padding:2px 8px;margin:0 3px}
+.frames{display:flex;gap:52px;flex-wrap:wrap;justify-content:center;max-width:1320px;margin:0 auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.frame-cap{font-size:12.5px;color:var(--on-surface-variant);text-align:center;max-width:412px}
+.frame-cap b{color:var(--on-surface);font-family:var(--font-display);font-weight:600}
+
+.phone{position:relative;width:412px;height:915px;border-radius:46px;background:var(--surface);overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 0 0 10px #050505,0 0 0 11px #1b1b1c}
+.screen{position:absolute;inset:0}
+.glass{background:linear-gradient(135deg,rgba(255,127,142,.10),rgba(142,16,48,.16)),rgba(28,28,29,.60);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 60px -24px rgba(0,0,0,.75)}
+.glass--deep{background:linear-gradient(160deg,rgba(255,127,142,.13),rgba(142,16,48,.22)),rgba(22,22,23,.72)}
+
+.statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:40;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 7px;background:linear-gradient(180deg,#1c1416,#191315);color:var(--on-surface)}
+.statusbar .time{font-family:var(--font-mono);font-size:13px}
+.statusbar .sysicons{display:flex;gap:7px;opacity:.9}
+
+/* ---- reader surface (D8 immersive) ---- */
+.reader{position:absolute;inset:0;background:var(--surface-lowest);overflow:hidden}
+.page{position:absolute;inset:0;overflow-y:auto;padding:104px 26px 210px;scrollbar-width:none}
+.page::-webkit-scrollbar{display:none}
+.chapter-eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:2px;color:var(--accent);opacity:.85;text-transform:uppercase}
+.chapter-title{font-family:var(--font-display);font-weight:700;font-size:24px;letter-spacing:-.4px;margin:8px 0 20px}
+.rbody{font-family:var(--font-reader);font-size:18px;line-height:1.75;color:#EBE7E4;letter-spacing:.1px}
+.rbody p{margin:0 0 18px}
+.rbody .read{color:rgba(235,231,228,.42)} /* already-read words dimmed */
+.rbody .cur{color:#fff;background:rgba(255,127,142,.20);border-bottom:2px solid var(--accent);border-radius:3px;padding:0 1px} /* karaoke current word */
+.eq-block{margin:22px 0;padding:16px 12px;text-align:center;background:rgba(255,255,255,.02);border:1px solid var(--hairline);border-radius:14px;overflow-x:auto}
+.eq-num{float:right;color:var(--on-surface-variant);font-family:var(--font-mono);font-size:12px;margin-top:14px}
+.katex{color:#F3EFEC;font-size:1.05em}
+.selpop{position:absolute;left:50%;top:340px;transform:translateX(-50%);z-index:25;display:flex;gap:2px;padding:5px;border-radius:14px}
+.selpop button{border:none;background:transparent;color:var(--on-surface);font-family:var(--font-body);font-weight:600;font-size:13px;padding:8px 12px;border-radius:10px;display:flex;gap:6px;align-items:center;cursor:pointer}
+.selpop button:hover{background:rgba(255,127,142,.12);color:var(--accent)}
+.selpop .div{width:1px;background:var(--hairline);margin:4px 0}
+.selection{background:rgba(255,127,142,.16);border-radius:3px;box-shadow:0 0 0 1px rgba(255,127,142,.3)}
+
+/* ---- top chrome bar (D8) ---- */
+.topbar{position:absolute;top:46px;left:0;right:0;height:52px;z-index:30;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid var(--hairline)}
+.tb-btn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;border:none;background:transparent;color:var(--on-surface);cursor:pointer}
+.tb-btn:hover{background:rgba(255,255,255,.06)}
+.tb-title{flex:1;text-align:center;font-family:var(--font-display);font-weight:600;font-size:14px;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+.tb-title small{display:block;font-family:var(--font-mono);font-weight:400;font-size:10px;color:var(--on-surface-variant);letter-spacing:.5px}
+
+/* Ask floating button (D10) top-right translucent */
+.ask{position:absolute;top:108px;right:16px;z-index:32;display:flex;gap:7px;align-items:center;padding:9px 15px 9px 12px;border-radius:999px;color:var(--accent);font-family:var(--font-display);font-weight:600;font-size:13px;cursor:pointer}
+.ask svg{filter:drop-shadow(0 0 6px var(--accent-glow))}
+
+.hint{position:absolute;left:50%;top:52%;transform:translateX(-50%);z-index:5;color:var(--on-surface-variant);font-size:12px;opacity:.5;font-family:var(--font-mono);pointer-events:none}
+
+/* ---- Tidal player, Variation A (docked) D10 ---- */
+.player{position:absolute;left:12px;right:12px;bottom:16px;z-index:34;border-radius:26px;padding:14px 16px 16px}
+.scrub{display:flex;flex-direction:column;gap:6px}
+.scrub .labels{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant)}
+.scrub .labels .pos{color:var(--accent)}
+.track{position:relative;height:16px;display:flex;align-items:center;cursor:pointer}
+.track .rail{position:absolute;left:0;right:0;height:4px;border-radius:2px;background:var(--surface-high)}
+.track .fill{position:absolute;left:0;height:4px;border-radius:2px;background:var(--accent);width:42%}
+.track .thumb{position:absolute;left:42%;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,127,142,.3);transform:translateX(-50%)}
+.track .tick{position:absolute;top:-3px;width:2px;height:10px;background:rgba(208,198,200,.5);border-radius:1px}
+.transport{display:flex;align-items:center;justify-content:center;gap:26px;margin:14px 0 6px}
+.tp{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;border:none;background:transparent;color:var(--on-surface);cursor:pointer}
+.tp:hover{background:rgba(255,255,255,.06)}
+.tp.play{width:64px;height:64px;background:var(--accent);color:var(--on-primary);box-shadow:0 10px 30px -8px var(--accent-glow)}
+.pbottom{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+.tone{display:flex;gap:4px;background:rgba(0,0,0,.25);border-radius:999px;padding:4px}
+.tone button{border:none;background:transparent;color:var(--on-surface-variant);font-family:var(--font-body);font-weight:600;font-size:12px;padding:6px 12px;border-radius:999px;cursor:pointer}
+.tone button.on{background:rgba(255,127,142,.16);color:var(--accent)}
+.wpm{display:flex;gap:7px;align-items:center;font-family:var(--font-mono);font-size:12px;color:var(--on-surface-variant);background:rgba(0,0,0,.25);border-radius:999px;padding:7px 12px;cursor:pointer}
+.wpm b{color:var(--accent);font-weight:500}
+
+/* ---- TOC (frame R2) ---- */
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:36;max-height:74%;border-radius:26px 26px 0 0;padding:10px 0 20px;display:flex;flex-direction:column}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:rgba(159,141,145,.35);margin:8px auto 6px}
+.sheet h3{font-family:var(--font-display);font-weight:700;font-size:18px;margin:6px 22px 4px}
+.sheet .csub{margin:0 22px 10px;color:var(--on-surface-variant);font-size:12px;font-family:var(--font-mono)}
+.toc{overflow-y:auto;padding:4px 12px}
+.toc a{display:flex;gap:12px;align-items:baseline;padding:12px 12px;border-radius:12px;text-decoration:none;color:var(--on-surface)}
+.toc a .n{font-family:var(--font-mono);font-size:12px;color:var(--on-surface-variant);width:30px}
+.toc a .t{flex:1;font-size:14.5px;font-family:var(--font-body)}
+.toc a .pg{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant)}
+.toc a.cur{background:rgba(255,127,142,.12)}
+.toc a.cur .t{color:var(--accent);font-weight:600}
+.toc a.done .t{color:var(--on-surface-variant)}
+
+/* ---- Original pages (frame R3) ---- */
+.pdfwrap{position:absolute;inset:0;top:98px;bottom:0;padding:14px 18px 30px;overflow-y:auto;background:var(--surface)}
+.pdfpage{background:#f4f1ec;color:#15130f;border-radius:8px;padding:26px 24px;margin-bottom:16px;box-shadow:0 12px 30px -14px rgba(0,0,0,.7);font-family:"Fraunces",Georgia,serif}
+.pdfpage h4{font-family:Georgia,serif;font-size:16px;margin:0 0 12px;text-align:center}
+.pdfpage p{font-size:12.5px;line-height:1.7;margin:0 0 11px;text-align:justify;font-family:Georgia,serif;color:#26221c}
+.pdfpage .fig{height:96px;border:1px solid #c9c2b4;border-radius:6px;display:grid;place-items:center;color:#8a8272;font-size:11px;margin:10px 0}
+.pagelabel{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;font-family:var(--font-mono);font-size:12px;color:var(--on-surface);padding:6px 14px;border-radius:999px}
+.viewtoggle{position:absolute;top:108px;left:16px;z-index:32;display:flex;background:rgba(0,0,0,.3);border-radius:999px;padding:4px}
+.viewtoggle button{border:none;background:transparent;color:var(--on-surface-variant);font-family:var(--font-body);font-weight:600;font-size:12px;padding:6px 12px;border-radius:999px;cursor:pointer}
+.viewtoggle button.on{background:rgba(255,127,142,.16);color:var(--accent)}
+
+/* legend cards */
+.extra{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:1320px;margin:40px auto 0}
+.xcard{flex:1;min-width:330px;max-width:560px;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.xcard h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.xcard p{color:var(--on-surface-variant);font-size:13px;line-height:1.6;margin:0 0 12px}
+.before{font-family:var(--font-mono);font-size:13px;color:#c9b7b9;background:rgba(255,180,171,.06);border:1px dashed rgba(255,180,171,.3);border-radius:10px;padding:12px;margin-bottom:10px}
+.after{background:rgba(255,127,142,.06);border:1px solid rgba(255,127,142,.25);border-radius:10px;padding:14px;text-align:center}
+.legend{max-width:1320px;margin:24px auto 0;background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:18px;padding:22px 24px}
+.legend h2{font-family:var(--font-display);font-size:16px;margin:0 0 12px}
+.legend ul{margin:0;padding-left:18px;color:var(--on-surface-variant);font-size:13.5px;line-height:1.7}
+.legend b{color:var(--on-surface)}
+.dispcard .row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--hairline)}
+.dispcard .row:last-child{border-bottom:none}
+.dispcard .seg{display:flex;gap:4px;background:rgba(0,0,0,.25);border-radius:999px;padding:3px}
+.dispcard .seg span{font-size:11.5px;padding:5px 9px;border-radius:999px;color:var(--on-surface-variant)}
+.dispcard .seg span.on{background:rgba(255,127,142,.16);color:var(--accent)}
+.dispcard .lab{font-size:12px;color:var(--on-surface-variant);letter-spacing:1.5px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="board-head">
+  <h1>Reader — the flagship overhaul &nbsp;<span class="pill">D8</span><span class="pill">D9</span><span class="pill">D10</span></h1>
+  <p>A <span class="tagline">Google Play Books</span> immersive surface (tap center to toggle chrome), <span class="tagline">real KaTeX-quality equations</span> inline + block, a proper <span class="tagline">Table of Contents</span> replacing “‹ Part N/M ›”, and a <span class="tagline">Tidal-style player</span> (scrubber on top → ◀ ⏯ ▶ centered → tone/voice at the bottom) with <span class="tagline">“Ask” as a translucent top-right glass button</span>. The word-level karaoke, both view modes, and Explain-on-selection are preserved. <b>Variation B of the player is in <code>mockup-v2.html</code>.</b></p>
+</div>
+
+<div class="frames">
+  <!-- ===== R1: immersive reading (hero) ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen reader">
+        <div class="page" id="rpage">
+          <div class="chapter-eyebrow">Chapter 3 · Quantum Imaging</div>
+          <div class="chapter-title">Correlation-Plenoptic Imaging with Entangled Photons</div>
+          <div class="rbody">
+            <p><span class="read">Sub-shot-noise imaging exploits photon-number correlations that</span> <span class="read">have no classical analogue. In the entangled regime, the joint</span> <span class="cur">detection</span> probability factorizes only up to a correlation term, so the biphoton amplitude carries the spatial information of both arms simultaneously.</p>
+            <p>Writing the two-photon state for orthogonal polarizations <span class="katex-inline">$H$</span> and <span class="katex-inline">$V$</span>, the spatial wavefunction is antisymmetric:</p>
+            <div class="eq-block">
+              $$\Psi(\mathbf r_a,\mathbf r_b)=\tfrac{1}{\sqrt2}\big[\psi_H(\mathbf r_a)\psi_V(\mathbf r_b)-\psi_V(\mathbf r_a)\psi_H(\mathbf r_b)\big]$$
+            </div>
+            <p>The measured correlation visibility, with singles rates <span class="katex-inline">$P_a$</span> and <span class="katex-inline">$P_b$</span> and coincidence rate <span class="katex-inline">$P_{ab}$</span>, is</p>
+            <div class="eq-block">
+              <span class="eq-num">(3.14)</span>
+              $$\mathcal V=\frac{P_{ab}-P_aP_b}{\sqrt{P_aP_b}},\qquad \langle\hat n_a\hat n_b\rangle-\langle\hat n_a\rangle\langle\hat n_b\rangle>0.$$
+            </div>
+            <p>Because the correlation term survives even when each arm is separately incoherent, the plenoptic reconstruction beats the standard quantum limit by a factor set by the Schmidt number of the source.</p>
+          </div>
+        </div>
+
+        <!-- selection actions (Explain on selection, Play-Books style) -->
+        <div class="selpop glass">
+          <button><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke-linecap="round"/><circle cx="12" cy="12" r="3"/></svg>Explain</button>
+          <div class="div"></div>
+          <button><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7" stroke-linecap="round"/></svg>Ask</button>
+          <div class="div"></div>
+          <button><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4v16l7-4 7 4V4z"/></svg>Highlight</button>
+        </div>
+
+        <!-- top chrome -->
+        <div class="statusbar"><span class="time">9:41</span><span class="sysicons"><svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="7" width="3" height="5" rx="1" fill="currentColor"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1" fill="currentColor"/><rect x="9" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="currentColor" opacity=".45"/></svg><svg width="24" height="12" viewBox="0 0 24 12"><rect x="1" y="1.4" width="20" height="9.2" rx="2.6" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2.6" y="3" width="14" height="6" rx="1.4" fill="currentColor"/></svg></span></div>
+        <div class="topbar glass">
+          <button class="tb-btn" aria-label="Back to library"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="tb-title">CPI with Entangled Photons<small>D'Angelo et al. · 24 pp</small></div>
+          <button class="tb-btn" aria-label="Table of contents"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+          <button class="tb-btn" aria-label="Display options"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 18l4-11 4 11M5.4 14h5.2" stroke-linecap="round"/><path d="M14 12h6M14 16h6" stroke-linecap="round"/></svg></button>
+          <button class="tb-btn" aria-label="More"><svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+        </div>
+        <!-- Ask floating translucent button (D10) -->
+        <div class="ask glass" aria-label="Ask about this document">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/><circle cx="18" cy="17" r="1"/></svg>Ask
+        </div>
+
+        <!-- Tidal player Variation A (docked) -->
+        <div class="player glass">
+          <div class="scrub">
+            <div class="labels"><span class="pos">42% · Ch 3</span><span>12 min left</span></div>
+            <div class="track" id="trk">
+              <div class="rail"></div><div class="fill" id="fill"></div>
+              <div class="tick" style="left:18%"></div><div class="tick" style="left:35%"></div>
+              <div class="tick" style="left:58%"></div><div class="tick" style="left:78%"></div>
+              <div class="thumb" id="thumb"></div>
+            </div>
+          </div>
+          <div class="transport">
+            <button class="tp" aria-label="Jump back"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11 6 4 12l7 6zM20 6l-7 6 7 6z"/></svg></button>
+            <button class="tp play" id="pp" aria-label="Play"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+            <button class="tp" aria-label="Skip ahead"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
+          </div>
+          <div class="pbottom">
+            <div class="tone">
+              <button>Soft</button><button class="on">Natural</button><button>Deep</button>
+            </div>
+            <div class="wpm" aria-label="Reading speed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6" stroke-linecap="round"/></svg><b>240</b> wpm</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Immersive reading + docked Tidal player (Variation A — default)</b> — rendered block equation (3.14), inline math, karaoke current-word highlight, Explain-on-selection popover, translucent “✦ Ask” top-right.</div>
+  </div>
+
+  <!-- ===== R2: Table of Contents ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen reader">
+        <div class="page" style="padding-top:104px;filter:brightness(.5)">
+          <div class="chapter-eyebrow">Chapter 3 · Quantum Imaging</div>
+          <div class="chapter-title">Correlation-Plenoptic Imaging…</div>
+          <div class="rbody"><p style="color:rgba(235,231,228,.5)">The measured correlation visibility, with singles rates and coincidence rate, is bounded below by the classical value only when the source is separable…</p></div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span><span class="sysicons"><svg width="24" height="12" viewBox="0 0 24 12"><rect x="1" y="1.4" width="20" height="9.2" rx="2.6" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2.6" y="3" width="14" height="6" rx="1.4" fill="currentColor"/></svg></span></div>
+        <div class="topbar glass">
+          <button class="tb-btn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="tb-title">Contents</div>
+          <button class="tb-btn" aria-label="Close contents"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="sheet glass--deep">
+          <div class="grab"></div>
+          <h3>Table of Contents</h3>
+          <div class="csub">24 pages · 42% read · scrubber ticks map these chapters</div>
+          <div class="toc">
+            <a class="done"><span class="n">1</span><span class="t">Introduction &amp; Motivation</span><span class="pg">p.1</span></a>
+            <a class="done"><span class="n">2</span><span class="t">The Biphoton Correlation Framework</span><span class="pg">p.5</span></a>
+            <a class="cur"><span class="n">3</span><span class="t">Correlation-Plenoptic Imaging with Entangled Photons</span><span class="pg">p.11</span></a>
+            <a><span class="n">4</span><span class="t">Resolution &amp; the Schmidt Number</span><span class="pg">p.16</span></a>
+            <a><span class="n">5</span><span class="t">Experimental Realization</span><span class="pg">p.19</span></a>
+            <a><span class="n">6</span><span class="t">Discussion &amp; Outlook</span><span class="pg">p.22</span></a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Table of Contents</b> — replaces “‹ Part 1/25 ›”. Tap a chapter to jump; current chapter highlighted; these are the same ticks shown on the player scrubber.</div>
+  </div>
+
+  <!-- ===== R3: Original pages (PDF fidelity) ===== -->
+  <div class="frame-wrap">
+    <div class="phone">
+      <div class="screen reader">
+        <div class="pdfwrap">
+          <div class="pdfpage">
+            <h4>3. Correlation-Plenoptic Imaging</h4>
+            <p>Sub-shot-noise imaging exploits photon-number correlations that have no classical analogue. In the entangled regime, the joint detection probability factorizes only up to a correlation term.</p>
+            <p style="text-align:center;font-style:italic">Ψ(r_a, r_b) = (1/√2)[ψ_H(r_a)ψ_V(r_b) − ψ_V(r_a)ψ_H(r_b)]</p>
+            <div class="fig">Fig 3.1 — coincidence imaging setup</div>
+            <p>The measured correlation visibility 𝒱 = (P_ab − P_a P_b)/√(P_a P_b) remains positive because the correlation term survives even when each arm is separately incoherent.</p>
+          </div>
+        </div>
+        <div class="statusbar"><span class="time">9:41</span><span class="sysicons"><svg width="24" height="12" viewBox="0 0 24 12"><rect x="1" y="1.4" width="20" height="9.2" rx="2.6" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2.6" y="3" width="14" height="6" rx="1.4" fill="currentColor"/></svg></span></div>
+        <div class="topbar glass">
+          <button class="tb-btn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="tb-title">CPI with Entangled Photons<small>Original pages</small></div>
+          <button class="tb-btn"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+        </div>
+        <div class="viewtoggle glass"><button>Text</button><button class="on">Pages</button></div>
+        <div class="pagelabel glass">Page 11 / 24 · pinch to zoom</div>
+      </div>
+    </div>
+    <div class="frame-cap"><b>Original pages (kept)</b> — the true-PDF fidelity view is preserved as the equation fallback alongside D9. Text ⇄ Pages toggle top-left; pinch-zoom + page jump added.</div>
+  </div>
+</div>
+
+<div class="extra">
+  <div class="xcard">
+    <h2>D9 — equation rendering (before → after)</h2>
+    <p>Today PDF-extracted math renders as broken text. The new pipeline (MathML/image → LaTeX → KaTeX) renders it the way Claude/ChatGPT/Gemini do. TTS <b>skips</b> equations; the karaoke highlight steps over them.</p>
+    <div class="before">Before:&nbsp; Ψ R (P a −P b )/ √ 2 &nbsp;— garbage glyph soup</div>
+    <div class="after"><div style="font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:8px">AFTER (rendered here with real KaTeX)</div>$$\mathcal V=\frac{P_{ab}-P_aP_b}{\sqrt{P_aP_b}}$$</div>
+  </div>
+  <div class="xcard dispcard">
+    <h2>Display options (the “Aa” button, D8 ↔ D2)</h2>
+    <p>The top-bar “Aa” opens reader-relevant Settings — the same controls that live in the Settings screen (D2), surfaced where you read.</p>
+    <div class="row"><span class="lab">Theme</span><div class="seg"><span>Dark</span><span class="on">Sepia</span><span>Light</span><span>Contrast</span></div></div>
+    <div class="row"><span class="lab">Reader font</span><div class="seg"><span class="on">Atkinson</span><span>Lora</span><span>Dyslexic</span></div></div>
+    <div class="row"><span class="lab">Size</span><span style="font-family:var(--font-mono);color:var(--accent);font-size:12px">19 pt</span></div>
+    <div class="row"><span class="lab">Line spacing</span><span style="font-family:var(--font-mono);color:var(--accent);font-size:12px">1.75</span></div>
+  </div>
+</div>
+
+<div class="legend">
+  <h2>What changed / mapping for the dev</h2>
+  <ul>
+    <li><b>D8 — Play-Books reader</b>: heavy header + left minimap + “‹ Part N/M ›” removed. Tap-center toggles chrome (auto-hides while reading). Top bar = back · title · <b>Contents</b> · <b>Display options</b> · overflow. <b>Citation-graph cut</b> (dead). Both view modes kept (Text ⇄ Original pages).</li>
+    <li><b>D9 — Equations</b>: inline + block via KaTeX (shown live). Backend extraction (MathML/PDF→LaTeX/math-OCR) is a later push — the target look is fixed here. Not narrated by TTS.</li>
+    <li><b>D10 — Tidal player</b>: scrubber (with chapter ticks) on top → ◀ ⏯ ▶ centered → tone (Soft/Natural/Deep) at bottom; WPM kept as a compact pill; <b>Ask</b> moved to the translucent top-right glass button; whole player is tinted glass and hides with chrome. <b>Variation B (expandable full now-playing) → mockup-v2.html.</b></li>
+    <li><b>Preserved (contract)</b>: word tap-to-seek + current-word highlight (karaoke), long-press → Explain, Q&amp;A thread (Ask), play/pause/jump/skip, WPM, voice select, view-toggle, Study (🎓 in overflow). Accessibility labels on all controls; reader font/size/spacing/theme honored.</li>
+  </ul>
+</div>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>
+  function doRender(){
+    if(!window.renderMathInElement) return;
+    renderMathInElement(document.body,{delimiters:[
+      {left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+  }
+  window.addEventListener('load',()=>setTimeout(doRender,60));
+  // play/pause toggle
+  const pp=document.getElementById('pp');
+  if(pp){pp.addEventListener('click',()=>{
+    const playing=pp.getAttribute('data-on')==='1';pp.setAttribute('data-on',playing?'0':'1');
+    pp.innerHTML= playing?'<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+                         :'<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+    pp.setAttribute('aria-label',playing?'Play':'Pause');
+  });}
+  // draggable scrubber
+  const trk=document.getElementById('trk');
+  if(trk){const fill=document.getElementById('fill'),thumb=document.getElementById('thumb');
+    function set(e){const r=trk.getBoundingClientRect();let p=(e.clientX-r.left)/r.width;p=Math.max(0,Math.min(1,p));
+      fill.style.width=(p*100)+'%';thumb.style.left=(p*100)+'%';}
+    let drag=false;
+    trk.addEventListener('pointerdown',e=>{drag=true;trk.setPointerCapture(e.pointerId);set(e);});
+    trk.addEventListener('pointermove',e=>{if(drag)set(e);});
+    trk.addEventListener('pointerup',()=>drag=false);
+  }
+</script>
+</body>
+</html>
