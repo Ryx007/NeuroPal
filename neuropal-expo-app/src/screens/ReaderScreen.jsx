@@ -3,6 +3,8 @@ import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/nativ
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  AppState,
+  BackHandler,
   FlatList,
   Image,
   Modal,
@@ -25,7 +27,12 @@ import { SelectionBar } from "../components/reader/SelectionBar";
 import { TidalPlayer } from "../components/reader/TidalPlayer";
 import { TocSheet } from "../components/reader/TocSheet";
 import { StudySheet } from "../components/StudySheet";
-import { documentPageUrl, USE_MOCK } from "../services/network";
+import {
+  documentPageUrl,
+  fetchReadingProgressApi,
+  saveReadingProgressApi,
+  USE_MOCK,
+} from "../services/network";
 import { speakWords } from "../services/tts";
 import { appStore } from "../store";
 import {
@@ -94,11 +101,15 @@ export function ReaderScreen() {
   const [activeSection, setActiveSection] = useState(0);
   const [viewMode, setViewMode] = useState("text"); // 'text' | 'pages'
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [playerExpanded, setPlayerExpanded] = useState(false); // A ↔ B
   const [selection, setSelection] = useState(null); // {start, end} inclusive
   const [currentPage, setCurrentPage] = useState(1);
 
   const simTimerRef = useRef(null);
   const ttsRef = useRef(null);
+  // Resume: which docId we've already restored the reading position for, so
+  // the fetch runs once per open and never fights a user seek afterward.
+  const restoredForRef = useRef(null);
   const settingsRestartRef = useRef(null);
   const pagesListRef = useRef(null);
   // Flips true on the first real word-boundary event from the TTS engine —
@@ -223,6 +234,18 @@ export function ReaderScreen() {
     }
   }, []);
 
+  // Save the resume point (word index + % through the book) — fire-and-forget
+  // so it never blocks the UI. Called on pause, seek, blur and unmount.
+  const persistProgress = useCallback(() => {
+    if (!targetId || USE_MOCK || words.length === 0) return;
+    const st = appStore.getState().reader;
+    const total = st.totalWords || words.length;
+    saveReadingProgressApi(targetId, {
+      lastWordIndex: st.wordIndex,
+      progress: total > 0 ? st.wordIndex / total : 0,
+    });
+  }, [targetId, words.length]);
+
   useEffect(() => {
     dispatch(resetReader());
     dispatch(setReaderTotalWords(words.length));
@@ -230,11 +253,37 @@ export function ReaderScreen() {
     setViewMode("text");
     setSelection(null);
     setChromeVisible(true);
+    setPlayerExpanded(false); // never carry the full-screen B into a new doc
     return () => {
       stopSpeech();
       dispatch(pauseReader());
     };
-  }, [dispatch, words.length, stopSpeech]);
+    // keyed on targetId too, so switching between two same-length docs still
+    // resets view state (the Reader is a never-unmounting drawer destination)
+  }, [dispatch, words.length, targetId, stopSpeech]);
+
+  // Resume where the reader last left off (Audible-style). Runs once per doc
+  // open, AFTER the reset above (declared later → same-commit ordering), and
+  // never re-fetches for a doc it has already restored.
+  useEffect(() => {
+    if (USE_MOCK || !targetId || words.length === 0) return undefined;
+    if (readerDoc.docId !== targetId) return undefined;
+    if (restoredForRef.current === targetId) return undefined;
+    restoredForRef.current = targetId;
+    let active = true;
+    fetchReadingProgressApi(targetId).then((p) => {
+      if (!active || !p) return;
+      const idx = Math.min(Math.max(0, p.lastWordIndex || 0), words.length - 1);
+      if (idx > 0) {
+        dispatch(setReaderWord(idx));
+        const span = sectionSpans.findIndex((s) => idx >= s.start && idx < s.end);
+        if (span >= 0) setActiveSection(span);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [targetId, words.length, readerDoc.docId, sectionSpans, dispatch]);
 
   // Whatever flips `playing` off must also kill the audio.
   useEffect(() => {
@@ -247,8 +296,9 @@ export function ReaderScreen() {
       return () => {
         stopSpeech();
         dispatch(pauseReader());
+        persistProgress();
       };
-    }, [stopSpeech, dispatch])
+    }, [stopSpeech, dispatch, persistProgress])
   );
 
   const startPlaybackFrom = useCallback(
@@ -299,12 +349,13 @@ export function ReaderScreen() {
       stopSpeech();
       dispatch(pauseReader());
       setChromeVisible(true);
+      persistProgress();
       return;
     }
     dispatch(playReader());
     startPlaybackFrom(playback.wordIndex);
     setChromeVisible(false); // Play-Books: chrome auto-hides while reading
-  }, [dispatch, playback.playing, playback.wordIndex, startPlaybackFrom, stopSpeech]);
+  }, [dispatch, playback.playing, playback.wordIndex, startPlaybackFrom, stopSpeech, persistProgress]);
 
   const seekTo = useCallback(
     (index) => {
@@ -313,24 +364,31 @@ export function ReaderScreen() {
       stopSpeech();
       dispatch(setReaderWord(clamped));
       if (wasPlaying) startPlaybackFrom(clamped);
+      persistProgress();
     },
-    [words.length, stopSpeech, dispatch, startPlaybackFrom]
+    [words.length, stopSpeech, dispatch, startPlaybackFrom, persistProgress]
   );
 
-  const skipParagraph = useCallback(
-    (dir) => {
-      const idx = appStore.getState().reader.wordIndex;
-      const ri = ranges.findIndex((r) => idx >= r.start && idx < r.end);
-      if (ri < 0) return;
-      if (dir < 0) {
-        const intoParagraph = idx - ranges[ri].start;
-        seekTo(intoParagraph > 5 ? ranges[ri].start : ranges[ri - 1]?.start ?? 0);
-      } else if (ranges[ri + 1]) {
-        seekTo(ranges[ri + 1].start);
+  // #7 hardware back collapses the expanded player before leaving the screen;
+  // #9 backgrounding the app saves the resume point (blur doesn't fire on
+  // background, so an OS kill mid-listen would otherwise lose the position).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (playerExpanded) {
+        setPlayerExpanded(false);
+        return true;
       }
-    },
-    [ranges, seekTo]
-  );
+      return false;
+    });
+    return () => sub.remove();
+  }, [playerExpanded]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "background" || next === "inactive") persistProgress();
+    });
+    return () => sub.remove();
+  }, [persistProgress]);
 
   // Speed/voice changes apply mid-playback (debounced engine restart).
   useEffect(() => {
@@ -659,20 +717,26 @@ export function ReaderScreen() {
         />
       ) : null}
 
-      {chromeVisible && viewMode === "text" && words.length > 0 ? (
+      {(chromeVisible || playerExpanded) && viewMode === "text" && words.length > 0 ? (
         <TidalPlayer
           playing={playback.playing}
           wordIndex={playback.wordIndex}
-          totalWords={playback.totalWords}
           chapterIndex={activeSection}
           chapterCount={sections.length}
           chapterStart={sectionSpans[activeSection]?.start ?? 0}
           chapterEnd={sectionSpans[activeSection]?.end ?? words.length}
           sectionHeading={currentHeading}
+          docTitle={activeDocument.title}
+          docSubtitle={activeDocument.subtitle}
+          expanded={playerExpanded}
+          onExpand={() => setPlayerExpanded(true)}
+          onCollapse={() => {
+            setPlayerExpanded(false);
+            setChromeVisible(true); // reveal the mini-player, not a bare page
+          }}
+          onAsk={() => setAskOpen(true)}
           onSeek={seekTo}
           onTogglePlay={togglePlay}
-          onPrev={() => skipParagraph(-1)}
-          onNext={() => skipParagraph(1)}
           onPrevChapter={() =>
             jumpToSection(Math.max(0, activeSection - 1))
           }

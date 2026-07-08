@@ -390,6 +390,36 @@ export async function saveRawDocumentApi(documentId, text) {
   }
 }
 
+// ---- Reading position (Audible-style resume, D10 backend tandem) -----------
+
+// GET /api/documents/:id/progress → { progress, lastWordIndex, lastPage, ... }
+export async function fetchReadingProgressApi(documentId) {
+  if (USE_MOCK) return null;
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get(`documents/${documentId}/progress`, {
+      timeout: 15000,
+    });
+    return data;
+  } catch (error) {
+    // A missing resume point must never block opening the doc — start at 0.
+    return null;
+  }
+}
+
+// PATCH /api/documents/:id/progress — throttled heartbeat from the reader.
+// Fire-and-forget: a dropped heartbeat just means a slightly stale resume.
+export async function saveReadingProgressApi(documentId, payload) {
+  if (USE_MOCK || !apiConfigured) return;
+  try {
+    await apiClient.patch(`documents/${documentId}/progress`, payload, {
+      timeout: 15000,
+    });
+  } catch (error) {
+    // swallow — position sync is best-effort
+  }
+}
+
 // PATCH /api/documents/:id — rename from the library.
 export async function renameDocument(documentId, title) {
   assertConfigured();

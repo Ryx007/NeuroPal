@@ -361,6 +361,38 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// GET /api/documents/:id/progress
+// The reader's resume point: last word index / page / progress for this user.
+// Returns nulls (not 404) when the doc has never been opened, so the client
+// can just start at 0.
+// ---------------------------------------------------------------------------
+router.get(
+    '/:id/progress',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        }).select('_id');
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+
+        const session = await ReadingSession.findOne({
+            userId: req.userId,
+            documentId: doc._id,
+        }).lean();
+
+        res.json({
+            documentId: doc._id,
+            progress: session?.progress ?? 0,
+            lastWordIndex: session?.lastWordIndex ?? 0,
+            lastPage: session?.lastPage ?? null,
+            lastOpenedAt: session?.lastOpenedAt ?? null,
+        });
+    }),
+);
+
+// ---------------------------------------------------------------------------
 // PATCH /api/documents/:id/progress
 // body: { progress, lastWordIndex, lastPage, timeSpentSec }
 // Throttled heartbeat from the reader. Upserts a ReadingSession.
