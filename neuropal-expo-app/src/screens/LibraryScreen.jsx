@@ -4,7 +4,6 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -13,7 +12,7 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 
-import { describeNetworkError, USE_MOCK } from "../services/network";
+import { describeNetworkError, uploadDocument, USE_MOCK } from "../services/network";
 import { apiConfigured } from "../store/ApiLink";
 import { useApiRequest } from "../store/ApiRequest";
 import { selectDocuments } from "../store/selectors";
@@ -65,7 +64,7 @@ export function LibraryScreen() {
   const palette = usePalette();
   const navigation = useNavigation();
   const dispatch = useDispatch();
-  const { fetchData, uploadData } = useApiRequest();
+  const { fetchData } = useApiRequest();
   const documents = useSelector(selectDocuments);
   const [activeFilter, setActiveFilter] = useState(0);
   const [connectionError, setConnectionError] = useState(
@@ -131,37 +130,24 @@ export function LibraryScreen() {
       return;
     }
 
-    const asset = result.assets[0];
-
-    const formData = new FormData();
-    if (Platform.OS === "web") {
-      // On web the picker returns a real File — the RN-style {uri,name,type}
-      // object would serialize as "[object Object]" and 400 the upload.
-      const file =
-        asset.file || (await (await fetch(asset.uri)).blob());
-      formData.append("file", file, asset.name || "upload");
-    } else {
-      // RN multipart file value — { uri, name, type }, not a real File.
-      // axios will compute the multipart boundary itself; don't set
-      // Content-Type manually.
-      formData.append("file", {
-        uri: asset.uri,
-        name: asset.name || "upload",
-        type: asset.mimeType || "application/octet-stream",
+    let created;
+    try {
+      created = await uploadDocument(result.assets[0]);
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: "Upload failed",
+        text2: error?.message || "Unknown error",
+        visibilityTime: 8000,
       });
+      return;
     }
-    if (asset.name) {
-      formData.append("title", asset.name.replace(/\.[^.]+$/, ""));
-    }
-
-    const created = await uploadData("documents/upload", formData);
-    if (!created) return; // ApiRequest already toasted
 
     dispatch(addDocument(normaliseDoc(created)));
     Toast.show({
       type: "success",
       text1: "Upload received",
-      text2: "Indexing in the background — refresh for status.",
+      text2: "Indexing in the background — status updates automatically.",
     });
   }
 

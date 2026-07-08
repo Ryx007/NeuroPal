@@ -2,14 +2,25 @@ const fs = require('fs/promises');
 
 // File → plain text. Returns { text, pageCount, wordCount }.
 //
-//   pdf:  pdf-parse (no dependency on a Chromium/PDFium native binary)
+//   pdf:  pdf-parse; when the result looks like a SCANNED pdf (image-only
+//         pages, no text layer) and opts.allowOcr is set, falls back to
+//         tesseract OCR via services/ocr.js
 //   txt:  raw UTF-8 read; pageCount estimated as 1 page per 3000 chars
 //   epub: real extraction — unzip, walk the OPF spine in reading order,
 //         strip each XHTML chapter to plain text (chapters joined by blank
 //         lines so the chunker sees them as paragraph boundaries)
 //   docx: warning + raw UTF-8 fallback (real DOCX parser is a later upgrade)
+//
+// opts: { allowOcr?: boolean, onOcrProgress?: (done, total) => void }
+// OCR is opt-in because it is minutes-slow — the ingest pipeline enables
+// it; the query route's raw-file fallback must stay fast and does not.
 
-async function extractText(filePath, docType) {
+// Under this many extractable chars per page, a PDF is treated as scanned.
+// Real text pages run 1500-3500 chars; scans yield 0 (or a few chars of
+// metadata/watermark junk).
+const SCANNED_PDF_CHARS_PER_PAGE = 100;
+
+async function extractText(filePath, docType, opts = {}) {
     const buf = await fs.readFile(filePath);
 
     if (docType === 'pdf') {
@@ -18,10 +29,37 @@ async function extractText(filePath, docType) {
         const pdfParse = require('pdf-parse');
         const data = await pdfParse(buf);
         const text = data.text || '';
+        const pageCount = data.numpages || 0;
+
+        const density = text.trim().length / Math.max(1, pageCount);
+        if (density >= SCANNED_PDF_CHARS_PER_PAGE || !opts.allowOcr) {
+            if (density < SCANNED_PDF_CHARS_PER_PAGE) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    `[extractor] "${filePath.split('/').pop()}" looks scanned ` +
+                        `(${Math.round(density)} chars/page) but OCR is not enabled for this call`,
+                );
+            }
+            return { text, pageCount, wordCount: countWords(text) };
+        }
+
+        // Scanned PDF → OCR.
+        const { ocrPdf, isOcrAvailable } = require('./ocr');
+        if (!(await isOcrAvailable())) {
+            throw new Error(
+                'this PDF appears to be scanned (no text layer) and OCR tools are missing — ' +
+                    'run `brew install tesseract poppler` on the backend host',
+            );
+        }
+        // eslint-disable-next-line no-console
+        console.log(
+            `[extractor] scanned PDF detected (${Math.round(density)} chars/page) — running OCR`,
+        );
+        const ocr = await ocrPdf(filePath, { onProgress: opts.onOcrProgress });
         return {
-            text,
-            pageCount: data.numpages || 0,
-            wordCount: countWords(text),
+            text: ocr.text,
+            pageCount: ocr.pageCount || pageCount,
+            wordCount: countWords(ocr.text),
         };
     }
 

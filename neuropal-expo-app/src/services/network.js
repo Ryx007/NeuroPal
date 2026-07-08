@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Platform } from "react-native";
 
 import { apiConfigured, apiHost, baseUrl, getHeaders } from "../store/ApiLink";
 
@@ -159,6 +160,88 @@ export async function requestStudyMaterial(documentId, kind, opts = {}) {
     model: data.model,
     provider: data.provider,
   };
+}
+
+// Upload a picked document (expo-document-picker asset) to
+// POST /api/documents/upload. Returns the created Document.
+//
+// Native does NOT go through axios/XHR FormData — that path fails with an
+// opaque "Network Error" on Android (the RN {uri,name,type} pseudo-file
+// never leaves the device). expo-file-system's uploadAsync streams the
+// file through the OS's native uploader instead. Web uses the real File
+// from the picker in a real FormData, which browsers handle natively.
+export async function uploadDocument(asset) {
+  if (USE_MOCK) {
+    throw new Error("Mock mode is on (EXPO_PUBLIC_USE_MOCK) — uploads are disabled.");
+  }
+  assertConfigured();
+
+  const title = (asset.name || "").replace(/\.[^.]+$/, "");
+
+  if (Platform.OS === "web") {
+    const file = asset.file || (await (await fetch(asset.uri)).blob());
+    const formData = new FormData();
+    formData.append("file", file, asset.name || "upload");
+    if (title) formData.append("title", title);
+
+    let data;
+    try {
+      ({ data } = await apiClient.post("documents/upload", formData, {
+        // Let the browser set the multipart boundary itself.
+        headers: { "Content-Type": undefined },
+        timeout: 300000,
+      }));
+    } catch (error) {
+      throw new Error(describeNetworkError(error));
+    }
+    if (!data || !(data._id || data.id)) {
+      throw new Error("Upload succeeded but the backend returned no document.");
+    }
+    return data;
+  }
+
+  // Native (Android / iOS)
+  const FileSystem = require("expo-file-system/legacy");
+  let result;
+  try {
+    result = await FileSystem.uploadAsync(
+      `${baseUrl}documents/upload`,
+      asset.uri,
+      {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: asset.mimeType || "application/octet-stream",
+        parameters: title ? { title } : {},
+        headers: { Accept: "application/json", ...(await getHeaders()) },
+      }
+    );
+  } catch (error) {
+    throw new Error(
+      `Upload failed before reaching the backend: ${error?.message || error}. ` +
+        `Is the Mac Mini reachable at ${apiHost}?`
+    );
+  }
+
+  if (result.status < 200 || result.status >= 300) {
+    let serverMsg = "";
+    try {
+      serverMsg = JSON.parse(result.body)?.error || "";
+    } catch (e) {
+      // non-JSON body
+    }
+    throw new Error(
+      serverMsg
+        ? `Backend rejected the upload (${result.status}): ${serverMsg}`
+        : `Backend rejected the upload (HTTP ${result.status}).`
+    );
+  }
+
+  try {
+    return JSON.parse(result.body);
+  } catch (e) {
+    throw new Error("Upload succeeded but the backend response was unreadable.");
+  }
 }
 
 // GET /api/documents/:id/text — the reader's TTS source.

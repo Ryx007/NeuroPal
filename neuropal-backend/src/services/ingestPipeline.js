@@ -36,7 +36,24 @@ async function ingestDocument(documentId) {
             throw new Error('document.file.relativePath is missing');
         }
         const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
-        const { text, pageCount, wordCount } = await extractText(absPath, doc.type);
+
+        // Overall ingest progress: parsing/OCR climbs 0→0.4, embedding
+        // 0.4→1. Throttled fire-and-forget writes (see embedding stage).
+        let lastParseWrite = 0;
+        const onOcrProgress = (done, total) => {
+            const now = Date.now();
+            if (now - lastParseWrite < 1500 && done < total) return;
+            lastParseWrite = now;
+            Document.updateOne(
+                { _id: doc._id },
+                { $set: { progress: (done / total) * 0.4 } },
+            ).catch(() => {});
+        };
+
+        const { text, pageCount, wordCount } = await extractText(absPath, doc.type, {
+            allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
+            onOcrProgress,
+        });
         if (!text || !text.trim()) {
             throw new Error('extractor returned empty text');
         }
@@ -54,7 +71,7 @@ async function ingestDocument(documentId) {
 
         // ---- 3) embedding ----
         doc.status = 'embedding';
-        doc.progress = 0;
+        doc.progress = 0.4; // parsing/OCR owned 0→0.4
         await doc.save();
 
         // Throttled progress writes (fire-and-forget updateOne so a slow
@@ -67,7 +84,7 @@ async function ingestDocument(documentId) {
             lastProgressWrite = now;
             Document.updateOne(
                 { _id: doc._id },
-                { $set: { progress: done / total } },
+                { $set: { progress: 0.4 + (done / total) * 0.6 } },
             ).catch(() => {});
         };
 

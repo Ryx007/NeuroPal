@@ -92,28 +92,10 @@ export const useApiRequest = () => {
         [handleError],
     );
 
-    // Multipart upload. `formData` is a FormData instance built by the
-    // caller — RN-style file values look like `{ uri, name, type }`.
-    // Don't set Content-Type manually; axios needs to compute the
-    // boundary string and will set the header itself.
-    const uploadData = useCallback(
-        async (endpoint, formData) => {
-            try {
-                const response = await axiosInstance.post(endpoint, formData, {
-                    headers: { Accept: 'application/json' },
-                    transformRequest: (data) => data, // keep FormData intact
-                    // The backend accepts files up to 100MB — a textbook PDF
-                    // over WiFi can easily outlive the default 30s.
-                    timeout: 300000,
-                });
-                return response.data;
-            } catch (error) {
-                handleError(error);
-                return null;
-            }
-        },
-        [handleError],
-    );
+    // NOTE: file uploads do NOT live here. The axios/XHR FormData path
+    // fails on Android with an opaque "Network Error" — use
+    // services/network.js uploadDocument (expo-file-system on native,
+    // real File on web) instead.
 
-    return { fetchData, postData, uploadData };
+    return { fetchData, postData };
 };

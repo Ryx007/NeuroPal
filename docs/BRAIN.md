@@ -104,8 +104,13 @@ retrieves top-8 by passage embedding first, falls back to the sample.
 ## 5. The pipelines (what happens where)
 
 **Ingest:** upload/inbox → `services/ingestPipeline.js`: extractText
-(`textExtractor.js` — pdf-parse for PDF; real EPUB extraction via adm-zip →
-OPF spine walk → XHTML→text; TXT raw; DOCX still raw-fallback w/ warning) →
+(`textExtractor.js` — pdf-parse for PDF; **scanned PDFs (<100 chars/page)
+auto-OCR via `services/ocr.js`**: poppler `pdftoppm` rasterizes 200dpi
+grayscale → `tesseract --psm 1` per page, concurrency 3, ~1-2s/page on the
+M4, progress 0→0.4 of the bar; needs `brew install tesseract poppler`,
+installed 2026-07-08; OCR runs ONLY in ingest, never in the query
+fallback; real EPUB extraction via adm-zip → OPF spine walk → XHTML→text;
+TXT raw; DOCX still raw-fallback w/ warning) →
 `chunker.js` (paragraph-aware ~2000 chars, 200 overlap, never mid-sentence)
 → `embedder.js` embedBatch (Ollama, concurrency 4, onProgress) → Mongo
 `DocumentChunk` rows first, then Qdrant points (batch 100, shared UUID
@@ -129,6 +134,13 @@ catches files dropped while the server was down). Drop a
 `.pdf/.epub/.txt/.docx` → file is MOVED into
 `storage/documents/<userId>/<unique>-<name>` → Document created → normal
 ingest. The library's poll shows it appear on its own.
+
+**Uploads from the app** go through `services/network.js#uploadDocument`,
+NOT axios: on native, RN's FormData/XHR multipart dies with an opaque
+"Network Error" before anything hits the wire — `expo-file-system`(/legacy)
+`uploadAsync` streams the picked file through the OS uploader instead. Web
+uses the picker's real `File` in a real FormData. Do not resurrect an
+axios-based upload path.
 
 **Frontend data flow:** `store/ApiLink.js` derives everything from
 `EXPO_PUBLIC_API_BASE_URL` (bundle-time inlined; restart bundler after
@@ -213,7 +225,8 @@ npx expo start                                     # + QR for Expo Go phones
 
 ## 7. Known limitations / deliberate cuts (as of 2026-07-08)
 
-- **DOCX** parsing is still raw-fallback (mammoth integration pending). PDF/EPUB/TXT are real.
+- **DOCX** parsing is still raw-fallback (mammoth integration pending). PDF (incl. scanned via OCR)/EPUB/TXT are real.
+- **OCR is English-only for now** (`-l eng`); other languages need `brew install tesseract-lang` + a language option. Equations OCR imperfectly (φ→¢ etc.) — prose is what TTS/Q&A consume.
 - **EPUB page numbers** are estimates (chars/3000) — citations on EPUBs cite estimated "pages".
 - **DocCard "% completed"** shows `Document.progress` = INGEST progress (100% once ready). Reading progress (ReadingSession + PATCH /progress) is not yet wired into the UI.
 - **Web TTS boundaries**: expo-speech web emits boundary events in Chrome/Safari with local voices; headless/exotic browsers fall back to the estimator. Fine in practice.
