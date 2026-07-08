@@ -53,35 +53,111 @@ const MAX_PARAGRAPH_WORDS = 180;
 // section boundaries.
 const SECTION_PARAGRAPHS = 40;
 
+// A paragraph that looks like a TOP-LEVEL chapter heading (the cleaned PDF
+// extraction emits headings as their own paragraphs). Deliberately strict:
+// dotted subsection numbers ("1.1.2 …") are NOT chapter breaks — textbooks
+// have hundreds of those and each would become a one-screen sliver.
+function isHeadingParagraph(p) {
+  if (p.length > 70 || /[.!?,;]$/.test(p)) return false;
+  return (
+    /^(chapter|part|appendix|preface|introduction|bibliography|epilogue|prologue)\b/i.test(p) ||
+    /^\d{1,2}\.?\s+[A-Z]/.test(p) ||
+    (/^[A-Z]/.test(p) && p === p.toUpperCase() && /[A-Z]{3}/.test(p))
+  );
+}
+
+const MIN_CHAPTER_PARAGRAPHS = 5;
+
 function textToSections({ documentId, title, text }) {
   const rough = (text || "")
     .split(/\n{2,}/)
     .map((p) => p.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
-  const paragraphs = [];
+  // Group paragraphs under detected headings → real chapters in the reader
+  // (and the Part navigator shows actual chapter names). Oversized chapters
+  // and heading-less documents fall back to fixed-size parts.
+  const chapters = [];
+  let current = { heading: null, paragraphs: [] };
   for (const p of rough) {
-    const words = p.split(" ");
-    if (words.length <= MAX_PARAGRAPH_WORDS) {
-      paragraphs.push(p);
+    if (isHeadingParagraph(p) && current.paragraphs.length > 0) {
+      chapters.push(current);
+      current = { heading: p, paragraphs: [] };
       continue;
     }
-    for (let i = 0; i < words.length; i += MAX_PARAGRAPH_WORDS) {
-      paragraphs.push(words.slice(i, i + MAX_PARAGRAPH_WORDS).join(" "));
+    if (isHeadingParagraph(p) && !current.heading && current.paragraphs.length === 0) {
+      current.heading = p;
+      continue;
+    }
+    const words = p.split(" ");
+    if (words.length <= MAX_PARAGRAPH_WORDS) {
+      current.paragraphs.push(p);
+    } else {
+      for (let i = 0; i < words.length; i += MAX_PARAGRAPH_WORDS) {
+        current.paragraphs.push(words.slice(i, i + MAX_PARAGRAPH_WORDS).join(" "));
+      }
+    }
+  }
+  if (current.paragraphs.length > 0 || current.heading) chapters.push(current);
+
+  // Merge slivers (front-matter lines, TOC fragments, sparse headings) into
+  // their predecessor so navigation stays meaningful.
+  const merged = [];
+  for (const ch of chapters) {
+    const prev = merged[merged.length - 1];
+    if (prev && ch.paragraphs.length < MIN_CHAPTER_PARAGRAPHS) {
+      if (ch.heading) prev.paragraphs.push(ch.heading);
+      prev.paragraphs.push(...ch.paragraphs);
+    } else {
+      merged.push({ ...ch });
+    }
+  }
+  chapters.length = 0;
+  chapters.push(...merged);
+
+  // Too few detected headings → treat as unstructured. Too many relative to
+  // the document's size means the "headings" are noise → also unstructured.
+  const totalParas = chapters.reduce((n, c) => n + c.paragraphs.length, 0);
+  const structured =
+    chapters.length >= 3 && chapters.length <= Math.max(6, totalParas / 15);
+  const sections = [];
+  const pushSection = (heading, paragraphs) => {
+    sections.push({
+      id: `doc-${documentId}-s-${sections.length + 1}`,
+      heading,
+      paragraphs,
+    });
+  };
+
+  if (structured) {
+    for (const ch of chapters) {
+      const head = ch.heading || title || "Document";
+      if (ch.paragraphs.length <= SECTION_PARAGRAPHS) {
+        pushSection(head, ch.paragraphs);
+      } else {
+        const pieces = Math.ceil(ch.paragraphs.length / SECTION_PARAGRAPHS);
+        for (let i = 0; i < pieces; i++) {
+          pushSection(
+            i === 0 ? head : `${head} (cont. ${i + 1})`,
+            ch.paragraphs.slice(i * SECTION_PARAGRAPHS, (i + 1) * SECTION_PARAGRAPHS)
+          );
+        }
+      }
+    }
+  } else {
+    const paragraphs = chapters.flatMap((c) =>
+      c.heading ? [c.heading, ...c.paragraphs] : c.paragraphs
+    );
+    const totalParts = Math.max(1, Math.ceil(paragraphs.length / SECTION_PARAGRAPHS));
+    for (let i = 0; i < paragraphs.length; i += SECTION_PARAGRAPHS) {
+      const part = sections.length + 1;
+      pushSection(
+        totalParts === 1 ? title || "Document" : `${title} — Part ${part} of ${totalParts}`,
+        paragraphs.slice(i, i + SECTION_PARAGRAPHS)
+      );
     }
   }
 
-  const sections = [];
-  const totalParts = Math.max(1, Math.ceil(paragraphs.length / SECTION_PARAGRAPHS));
-  for (let i = 0; i < paragraphs.length; i += SECTION_PARAGRAPHS) {
-    const part = sections.length + 1;
-    sections.push({
-      id: `doc-${documentId}-part-${part}`,
-      heading:
-        totalParts === 1 ? title || "Document" : `${title} — Part ${part} of ${totalParts}`,
-      paragraphs: paragraphs.slice(i, i + SECTION_PARAGRAPHS),
-    });
-  }
   if (sections.length === 0) {
     sections.push({ id: `doc-${documentId}`, heading: title || "Document", paragraphs: [] });
   }

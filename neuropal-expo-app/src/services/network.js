@@ -244,6 +244,33 @@ export async function uploadDocument(asset) {
   }
 }
 
+// PATCH /api/documents/:id — rename from the library.
+export async function renameDocument(documentId, title) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.patch(`documents/${documentId}`, { title });
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// DELETE /api/documents/:id — soft-delete (backend keeps the file 30 days).
+export async function deleteDocument(documentId) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.delete(`documents/${documentId}`);
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// URL of a rendered PDF page image (reader "Original pages" view).
+export function documentPageUrl(documentId, page) {
+  return `${baseUrl}documents/${documentId}/page/${page}`;
+}
+
 // GET /api/documents/:id/text — the reader's TTS source.
 // Returns { id, title, text, pageCount, wordCount, source }.
 export async function fetchDocumentText(documentId) {

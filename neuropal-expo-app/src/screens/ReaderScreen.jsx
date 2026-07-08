@@ -4,6 +4,8 @@ import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/nativ
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  FlatList,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -15,7 +17,7 @@ import Svg, { Circle, Line } from "react-native-svg";
 
 import { GlassPanel, withAlpha } from "../components/primitives";
 import { StudySheet } from "../components/StudySheet";
-import { USE_MOCK } from "../services/network";
+import { documentPageUrl, USE_MOCK } from "../services/network";
 import { speakWords } from "../services/tts";
 import { appStore } from "../store";
 import {
@@ -125,8 +127,12 @@ export function ReaderScreen() {
   const [citationOpen, setCitationOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
   const [activeSection, setActiveSection] = useState(0);
+  // 'text' = karaoke reader; 'pages' = rendered original PDF pages (true
+  // visual fidelity — equations/figures exactly as printed).
+  const [viewMode, setViewMode] = useState("text");
   const simTimerRef = useRef(null);
   const ttsRef = useRef(null);
+  const settingsRestartRef = useRef(null);
   // Flips true on the first real word-boundary event from the TTS engine —
   // from then on the engine drives the highlight and the estimator dies.
   const boundaryLiveRef = useRef(false);
@@ -174,6 +180,7 @@ export function ReaderScreen() {
     dispatch(resetReader());
     dispatch(setReaderTotalWords(words.length));
     setActiveSection(0);
+    setViewMode("text");
     return () => {
       stopSpeech();
       dispatch(pauseReader());
@@ -215,51 +222,106 @@ export function ReaderScreen() {
     if (next >= 0 && next !== activeSection) setActiveSection(next);
   }, [playback.playing, playback.wordIndex, sectionSpans, activeSection]);
 
+  // Start the TTS engine + estimator from a given word. Chunked utterances
+  // (Android caps one utterance at ~4k chars); where the engine emits word
+  // boundaries they drive the highlight exactly, otherwise the estimator
+  // paces it and chunk starts resync it.
+  const startPlaybackFrom = useCallback(
+    (startIndex) => {
+      boundaryLiveRef.current = false;
+      const pitch = voice === "deep" ? 0.85 : voice === "natural" ? 1 : 1.1;
+      const rate = Math.min(1, Math.max(0.3, wpm / 400));
+
+      ttsRef.current = speakWords({
+        words,
+        startIndex,
+        rate,
+        pitch,
+        onWord: (wordIndex) => {
+          boundaryLiveRef.current = true;
+          if (simTimerRef.current) {
+            clearInterval(simTimerRef.current);
+            simTimerRef.current = null;
+          }
+          dispatch(setReaderWord(wordIndex));
+        },
+        onChunkStart: (wordIndex) => {
+          if (!boundaryLiveRef.current) dispatch(setReaderWord(wordIndex));
+        },
+        onDone: () => dispatch(pauseReader()),
+        onError: () => dispatch(pauseReader()),
+      });
+
+      simTimerRef.current = setInterval(() => {
+        if (!boundaryLiveRef.current) {
+          dispatch(advanceReader());
+        }
+        if (!appStore.getState().reader.playing && simTimerRef.current) {
+          clearInterval(simTimerRef.current);
+          simTimerRef.current = null;
+        }
+      }, 60000 / wpm);
+    },
+    [dispatch, voice, wpm, words]
+  );
+
   const togglePlay = useCallback(() => {
     if (playback.playing) {
       stopSpeech();
       dispatch(pauseReader());
       return;
     }
-
     dispatch(playReader());
-    boundaryLiveRef.current = false;
-    const pitch = voice === "deep" ? 0.85 : voice === "natural" ? 1 : 1.1;
-    const rate = Math.min(1, Math.max(0.3, wpm / 400));
+    startPlaybackFrom(playback.wordIndex);
+  }, [dispatch, playback.playing, playback.wordIndex, startPlaybackFrom, stopSpeech]);
 
-    // Chunked utterances (Android caps one utterance at ~4k chars). Where
-    // the engine emits word boundaries, they drive the highlight exactly;
-    // otherwise the estimator below paces it and chunk starts resync it.
-    ttsRef.current = speakWords({
-      words,
-      startIndex: playback.wordIndex,
-      rate,
-      pitch,
-      onWord: (wordIndex) => {
-        boundaryLiveRef.current = true;
-        if (simTimerRef.current) {
-          clearInterval(simTimerRef.current);
-          simTimerRef.current = null;
-        }
-        dispatch(setReaderWord(wordIndex));
-      },
-      onChunkStart: (wordIndex) => {
-        if (!boundaryLiveRef.current) dispatch(setReaderWord(wordIndex));
-      },
-      onDone: () => dispatch(pauseReader()),
-      onError: () => dispatch(pauseReader()),
-    });
+  // Precise cursor control: jump to any word. If the voice is running it
+  // restarts seamlessly from the new position.
+  const seekTo = useCallback(
+    (index) => {
+      const clamped = Math.max(0, Math.min(Math.max(0, words.length - 1), index));
+      const wasPlaying = appStore.getState().reader.playing;
+      stopSpeech();
+      dispatch(setReaderWord(clamped));
+      if (wasPlaying) startPlaybackFrom(clamped);
+    },
+    [words.length, stopSpeech, dispatch, startPlaybackFrom]
+  );
 
-    simTimerRef.current = setInterval(() => {
-      if (!boundaryLiveRef.current) {
-        dispatch(advanceReader());
+  // Skip back/forward one paragraph (back first jumps to the top of the
+  // current paragraph, like a music player restarts the current track).
+  const skipParagraph = useCallback(
+    (dir) => {
+      const idx = appStore.getState().reader.wordIndex;
+      const ri = ranges.findIndex((r) => idx >= r.start && idx < r.end);
+      if (ri < 0) return;
+      if (dir < 0) {
+        const intoParagraph = idx - ranges[ri].start;
+        seekTo(intoParagraph > 5 ? ranges[ri].start : ranges[ri - 1]?.start ?? 0);
+      } else if (ranges[ri + 1]) {
+        seekTo(ranges[ri + 1].start);
       }
-      if (!appStore.getState().reader.playing && simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-        simTimerRef.current = null;
+    },
+    [ranges, seekTo]
+  );
+
+  const onWordPress = useCallback((globalIndex) => seekTo(globalIndex), [seekTo]);
+
+  // Speed/voice changes now apply mid-playback: debounce (the slider fires
+  // continuously), then restart the engine from the current word.
+  useEffect(() => {
+    if (!appStore.getState().reader.playing) return undefined;
+    if (settingsRestartRef.current) clearTimeout(settingsRestartRef.current);
+    settingsRestartRef.current = setTimeout(() => {
+      if (appStore.getState().reader.playing) {
+        stopSpeech();
+        startPlaybackFrom(appStore.getState().reader.wordIndex);
       }
-    }, 60000 / wpm);
-  }, [dispatch, playback.playing, playback.wordIndex, voice, wpm, words, stopSpeech]);
+    }, 600);
+    return () => {
+      if (settingsRestartRef.current) clearTimeout(settingsRestartRef.current);
+    };
+  }, [wpm, voice, stopSpeech, startPlaybackFrom]);
 
   const progress =
     playback.totalWords === 0 ? 0 : playback.wordIndex / playback.totalWords;
@@ -300,9 +362,15 @@ export function ReaderScreen() {
         onBack={() => navigation.navigate("Library")}
         onOpenGraph={() => setCitationOpen(true)}
         onOpenStudy={document ? () => setStudyOpen(true) : null}
+        viewMode={viewMode}
+        onToggleView={
+          document && document.type === "pdf" && document.pageCount > 0 && !USE_MOCK
+            ? () => setViewMode((m) => (m === "text" ? "pages" : "text"))
+            : null
+        }
       />
 
-      {sections.length > 1 ? (
+      {viewMode === "text" && sections.length > 1 ? (
         <PartNav
           index={activeSection}
           total={sections.length}
@@ -321,34 +389,45 @@ export function ReaderScreen() {
         />
       ) : null}
 
-      <View style={{ flex: 1, flexDirection: "row" }}>
-        {readerLayout !== "paginated" ? (
-          <Minimap sections={activeDocument.sections || []} progress={progress} />
-        ) : null}
-        <ReaderBody
-          document={activeDocument}
-          visibleSections={visibleSections}
-          sectionKey={activeSection}
-          currentWordIndex={playback.wordIndex}
-          ranges={ranges}
-          chat={chat}
-          askingId={askingId}
-          emptyNotice={emptyNotice}
-          onRetryText={textError ? retryTextFetch : null}
-          layout={readerLayout}
-          readerFontFamily={readerFontFamily}
-          readerFontSize={readerFontSize}
-          readerLineHeight={readerLineHeight}
-          readerExtraLetterSpacing={readerExtraLetterSpacing}
-          onAsk={askAboutParagraph}
+      {viewMode === "pages" ? (
+        <PdfPagesView
+          documentId={activeDocument.id}
+          pageCount={activeDocument.pageCount}
         />
-      </View>
+      ) : (
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          {readerLayout !== "paginated" ? (
+            <Minimap sections={activeDocument.sections || []} progress={progress} />
+          ) : null}
+          <ReaderBody
+            document={activeDocument}
+            visibleSections={visibleSections}
+            sectionKey={activeSection}
+            currentWordIndex={playback.wordIndex}
+            ranges={ranges}
+            chat={chat}
+            askingId={askingId}
+            emptyNotice={emptyNotice}
+            onRetryText={textError ? retryTextFetch : null}
+            layout={readerLayout}
+            readerFontFamily={readerFontFamily}
+            readerFontSize={readerFontSize}
+            readerLineHeight={readerLineHeight}
+            readerExtraLetterSpacing={readerExtraLetterSpacing}
+            onAsk={askAboutParagraph}
+            onWordPress={onWordPress}
+          />
+        </View>
+      )}
 
+      {viewMode === "pages" ? null : (
       <PlaybackBar
         playing={playback.playing}
         wpm={wpm}
         voice={voice}
         onPlay={togglePlay}
+        onPrev={() => skipParagraph(-1)}
+        onNext={() => skipParagraph(1)}
         onWpm={(value) => dispatch(setWpm(value))}
         onVoice={(value) => dispatch(setVoice(value))}
         onAsk={() => {
@@ -362,6 +441,7 @@ export function ReaderScreen() {
           );
         }}
       />
+      )}
 
       <CitationGraphDialog
         visible={citationOpen}
@@ -375,6 +455,56 @@ export function ReaderScreen() {
         documentTitle={activeDocument.title}
       />
     </View>
+  );
+}
+
+// "Original pages" view — the actual PDF pages rendered server-side
+// (GET /documents/:id/page/:n). Equations, figures, and layout appear
+// exactly as printed; lazily loads pages as you scroll.
+function PdfPagesView({ documentId, pageCount }) {
+  const palette = usePalette();
+  const { width } = useWindowDimensions();
+  const pageWidth = Math.min(width - 16, 900);
+  const pageHeight = Math.round(pageWidth * 1.35);
+  const pages = useMemo(
+    () => Array.from({ length: pageCount }, (_, i) => i + 1),
+    [pageCount]
+  );
+
+  return (
+    <FlatList
+      data={pages}
+      keyExtractor={(n) => String(n)}
+      initialNumToRender={2}
+      maxToRenderPerBatch={3}
+      windowSize={5}
+      contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
+      renderItem={({ item: n }) => (
+        <View style={{ marginTop: 8, alignItems: "center" }}>
+          <Image
+            source={{ uri: documentPageUrl(documentId, n) }}
+            style={{
+              width: pageWidth,
+              height: pageHeight,
+              backgroundColor: "#FFFFFF",
+              borderRadius: 4,
+            }}
+            resizeMode="contain"
+            accessibilityLabel={`Page ${n}`}
+          />
+          <Text
+            style={{
+              color: palette.onSurfaceVariant,
+              fontFamily: "JetBrainsMono_400Regular",
+              fontSize: 10,
+              marginTop: 4,
+            }}
+          >
+            {n} / {pageCount}
+          </Text>
+        </View>
+      )}
+    />
   );
 }
 
@@ -422,7 +552,7 @@ function PartNav({ index, total, onChange }) {
   );
 }
 
-function ReaderHeader({ document, onBack, onOpenGraph, onOpenStudy }) {
+function ReaderHeader({ document, onBack, onOpenGraph, onOpenStudy, viewMode, onToggleView }) {
   const palette = usePalette();
 
   return (
@@ -472,6 +602,23 @@ function ReaderHeader({ document, onBack, onOpenGraph, onOpenStudy }) {
           {document.title}
         </Text>
       </View>
+      {onToggleView ? (
+        <Pressable
+          onPress={onToggleView}
+          style={{ padding: 8 }}
+          accessibilityLabel={
+            viewMode === "text"
+              ? "Show original pages (equations and figures as printed)"
+              : "Show text reader"
+          }
+        >
+          <MaterialIcons
+            name={viewMode === "text" ? "auto-stories" : "subject"}
+            size={20}
+            color={viewMode === "pages" ? palette.accent : palette.onSurfaceVariant}
+          />
+        </Pressable>
+      ) : null}
       {onOpenStudy ? (
         <Pressable
           onPress={onOpenStudy}
@@ -541,6 +688,7 @@ function ReaderBody({
   readerLineHeight,
   readerExtraLetterSpacing,
   onAsk,
+  onWordPress,
 }) {
   const palette = usePalette();
   const scrollRef = useRef(null);
@@ -663,6 +811,7 @@ function ReaderBody({
                       fontSize={readerFontSize}
                       lineHeight={readerFontSize * readerLineHeight}
                       letterSpacing={readerExtraLetterSpacing ? 0.6 : 0}
+                      onWordPress={onWordPress}
                     />
                   </Pressable>
                   {layout === "split"
@@ -692,7 +841,8 @@ function paragraphHighlightEqual(prev, next) {
     prev.fontFamily !== next.fontFamily ||
     prev.fontSize !== next.fontSize ||
     prev.lineHeight !== next.lineHeight ||
-    prev.letterSpacing !== next.letterSpacing
+    prev.letterSpacing !== next.letterSpacing ||
+    prev.onWordPress !== next.onWordPress
   ) {
     return false;
   }
@@ -712,6 +862,7 @@ const ParagraphText = memo(function ParagraphText({
   fontSize,
   lineHeight,
   letterSpacing,
+  onWordPress,
 }) {
   const palette = usePalette();
   const words = text.split(/\s+/);
@@ -734,6 +885,7 @@ const ParagraphText = memo(function ParagraphText({
         return (
           <Text
             key={`${word}-${index}`}
+            onPress={onWordPress ? () => onWordPress(globalIndex) : undefined}
             style={{
               color: isRead
                 ? withAlpha(palette.onSurfaceVariant, 0.55)
@@ -839,7 +991,7 @@ function MarginNote({ note }) {
   );
 }
 
-function PlaybackBar({ playing, wpm, voice, onPlay, onWpm, onVoice, onAsk }) {
+function PlaybackBar({ playing, wpm, voice, onPlay, onPrev, onNext, onWpm, onVoice, onAsk }) {
   const palette = usePalette();
 
   return (
@@ -854,7 +1006,8 @@ function PlaybackBar({ playing, wpm, voice, onPlay, onWpm, onVoice, onAsk }) {
       <GlassPanel radius={28} style={{ paddingHorizontal: 10, paddingVertical: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Pressable
-            accessibilityLabel="Previous"
+            onPress={onPrev}
+            accessibilityLabel="Previous paragraph"
             style={{
               width: 44,
               height: 44,
@@ -893,7 +1046,8 @@ function PlaybackBar({ playing, wpm, voice, onPlay, onWpm, onVoice, onAsk }) {
             />
           </Pressable>
           <Pressable
-            accessibilityLabel="Next"
+            onPress={onNext}
+            accessibilityLabel="Next paragraph"
             style={{
               width: 44,
               height: 44,

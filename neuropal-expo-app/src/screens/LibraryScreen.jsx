@@ -4,15 +4,23 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  Modal,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
 import Toast from "react-native-toast-message";
 
-import { describeNetworkError, uploadDocument, USE_MOCK } from "../services/network";
+import {
+  deleteDocument,
+  describeNetworkError,
+  renameDocument,
+  uploadDocument,
+  USE_MOCK,
+} from "../services/network";
 import { apiConfigured } from "../store/ApiLink";
 import { useApiRequest } from "../store/ApiRequest";
 import { selectDocuments } from "../store/selectors";
@@ -67,6 +75,7 @@ export function LibraryScreen() {
   const { fetchData } = useApiRequest();
   const documents = useSelector(selectDocuments);
   const [activeFilter, setActiveFilter] = useState(0);
+  const [actionDoc, setActionDoc] = useState(null); // long-pressed card → rename/delete sheet
   const [connectionError, setConnectionError] = useState(
     !apiConfigured && !USE_MOCK
       ? "No backend configured — set EXPO_PUBLIC_API_BASE_URL in .env and restart expo start."
@@ -115,16 +124,29 @@ export function LibraryScreen() {
   }, [hasProcessing, refresh]);
 
   async function pickDocument() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        "application/pdf",
-        "application/epub+zip",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "text/plain",
-      ],
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
+    let result;
+    try {
+      result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/epub+zip",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "text/plain",
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+    } catch (error) {
+      // Some Android storage providers throw instead of returning a
+      // cancel — surface it instead of dying with an unhandled rejection.
+      Toast.show({
+        type: "error",
+        text1: "File picker failed",
+        text2: error?.message || "Unknown picker error",
+        visibilityTime: 8000,
+      });
+      return;
+    }
 
     if (result.canceled) {
       return;
@@ -310,6 +332,7 @@ export function LibraryScreen() {
               <DocCard
                 document={document}
                 onPress={() => navigation.navigate("Reader", { id: document.id })}
+                onLongPress={() => setActionDoc(document)}
               />
             </View>
           ))}
@@ -323,6 +346,15 @@ export function LibraryScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <DocActionsSheet
+        document={actionDoc}
+        onClose={() => setActionDoc(null)}
+        onChanged={() => {
+          setActionDoc(null);
+          refresh();
+        }}
+      />
 
       <Pressable
         onPress={pickDocument}
@@ -350,7 +382,179 @@ export function LibraryScreen() {
   );
 }
 
-function DocCard({ document, onPress }) {
+// Long-press sheet: rename or delete a library document.
+function DocActionsSheet({ document, onClose, onChanged }) {
+  const palette = usePalette();
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    setTitle(document?.title || "");
+    setConfirmingDelete(false);
+    setBusy(false);
+  }, [document]);
+
+  if (!document) return null;
+
+  async function saveRename() {
+    const next = title.trim();
+    if (!next || next === document.title || busy) return;
+    setBusy(true);
+    try {
+      await renameDocument(document.id, next);
+      Toast.show({ type: "success", text1: "Renamed", text2: next });
+      onChanged();
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Rename failed", text2: error?.message });
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (busy) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await deleteDocument(document.id);
+      Toast.show({ type: "success", text1: "Deleted", text2: document.title });
+      onChanged();
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Delete failed", text2: error?.message });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: withAlpha("#000000", 0.6),
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+        }}
+      >
+        <Pressable
+          onPress={() => {}}
+          style={{
+            width: "100%",
+            maxWidth: 420,
+            borderRadius: 20,
+            backgroundColor: palette.surfaceContainer,
+            padding: 20,
+          }}
+        >
+          <Text
+            numberOfLines={2}
+            style={{
+              color: palette.onSurface,
+              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontSize: 17,
+            }}
+          >
+            {document.title}
+          </Text>
+
+          <Text
+            style={{
+              color: palette.onSurfaceVariant,
+              fontFamily: "Inter_500Medium",
+              fontSize: 11,
+              letterSpacing: 1.2,
+              marginTop: 16,
+            }}
+          >
+            RENAME
+          </Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            editable={!busy}
+            placeholder="Document title"
+            placeholderTextColor={palette.onSurfaceVariant}
+            style={{
+              marginTop: 8,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderRadius: 12,
+              backgroundColor: palette.surfaceHigh,
+              color: palette.onSurface,
+              fontFamily: "Inter_400Regular",
+              fontSize: 15,
+            }}
+          />
+
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+            <Pressable
+              onPress={saveRename}
+              disabled={busy || !title.trim() || title.trim() === document.title}
+              accessibilityRole="button"
+              accessibilityLabel="Save new title"
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                backgroundColor: withAlpha(palette.accent, 0.16),
+                borderWidth: 1,
+                borderColor: withAlpha(palette.accent, 0.45),
+                opacity: busy || !title.trim() || title.trim() === document.title ? 0.4 : 1,
+              }}
+            >
+              <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                Save name
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={confirmDelete}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel={confirmingDelete ? "Confirm delete" : "Delete document"}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                backgroundColor: withAlpha(palette.error, confirmingDelete ? 0.3 : 0.12),
+                borderWidth: 1,
+                borderColor: withAlpha(palette.error, 0.45),
+                opacity: busy ? 0.4 : 1,
+              }}
+            >
+              <Text style={{ color: palette.error, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                {confirmingDelete ? "Tap again to delete" : "Delete"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+            style={{ marginTop: 14, alignItems: "center", paddingVertical: 8 }}
+          >
+            <Text
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "Inter_500Medium",
+                fontSize: 13,
+              }}
+            >
+              Cancel
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function DocCard({ document, onPress, onLongPress }) {
   const palette = usePalette();
   const typeTint =
     document.type === "pdf"
@@ -375,6 +579,8 @@ function DocCard({ document, onPress }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityHint="Long-press to rename or delete"
       style={{
         padding: 16,
         borderRadius: 22,

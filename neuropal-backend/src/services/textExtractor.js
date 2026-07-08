@@ -27,9 +27,37 @@ async function extractText(filePath, docType, opts = {}) {
         // Lazy-require so the heavy native-bindings load happens only when
         // someone actually uploads a PDF (keeps server boot fast).
         const pdfParse = require('pdf-parse');
-        const data = await pdfParse(buf);
-        const text = data.text || '';
-        const pageCount = data.numpages || 0;
+
+        // Collect per-page text (same line-building logic as pdf-parse's
+        // default renderer) so the cleanup pass can see page structure.
+        const pages = [];
+        const data = await pdfParse(buf, {
+            pagerender: (pageData) =>
+                pageData.getTextContent().then((tc) => {
+                    let lastY;
+                    let pageText = '';
+                    for (const item of tc.items) {
+                        if (lastY === item.transform[5] || lastY === undefined) {
+                            pageText += item.str;
+                        } else {
+                            pageText += `\n${item.str}`;
+                        }
+                        lastY = item.transform[5];
+                    }
+                    pages.push(pageText);
+                    return pageText;
+                }),
+        });
+
+        let text;
+        try {
+            text = pages.length > 0 ? cleanPdfPages(pages) : data.text || '';
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[extractor] pdf cleanup failed, using raw text:', e.message || e);
+            text = data.text || '';
+        }
+        const pageCount = data.numpages || pages.length || 0;
 
         const density = text.trim().length / Math.max(1, pageCount);
         if (density >= SCANNED_PDF_CHARS_PER_PAGE || !opts.allowOcr) {
@@ -91,6 +119,114 @@ async function extractText(filePath, docType, opts = {}) {
         pageCount: Math.max(1, Math.ceil(text.length / 3000)),
         wordCount: countWords(text),
     };
+}
+
+// ---- PDF text cleanup --------------------------------------------------------
+//
+// Raw PDF text extraction interleaves page furniture into the prose — the
+// running header ("CHAPTER 3  THE HARMONIC OSCILLATOR"), the footer, and
+// the page number land mid-sentence on every page boundary, and TTS reads
+// them aloud. This pass:
+//   1. drops running headers/footers (normalized lines that repeat at the
+//      top/bottom of ≥30% of pages) and standalone page numbers
+//   2. repairs end-of-line hyphenation ("electro-\nmagnetic")
+//   3. reflows hard-wrapped lines into paragraphs (blank line, sentence
+//      end + capital start, or a heading-like line breaks a paragraph)
+
+const FURNITURE_MIN_PAGES = 8;
+const FURNITURE_RATIO = 0.3;
+const EDGE_LINES = 2; // how many lines at each page edge are furniture candidates
+
+function cleanPdfPages(pages) {
+    const pageLines = pages.map((p) =>
+        p.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()),
+    );
+
+    // 1) find repeated page-edge lines (digits collapsed so "Chapter 3 · 87"
+    // and "Chapter 3 · 88" count as the same running head)
+    const freq = new Map();
+    const normalize = (l) => l.toLowerCase().replace(/\d+/g, '#').trim();
+    if (pageLines.length >= FURNITURE_MIN_PAGES) {
+        for (const lines of pageLines) {
+            const nonEmpty = lines.filter(Boolean);
+            const edges = [
+                ...nonEmpty.slice(0, EDGE_LINES),
+                ...nonEmpty.slice(-EDGE_LINES),
+            ];
+            for (const edge of new Set(edges.map(normalize))) {
+                if (!edge || edge.length > 80) continue;
+                freq.set(edge, (freq.get(edge) || 0) + 1);
+            }
+        }
+    }
+    const furniture = new Set(
+        [...freq.entries()]
+            .filter(([, n]) => n >= Math.max(3, pageLines.length * FURNITURE_RATIO))
+            .map(([l]) => l),
+    );
+    const isPageNumber = (l) => /^(\d{1,4}|[ivxlcdm]{1,7})$/i.test(l);
+
+    const allLines = [];
+    for (const lines of pageLines) {
+        const nonEmptyIdx = lines
+            .map((l, i) => (l ? i : -1))
+            .filter((i) => i >= 0);
+        const edgeSet = new Set([
+            ...nonEmptyIdx.slice(0, EDGE_LINES),
+            ...nonEmptyIdx.slice(-EDGE_LINES),
+        ]);
+        lines.forEach((line, i) => {
+            if (!line) {
+                allLines.push('');
+                return;
+            }
+            if (edgeSet.has(i) && (furniture.has(normalize(line)) || isPageNumber(line))) {
+                return; // page furniture — drop
+            }
+            allLines.push(line);
+        });
+        allLines.push(''); // page boundary is a soft paragraph hint
+    }
+
+    // 2+3) de-hyphenate and reflow into paragraphs
+    const paragraphs = [];
+    let current = '';
+    const flush = () => {
+        const p = current.trim();
+        if (p) paragraphs.push(p);
+        current = '';
+    };
+    const isHeading = (l) =>
+        l.length <= 60 &&
+        !/[.!?,;:]$/.test(l) &&
+        (/^(chapter|part|section|appendix)\b/i.test(l) ||
+            /^\d+(\.\d+)*\s+\S/.test(l) ||
+            (/^[A-Z]/.test(l) && l === l.toUpperCase() && /[A-Z]{3}/.test(l)));
+
+    for (const line of allLines) {
+        if (!line) {
+            // blank: only break if the current buffer looks sentence-complete —
+            // page boundaries often split mid-sentence
+            if (current && /[.!?:"'’”)\]]$/.test(current.trim())) flush();
+            continue;
+        }
+        if (isHeading(line)) {
+            flush();
+            paragraphs.push(line);
+            continue;
+        }
+        if (current.endsWith('-') && /^[a-z]/.test(line)) {
+            current = current.slice(0, -1) + line; // re-join hyphenated word
+        } else {
+            current = current ? `${current} ${line}` : line;
+        }
+        if (/[.!?]["'’”)\]]?$/.test(line) && line.length > 35) {
+            flush();
+        }
+    }
+    flush();
+
+    return paragraphs.join('\n\n');
 }
 
 // ---- EPUB ------------------------------------------------------------------

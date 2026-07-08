@@ -190,6 +190,90 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// PATCH /api/documents/:id
+// body: { title?, subtitle? } — rename from the library UI.
+// ---------------------------------------------------------------------------
+router.patch(
+    '/:id',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        });
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+
+        const { title, subtitle } = req.body || {};
+        if (typeof title === 'string' && title.trim()) {
+            doc.title = title.trim().slice(0, 500);
+        }
+        if (typeof subtitle === 'string') {
+            doc.subtitle = subtitle.trim().slice(0, 500) || undefined;
+        }
+        await doc.save();
+        res.json(doc);
+    }),
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/documents/:id/page/:n
+// Renders page N of a PDF to a JPEG (pdftoppm), cached on disk. Powers the
+// reader's "Original pages" view — true visual fidelity incl. equations.
+// ---------------------------------------------------------------------------
+const PAGE_RENDER_DPI = 150;
+
+router.get(
+    '/:id/page/:n',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        }).lean();
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+        if (doc.type !== 'pdf') {
+            return res
+                .status(400)
+                .json({ error: 'page rendering is only available for PDF documents' });
+        }
+        const n = parseInt(req.params.n, 10);
+        if (!Number.isInteger(n) || n < 1 || (doc.pageCount && n > doc.pageCount)) {
+            return res.status(400).json({ error: 'invalid page number' });
+        }
+
+        const cacheDir = path.resolve(STORAGE_ROOT, 'pages', String(doc._id));
+        const cached = path.join(cacheDir, `${n}.jpg`);
+        try {
+            await fs.access(cached);
+        } catch (e) {
+            // Render on demand. pdftoppm writes <prefix>-<n>.jpg (padded);
+            // render into a temp prefix then normalize the name.
+            const absPdf = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+            await fs.mkdir(cacheDir, { recursive: true });
+            const { execFile } = require('child_process');
+            const { promisify } = require('util');
+            const prefix = path.join(cacheDir, `render-${n}`);
+            await promisify(execFile)(
+                '/opt/homebrew/bin/pdftoppm',
+                ['-f', String(n), '-l', String(n), '-r', String(PAGE_RENDER_DPI), '-jpeg', '-jpegopt', 'quality=80', absPdf, prefix],
+                { timeout: 60000 },
+            );
+            const made = (await fs.readdir(cacheDir)).find(
+                (f) => f.startsWith(`render-${n}-`) && f.endsWith('.jpg'),
+            );
+            if (!made) return res.status(500).json({ error: 'page render failed' });
+            await fs.rename(path.join(cacheDir, made), cached);
+        }
+
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.sendFile(cached);
+    }),
+);
+
+// ---------------------------------------------------------------------------
 // PATCH /api/documents/:id/progress
 // body: { progress, lastWordIndex, lastPage, timeSpentSec }
 // Throttled heartbeat from the reader. Upserts a ReadingSession.

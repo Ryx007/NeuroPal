@@ -23,6 +23,54 @@ const STORAGE_KEYS = {
   reader: "np.reader.v2",
 };
 
+const CRASH_KEY = "np.lastCrash";
+
+// Lightweight crash recorder: fatal JS errors are persisted before the app
+// dies, so the next launch can say WHAT crashed instead of leaving the user
+// with a silent restart. (Native-level crashes bypass JS and won't appear.)
+if (typeof ErrorUtils !== "undefined" && ErrorUtils.getGlobalHandler) {
+  const previousHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    try {
+      if (isFatal) {
+        AsyncStorage.setItem(
+          CRASH_KEY,
+          JSON.stringify({
+            message: String(error?.message || error).slice(0, 500),
+            stack: String(error?.stack || "").slice(0, 2000),
+            at: new Date().toISOString(),
+          })
+        );
+      }
+    } catch (e) {
+      // never let the recorder itself throw
+    }
+    if (previousHandler) previousHandler(error, isFatal);
+  });
+}
+
+async function reportLastCrash() {
+  try {
+    const raw = await AsyncStorage.getItem(CRASH_KEY);
+    if (!raw) return;
+    await AsyncStorage.removeItem(CRASH_KEY);
+    const crash = JSON.parse(raw);
+    // eslint-disable-next-line no-console
+    console.warn("[crash] previous session died:", crash.message, crash.at);
+    const Toast = require("react-native-toast-message").default;
+    setTimeout(() => {
+      Toast.show({
+        type: "error",
+        text1: "The app crashed last time",
+        text2: crash.message,
+        visibilityTime: 8000,
+      });
+    }, 2000);
+  } catch (e) {
+    // best effort only
+  }
+}
+
 function getPersistedSlices(state) {
   return {
     [STORAGE_KEYS.ui]: JSON.stringify({
@@ -106,6 +154,7 @@ export function AppProviders({ children }) {
     }
 
     bootstrap();
+    reportLastCrash();
 
     return () => {
       active = false;
