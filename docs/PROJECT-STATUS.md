@@ -7,10 +7,13 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-07-08 (Mac Mini session — EPUB extraction, inbox drop-folder,
-ingest progress, Phase 4 study endpoints + StudySheet UI, chunked TTS with
-boundary karaoke, big-book reader windowing, web upload; local release-APK
-pipeline stood up. See `docs/BRAIN.md` — the extended continuation doc.)_
+_Last updated: 2026-07-08 (Mac Mini session, continued — reader overhaul
+(original-pages view, clean extraction, chapters, tap-to-seek), library
+rename/delete, OCR for scanned books, Drive library preload, frosted-glass
+panels, theme-wide accents, pomodoro + reminders (expo-notifications),
+flashcards (schema-structured), S-pen handwritten notes tab, physics
+visualizer tab (5 offline canvas templates incl. Bloch sphere). App is now
+7 tabs. See `docs/BRAIN.md`.)_
 
 ---
 

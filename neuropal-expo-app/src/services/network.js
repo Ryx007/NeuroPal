@@ -244,6 +244,31 @@ export async function uploadDocument(asset) {
   }
 }
 
+// POST /api/documents/:id/flashcards → { cards: [{front, back}], ... }
+export async function requestFlashcards(documentId, count = 15) {
+  if (USE_MOCK) {
+    return {
+      cards: [
+        { front: "[MOCK] What is mock mode?", back: "Bundled fake data — no backend involved." },
+      ],
+    };
+  }
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post(
+      `documents/${documentId}/flashcards`,
+      { count },
+      { timeout: 300000 }
+    );
+    if (!Array.isArray(data?.cards) || data.cards.length === 0) {
+      throw new Error("Backend returned no flashcards.");
+    }
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
 // PATCH /api/documents/:id — rename from the library.
 export async function renameDocument(documentId, title) {
   assertConfigured();

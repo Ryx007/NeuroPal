@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -8,8 +8,10 @@ import {
   Text,
   View,
 } from "react-native";
+import { useDispatch, useSelector } from "react-redux";
 
-import { requestStudyMaterial } from "../services/network";
+import { requestFlashcards, requestStudyMaterial } from "../services/network";
+import { setDeck } from "../store/slices/flashcardsSlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "./primitives";
 
@@ -18,14 +20,179 @@ import { withAlpha } from "./primitives";
 // as Markdown text and are rendered as selectable plain text — readable,
 // copyable, zero new dependencies.
 
+// Active-recall deck: tap to flip, "Again" requeues the card at the end,
+// "Got it" retires it. Session state is local; the deck itself persists.
+function FlashcardsDeck({ cards }) {
+  const palette = usePalette();
+  const [queue, setQueue] = useState(() => cards.map((_, i) => i));
+  const [flipped, setFlipped] = useState(false);
+  const [learned, setLearned] = useState(0);
+
+  useEffect(() => {
+    setQueue(cards.map((_, i) => i));
+    setFlipped(false);
+    setLearned(0);
+  }, [cards]);
+
+  const shuffled = useMemo(() => cards, [cards]);
+  const currentIdx = queue[0];
+  const card = currentIdx !== undefined ? shuffled[currentIdx] : null;
+
+  function answer(gotIt) {
+    setFlipped(false);
+    setQueue((q) => {
+      const [head, ...rest] = q;
+      return gotIt ? rest : [...rest, head];
+    });
+    if (gotIt) setLearned((n) => n + 1);
+  }
+
+  if (!card) {
+    return (
+      <View style={{ alignItems: "center", paddingVertical: 24, gap: 12 }}>
+        <MaterialIcons name="emoji-events" size={36} color={palette.accent} />
+        <Text
+          style={{
+            color: palette.onSurface,
+            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontSize: 16,
+          }}
+        >
+          Deck complete — {learned}/{cards.length} recalled
+        </Text>
+        <Pressable
+          onPress={() => {
+            setQueue(cards.map((_, i) => i).sort(() => Math.random() - 0.5));
+            setLearned(0);
+            setFlipped(false);
+          }}
+          accessibilityRole="button"
+          style={{
+            paddingHorizontal: 18,
+            paddingVertical: 10,
+            borderRadius: 12,
+            backgroundColor: withAlpha(palette.accent, 0.14),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+          }}
+        >
+          <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>
+            Shuffle & restart
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Text
+        style={{
+          color: palette.onSurfaceVariant,
+          fontFamily: "JetBrainsMono_400Regular",
+          fontSize: 11,
+          textAlign: "center",
+        }}
+      >
+        {learned} recalled · {queue.length} to go
+      </Text>
+
+      <Pressable
+        onPress={() => setFlipped((f) => !f)}
+        accessibilityRole="button"
+        accessibilityLabel={flipped ? "Show question" : "Reveal answer"}
+        style={{
+          marginTop: 10,
+          minHeight: 180,
+          borderRadius: 18,
+          padding: 20,
+          justifyContent: "center",
+          backgroundColor: flipped
+            ? withAlpha(palette.accent, 0.08)
+            : palette.surfaceHigh,
+          borderWidth: 1,
+          borderColor: flipped ? withAlpha(palette.accent, 0.35) : "transparent",
+        }}
+      >
+        <Text
+          style={{
+            color: palette.onSurfaceVariant,
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 10,
+            letterSpacing: 1.6,
+            marginBottom: 10,
+          }}
+        >
+          {flipped ? "ANSWER" : "QUESTION — tap to reveal"}
+        </Text>
+        <Text
+          selectable
+          style={{
+            color: palette.onSurface,
+            fontFamily: "Inter_400Regular",
+            fontSize: 16,
+            lineHeight: 24,
+          }}
+        >
+          {flipped ? card.back : card.front}
+        </Text>
+      </Pressable>
+
+      {flipped ? (
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+          <Pressable
+            onPress={() => answer(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Again — show this card later"
+            style={{
+              flex: 1,
+              paddingVertical: 14,
+              borderRadius: 14,
+              alignItems: "center",
+              backgroundColor: withAlpha(palette.warn, 0.14),
+              borderWidth: 1,
+              borderColor: withAlpha(palette.warn, 0.4),
+            }}
+          >
+            <Text style={{ color: palette.warn, fontFamily: "Inter_600SemiBold" }}>
+              Again
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => answer(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Got it — retire this card"
+            style={{
+              flex: 1,
+              paddingVertical: 14,
+              borderRadius: 14,
+              alignItems: "center",
+              backgroundColor: withAlpha(palette.accent, 0.16),
+              borderWidth: 1,
+              borderColor: withAlpha(palette.accent, 0.45),
+            }}
+          >
+            <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>
+              Got it
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const ACTIONS = [
   { kind: "summarize", label: "Summary", icon: "subject", opts: { depth: "intuitive" } },
   { kind: "quiz", label: "Quiz", icon: "quiz", opts: { count: 10 } },
   { kind: "cheatsheet", label: "Cheatsheet", icon: "sticky-note-2", opts: {} },
+  { kind: "flashcards", label: "Cards", icon: "style", opts: { count: 15 } },
 ];
 
 export function StudySheet({ visible, onClose, documentId, documentTitle }) {
   const palette = usePalette();
+  const dispatch = useDispatch();
+  const savedDeck = useSelector((s) => s.flashcards.byDoc[documentId]);
   const [active, setActive] = useState(null); // kind currently shown
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -45,6 +212,21 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
     if (loading) return; // one multi-minute LLM job at a time
     setActive(action.kind);
     setError(null);
+    if (action.kind === "flashcards") {
+      // Persisted deck (survives restarts) unless the user forces a redo.
+      if (!force && (results.flashcards || savedDeck?.cards?.length)) return;
+      setLoading(true);
+      try {
+        const res = await requestFlashcards(documentId, action.opts.count);
+        setResults((prev) => ({ ...prev, flashcards: res }));
+        dispatch(setDeck({ docId: documentId, cards: res.cards }));
+      } catch (err) {
+        setError(err?.message || "Generation failed.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     if (!force && results[action.kind]) return;
     setLoading(true);
     try {
@@ -59,6 +241,10 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
 
   if (!visible) return null;
   const current = active ? results[active] : null;
+  const deckCards =
+    active === "flashcards"
+      ? results.flashcards?.cards || savedDeck?.cards || null
+      : null;
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -199,6 +385,8 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                   </Text>
                 </Pressable>
               </View>
+            ) : deckCards ? (
+              <FlashcardsDeck cards={deckCards} />
             ) : current ? (
               <Text
                 selectable
@@ -213,7 +401,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
               </Text>
             ) : null}
 
-            {current && !loading && !error ? (
+            {(current || deckCards) && !loading && !error ? (
               <Pressable
                 onPress={() => generate(ACTIONS.find((a) => a.kind === active), true)}
                 accessibilityRole="button"

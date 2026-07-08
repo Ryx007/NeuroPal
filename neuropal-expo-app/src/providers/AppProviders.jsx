@@ -9,11 +9,13 @@ import {
   serializeDocuments,
   serializeMessages,
 } from "../store/serializers";
+import { hydrateFlashcards } from "../store/slices/flashcardsSlice";
 import { hydrateFocus } from "../store/slices/focusSlice";
 import { hydrateHome } from "../store/slices/homeSlice";
 import { hydrateLibrary } from "../store/slices/librarySlice";
 import { hydrateOnboarding } from "../store/slices/onboardingSlice";
 import { hydrateReader } from "../store/slices/readerSlice";
+import { hydrateNotes } from "../store/slices/notesSlice";
 import { hydrateReminders } from "../store/slices/remindersSlice";
 import { hydrateUi } from "../store/slices/uiSlice";
 
@@ -25,6 +27,8 @@ const STORAGE_KEYS = {
   reader: "np.reader.v2",
   focus: "np.focus.v1",
   reminders: "np.reminders.v1",
+  flashcards: "np.flashcards.v1",
+  notes: "np.notes.v1",
 };
 
 const CRASH_KEY = "np.lastCrash";
@@ -102,6 +106,8 @@ function getPersistedSlices(state) {
     }),
     [STORAGE_KEYS.focus]: JSON.stringify(state.focus),
     [STORAGE_KEYS.reminders]: JSON.stringify({ items: state.reminders.items }),
+    [STORAGE_KEYS.flashcards]: JSON.stringify({ byDoc: state.flashcards.byDoc }),
+    [STORAGE_KEYS.notes]: JSON.stringify({ items: state.notes.items }),
   };
 }
 
@@ -159,6 +165,16 @@ export function AppProviders({ children }) {
           appStore.dispatch(
             hydrateReminders(JSON.parse(persisted[STORAGE_KEYS.reminders]))
           );
+        }
+
+        if (persisted[STORAGE_KEYS.flashcards]) {
+          appStore.dispatch(
+            hydrateFlashcards(JSON.parse(persisted[STORAGE_KEYS.flashcards]))
+          );
+        }
+
+        if (persisted[STORAGE_KEYS.notes]) {
+          appStore.dispatch(hydrateNotes(JSON.parse(persisted[STORAGE_KEYS.notes])));
         }
       } catch {
         // Fall back to the bundled mock state if storage is unavailable.

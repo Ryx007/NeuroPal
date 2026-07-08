@@ -27,6 +27,8 @@ import { AnchorsScreen } from "../screens/AnchorsScreen";
 import { EmergencyScreen } from "../screens/EmergencyScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LibraryScreen } from "../screens/LibraryScreen";
+import { NotesScreen } from "../screens/NotesScreen";
+import { VisualizerScreen } from "../screens/VisualizerScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReaderScreen } from "../screens/ReaderScreen";
@@ -38,6 +40,8 @@ const TAB_CONFIG = {
   Home: { label: "Home", icon: "home" },
   Library: { label: "Library", icon: "menu-book" },
   Reader: { label: "Reader", icon: "chrome-reader-mode" },
+  Notes: { label: "Notes", icon: "gesture" },
+  Viz: { label: "Viz", icon: "insights" },
   Anchors: { label: "Anchors", icon: "anchor" },
   Profile: { label: "Profile", icon: "person" },
 };
@@ -220,6 +224,8 @@ function TabsChrome() {
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Library" component={LibraryScreen} />
         <Tab.Screen name="Reader" component={ReaderScreen} />
+        <Tab.Screen name="Notes" component={NotesScreen} />
+        <Tab.Screen name="Viz" component={VisualizerScreen} />
         <Tab.Screen name="Anchors" component={AnchorsScreen} />
         <Tab.Screen name="Profile" component={ProfileScreen} />
       </Tab.Navigator>

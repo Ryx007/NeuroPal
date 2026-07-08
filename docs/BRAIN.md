@@ -85,6 +85,9 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `POST /api/documents/:id/quiz` | `{count≤25, difficulty[,provider]}` | same envelope; answer = numbered Markdown questions with `**Answer:**` lines |
 | `POST /api/documents/:id/cheatsheet` | `{[provider]}` | same envelope |
 | `POST /api/documents/:id/explain` | `{passage, depth[,provider]}` | same envelope; retrieval-grounded on the passage |
+| `POST /api/documents/:id/flashcards` | `{count≤40[,provider]}` | `{cards:[{front,back}], …}` — schema-enforced structured output (`aiProvider.generateStructured`), NOT marker parsing (models won't hold a text format) |
+| `PATCH /api/documents/:id` | `{title?,subtitle?}` | rename (library long-press UI) |
+| `GET /api/documents/:id/page/:n` | — | rendered PDF page JPEG (reader "Original pages" view), disk-cached |
 | `GET /api/ai/provider` | — | active provider + models + localMode |
 
 Error envelope everywhere: `{error: "<message>"}`. Mapping: validation→422,

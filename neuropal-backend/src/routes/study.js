@@ -5,7 +5,7 @@ const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { getQdrant } = require('../db/qdrant');
 const { embedText, getModelName } = require('../services/embedder');
-const { generateAnswer, activeProvider } = require('../services/aiProvider');
+const { generateAnswer, generateStructured, activeProvider } = require('../services/aiProvider');
 
 // Phase 4 — exam-prep endpoints (Build Brief §4 Phase 4). All four are new
 // prompts over the existing RAG pipeline and the provider-agnostic
@@ -269,6 +269,79 @@ router.post(
             req, doc, `[cheatsheet] ${doc.title}`, result.answer, result,
         );
         respond(res, result, threadId, { chunksUsed: chunks.length });
+    }),
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/documents/:id/flashcards
+// body: { count?, provider? } → { cards: [{front, back}], ... }
+// The model emits strict "Q:/A:" line pairs inside the standard answer
+// envelope; the server parses them into structured cards.
+// ---------------------------------------------------------------------------
+router.post(
+    '/documents/:id/flashcards',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await loadDoc(req, res);
+        if (!doc) return;
+        const { count = 15, provider } = req.body || {};
+        const n = Math.max(3, Math.min(40, parseInt(count, 10) || 15));
+
+        const chunks = await sampleChunks(doc._id, budgetFor(provider));
+        const result = await generateStructured({
+            task:
+                `Create ${n} flashcards for spaced-repetition revision of this document. ` +
+                `Each card: "front" is a short prompt/question, "back" is a concise answer ` +
+                `(1-3 sentences). Cover the whole document; prefer concepts, definitions, ` +
+                `and results a student must recall in an oral exam.`,
+            contextChunks: chunks,
+            systemPrompt:
+                'You are an expert study assistant. Work STRICTLY from the provided context. ' +
+                'Respond as VALID JSON ONLY: {"cards": [{"front": "...", "back": "..."}]}',
+            provider,
+            docTitle: doc.title,
+            geminiSchema: {
+                type: 'OBJECT',
+                properties: {
+                    cards: {
+                        type: 'ARRAY',
+                        items: {
+                            type: 'OBJECT',
+                            properties: {
+                                front: { type: 'STRING' },
+                                back: { type: 'STRING' },
+                            },
+                            required: ['front', 'back'],
+                        },
+                    },
+                },
+                required: ['cards'],
+            },
+        });
+
+        const cards = (Array.isArray(result.data?.cards) ? result.data.cards : [])
+            .filter((c) => c && typeof c.front === 'string' && typeof c.back === 'string')
+            .map((c) => ({ front: c.front.trim(), back: c.back.trim() }))
+            .filter((c) => c.front && c.back);
+        if (cards.length === 0) {
+            return res.status(502).json({
+                error: 'the model did not return usable flashcards — try again',
+            });
+        }
+
+        const answerText = cards.map((c) => `Q: ${c.front}\nA: ${c.back}`).join('\n\n');
+        const threadId = await persistExchange(
+            req, doc, `[flashcards:${n}] ${doc.title}`, answerText,
+            { citations: [], model: result.model, tokens: undefined, latencyMs: undefined },
+        );
+        res.json({
+            cards,
+            count: cards.length,
+            threadId,
+            model: result.model,
+            provider: result.provider,
+            chunksUsed: chunks.length,
+        });
     }),
 );
 

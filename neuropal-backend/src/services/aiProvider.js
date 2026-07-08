@@ -130,18 +130,39 @@ const GEMINI_RESPONSE_SCHEMA = {
     required: ['answer', 'citations'],
 };
 
+// The free tier throws transient 503 "high demand" / 429 rate-limit errors
+// — retry those with backoff instead of failing a whole study request.
+async function withTransientRetry(fn, tries = 3) {
+    let lastErr;
+    for (let attempt = 0; attempt < tries; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastErr = err;
+            const status = err?.status || err?.error?.code || err?.response?.status;
+            if (status !== 503 && status !== 429) throw err;
+            // eslint-disable-next-line no-console
+            console.warn(`[ai] transient ${status}, retry ${attempt + 1}/${tries - 1}`);
+            await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+        }
+    }
+    throw lastErr;
+}
+
 async function callGemini(system, userPrompt) {
     const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const resp = await geminiClient().models.generateContent({
-        model,
-        contents: userPrompt,
-        config: {
-            systemInstruction: system,
-            responseMimeType: 'application/json',
-            responseSchema: GEMINI_RESPONSE_SCHEMA,
-            temperature: 0.2,
-        },
-    });
+    const resp = await withTransientRetry(() =>
+        geminiClient().models.generateContent({
+            model,
+            contents: userPrompt,
+            config: {
+                systemInstruction: system,
+                responseMimeType: 'application/json',
+                responseSchema: GEMINI_RESPONSE_SCHEMA,
+                temperature: 0.2,
+            },
+        }),
+    );
 
     // `.text` is the SDK's aggregated-text accessor; fall back to walking
     // candidates in case of SDK drift.
@@ -373,4 +394,60 @@ function normalise(s) {
     return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-module.exports = { generateAnswer, activeProvider, DEFAULT_SYSTEM };
+// ---------------------------------------------------------------------------
+// Structured generation — same providers, custom JSON shape. Gemini enforces
+// the schema at the API level; ollama/anthropic get JSON mode + tolerant
+// parsing. Returns { data, model, provider } where data is the parsed object
+// (callers validate the fields they need).
+// ---------------------------------------------------------------------------
+async function generateStructured({
+    task,
+    contextChunks = [],
+    systemPrompt,
+    provider,
+    docTitle = '',
+    geminiSchema,
+} = {}) {
+    const chosen = activeProvider(provider);
+    const contextBlock = buildContextBlock(contextChunks, '');
+    const userPrompt =
+        `DOCUMENT TITLE: ${docTitle}\n\n` +
+        `CONTEXT:\n${contextBlock}\n\n` +
+        `TASK:\n${String(task).trim()}`;
+
+    let raw;
+    let model;
+    if (chosen === 'gemini') {
+        model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        const resp = await withTransientRetry(() =>
+            geminiClient().models.generateContent({
+                model,
+                contents: userPrompt,
+                config: {
+                    systemInstruction: systemPrompt,
+                    responseMimeType: 'application/json',
+                    responseSchema: geminiSchema,
+                    temperature: 0.3,
+                },
+            }),
+        );
+        raw =
+            (typeof resp.text === 'string' && resp.text) ||
+            (resp.candidates?.[0]?.content?.parts || [])
+                .map((p) => p.text || '')
+                .join('') ||
+            '';
+    } else if (chosen === 'ollama') {
+        const r = await callOllama(systemPrompt, userPrompt);
+        raw = r.raw;
+        model = r.model;
+    } else {
+        const r = await callAnthropic(systemPrompt, userPrompt);
+        raw = r.raw;
+        model = r.model;
+    }
+
+    return { data: tolerantParse(raw), model, provider: chosen };
+}
+
+module.exports = { generateAnswer, generateStructured, activeProvider, DEFAULT_SYSTEM };
