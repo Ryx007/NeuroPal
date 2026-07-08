@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -30,6 +32,38 @@ function buildApp() {
     app.use('/api/documents', documentsRoutes);
     app.use('/api', queryRoutes); // owns POST /api/documents/:id/query
     app.use('/api', studyRoutes); // owns /api/documents/:id/{summarize,quiz,cheatsheet,explain}
+
+    // ---- Android APK download ------------------------------------------
+    // APK_PATH env → the sideload-able release build. The explicit MIME
+    // type matters: an APK is structurally a ZIP, and generic static
+    // servers label it application/zip — Android's browser then saves it
+    // as "<name>.apk.zip" and refuses to hand it to the installer.
+    const apkPath = process.env.APK_PATH;
+    if (apkPath) {
+        app.get('/apk', (req, res) => {
+            const abs = path.resolve(apkPath);
+            if (!fs.existsSync(abs)) {
+                return res.status(404).json({ error: 'APK not built yet' });
+            }
+            res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+            res.setHeader('Content-Disposition', 'attachment; filename="neuropal.apk"');
+            res.sendFile(abs);
+        });
+    }
+
+    // ---- Web app (static production build) ------------------------------
+    // WEB_DIST env → `npx expo export -p web` output. Served at / so ANY
+    // browser on the LAN (MacBooks, iPhones, other phones) gets the full
+    // app from http://<mini-ip>:4000/ — same always-on process as the API.
+    // Unknown non-API GETs fall back to index.html (client-side routing).
+    const webDist = process.env.WEB_DIST;
+    if (webDist && fs.existsSync(path.resolve(webDist))) {
+        const dist = path.resolve(webDist);
+        app.use(express.static(dist));
+        app.get(/^\/(?!api\/|healthz|apk).*/, (req, res) => {
+            res.sendFile(path.join(dist, 'index.html'));
+        });
+    }
 
     // 404 — anything that fell through the routers above.
     app.use((req, res) => {

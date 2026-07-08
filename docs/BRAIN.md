@@ -58,6 +58,8 @@ call (Gemini free tier) for reasoning.
 | Android SDK | `~/Library/Android/sdk` (platform 36.1, build-tools 36.1/37, NDK 30, licenses accepted). Not on PATH — builds only need `ANDROID_HOME`. |
 | GitHub | `gh` CLI authenticated as Ryx007; **git pushes over HTTPS via `gh auth setup-git`** (the SSH key exists but is passphrase-locked, useless non-interactively). |
 | Inbox folder | `/Users/ryx/NeuroPal-Inbox` (env `INBOX_DIR`) |
+| Router / MAC | Gateway `192.168.3.1`; Mini WiFi MAC `1c:f6:4c:3d:e9:3b` (for the DHCP reservation) |
+| Serving | `http://<mini>:4000/` = web app (WEB_DIST), `/apk` = Android installer (APK_PATH), `/api/*` = API — one pm2 process |
 
 ## 4. Backend API contract (all under `/api`, port 4000)
 
@@ -171,12 +173,22 @@ npx expo prebuild --platform android --clean       # regenerates android/ (gitig
 cd android && export JAVA_HOME=$(/usr/libexec/java_home) ANDROID_HOME=~/Library/Android/sdk
 ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
-# Publish to the phone (persistent, pm2-served):
+# Publish to the phone: just replace the file the backend serves —
 cp app/build/outputs/apk/release/app-release.apk ~/NeuroPal-APK/neuropal.apk
-# (`pm2 serve /Users/ryx/NeuroPal-APK 8888 --name neuropal-apk` is already
-#  registered + saved; just replacing the file is enough.)
-# On the S24 browser:  http://192.168.3.169:8888/neuropal.apk → install (allow unknown sources)
+# On the phone's browser:  http://192.168.3.169:4000/apk  → install
+# (the backend's GET /apk sets the Android package MIME type — a generic
+#  static server labels APKs as zip and the phone saves "neuropal.apk.zip")
 ```
+
+### Publish the web app (any browser on the LAN)
+```bash
+cd neuropal-expo-app && npx expo export -p web        # → dist/
+pm2 restart neuropal-api                               # backend serves it
+# App URL from ANY device on the WiFi:  http://192.168.3.169:4000/
+```
+The backend serves `WEB_DIST` (env → the dist/ folder) at `/` with an SPA
+fallback, and `APK_PATH` at `/apk`. Re-export + restart after frontend
+changes you want in browsers; rebuild the APK for the phone separately.
 Hard-won build facts:
 - RN Gradle wants a **JDK 17 toolchain**; JDK 21 alone makes Gradle try to download one via a broken foojay resolver (`IBM_SEMERU` crash). Fixed by the user-level Temurin 17 + `~/.gradle/gradle.properties` (see §3).
 - `usesCleartextTraffic` MUST come from the `expo-build-properties` plugin in `app.json` (a bare `android.usesCleartextTraffic` key is silently ignored) — without it the release APK cannot talk to `http://…` at all and every screen shows network errors.
