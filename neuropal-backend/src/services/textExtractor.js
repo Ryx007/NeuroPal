@@ -104,13 +104,33 @@ async function extractText(filePath, docType, opts = {}) {
         return extractEpub(buf);
     }
 
+    if (docType === 'md') {
+        const text = stripMarkdown(buf.toString('utf-8'));
+        return {
+            text,
+            pageCount: Math.max(1, Math.ceil(text.length / 3000)),
+            wordCount: countWords(text),
+        };
+    }
+
     if (docType === 'docx') {
-        // eslint-disable-next-line no-console
-        console.warn(
-            '[extractor] docx parser not wired yet — falling back to raw UTF-8 read. ' +
-                'Output will contain binary artefacts. Upload as .txt or .pdf for clean ' +
-                'RAG until mammoth is integrated.',
-        );
+        const mammoth = require('mammoth');
+        const { value } = await mammoth.extractRawText({ buffer: buf });
+        const text = (value || '').trim();
+        if (!text) throw new Error('docx contained no extractable text');
+        return {
+            text,
+            pageCount: Math.max(1, Math.ceil(text.length / 3000)),
+            wordCount: countWords(text),
+        };
+    }
+
+    if (docType === 'pptx') {
+        return extractPptx(buf);
+    }
+
+    if (docType === 'djvu') {
+        return extractDjvu(filePath);
     }
 
     const text = buf.toString('utf-8');
@@ -341,6 +361,133 @@ function countWords(text) {
     return text
         .split(/\s+/)
         .filter((s) => s.length > 0).length;
+}
+
+// ---- markdown -----------------------------------------------------------
+//
+// The RAW file is kept verbatim on disk (the editor round-trips it); this
+// strips syntax only for the INGESTED text so TTS never reads "hash hash"
+// or link URLs aloud.
+function stripMarkdown(md) {
+    return (
+        md
+            // fenced code blocks: keep the code, drop the fences
+            .replace(/^```[^\n]*$/gm, '')
+            // images: keep alt text
+            .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+            // links: keep the label
+            .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+            // headings / blockquotes / list markers at line start
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/^>\s?/gm, '')
+            .replace(/^\s*[-*+]\s+/gm, '')
+            .replace(/^\s*\d+\.\s+/gm, '')
+            // emphasis + inline code markers
+            .replace(/(\*\*|__|\*|_|`)/g, '')
+            // tables: turn pipes into spaces, drop separator rows
+            .replace(/^\s*\|?[-:| ]+\|?\s*$/gm, '')
+            .replace(/\|/g, '  ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+    );
+}
+
+// ---- pptx ---------------------------------------------------------------
+//
+// A .pptx is a zip; each slide is ppt/slides/slideN.xml with text in
+// <a:t> runs. One paragraph per slide, prefixed "Slide N", so the chunker
+// and the reader keep the deck's structure.
+function extractPptx(buf) {
+    const AdmZip = require('adm-zip');
+    const { XMLParser } = require('fast-xml-parser');
+
+    const zip = new AdmZip(buf);
+    const slideEntries = zip
+        .getEntries()
+        .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
+        .sort((a, b) => {
+            const n = (e) => parseInt(e.entryName.match(/slide(\d+)/)[1], 10);
+            return n(a) - n(b);
+        });
+    if (slideEntries.length === 0) {
+        throw new Error('pptx contained no slides');
+    }
+
+    const parser = new XMLParser({ ignoreAttributes: true });
+    const collectTexts = (node, out) => {
+        if (node == null) return;
+        if (Array.isArray(node)) {
+            for (const item of node) collectTexts(item, out);
+            return;
+        }
+        if (typeof node === 'object') {
+            for (const [key, value] of Object.entries(node)) {
+                if (key === 'a:t') {
+                    if (typeof value === 'string' || typeof value === 'number') {
+                        out.push(String(value));
+                    } else {
+                        collectTexts(value, out);
+                    }
+                } else {
+                    collectTexts(value, out);
+                }
+            }
+        }
+    };
+
+    const slides = slideEntries.map((entry, i) => {
+        const runs = [];
+        collectTexts(parser.parse(entry.getData().toString('utf-8')), runs);
+        const body = runs.join(' ').replace(/\s+/g, ' ').trim();
+        return `Slide ${i + 1}\n\n${body}`;
+    });
+
+    const text = slides.join('\n\n');
+    return {
+        text,
+        pageCount: slideEntries.length,
+        wordCount: countWords(text),
+    };
+}
+
+// ---- djvu ---------------------------------------------------------------
+//
+// djvulibre's djvutxt dumps the embedded text layer (page breaks come out
+// as form-feeds). No text layer → likely a pure scan; surfaced as an error
+// with the remedy rather than ingesting an empty document.
+async function extractDjvu(filePath) {
+    const { execFile } = require('child_process');
+    const { promisify } = require('util');
+
+    let stdout;
+    try {
+        ({ stdout } = await promisify(execFile)('djvutxt', [filePath], {
+            maxBuffer: 128 * 1024 * 1024,
+        }));
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            throw new Error(
+                'djvu support needs djvulibre — run `brew install djvulibre` on the backend host',
+            );
+        }
+        throw new Error(`djvutxt failed: ${err.message || err}`);
+    }
+
+    const pages = stdout.split('\f');
+    const text = pages
+        .map((pg) => pg.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n\n');
+    if (!text) {
+        throw new Error(
+            'this .djvu has no text layer (pure scan) — convert to PDF and upload that so OCR can run',
+        );
+    }
+    return {
+        text,
+        pageCount: Math.max(1, pages.length - 1),
+        wordCount: countWords(text),
+    };
 }
 
 module.exports = { extractText };

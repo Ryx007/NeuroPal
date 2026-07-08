@@ -110,6 +110,7 @@ async function ingestDocument(documentId) {
                 chunkIndex: c.chunkIndex,
                 text: c.text,
                 tokenCount: c.tokenEstimate,
+                overlapChars: c.overlapChars || 0,
                 anchor: {
                     page: c.pageEstimate,
                     paragraphIndex: c.paragraphIndex,

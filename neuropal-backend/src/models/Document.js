@@ -18,7 +18,7 @@ const DocumentSchema = new Schema(
         subtitle: { type: String, trim: true, maxlength: 500 },
         type: {
             type: String,
-            enum: ['pdf', 'epub', 'docx', 'txt', 'arxiv', 'web'],
+            enum: ['pdf', 'epub', 'docx', 'pptx', 'md', 'txt', 'djvu', 'arxiv', 'web'],
             required: true,
         },
 

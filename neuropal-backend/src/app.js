@@ -3,6 +3,9 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
+const annotationsRoutes = require('./routes/annotations');
+const searchRoutes = require('./routes/search');
+const vizRoutes = require('./routes/viz');
 const authRoutes = require('./routes/auth');
 const documentsRoutes = require('./routes/documents');
 const queryRoutes = require('./routes/query');
@@ -32,6 +35,19 @@ function buildApp() {
     app.use('/api/documents', documentsRoutes);
     app.use('/api', queryRoutes); // owns POST /api/documents/:id/query
     app.use('/api', studyRoutes); // owns /api/documents/:id/{summarize,quiz,cheatsheet,explain}
+    app.use('/api', annotationsRoutes); // highlights + bookmarks
+    app.use('/api/search', searchRoutes); // arXiv + Semantic Scholar paper search/import
+    app.use('/api/viz', vizRoutes); // AI-generated visualization specs
+
+    // KaTeX assets for the reader's equation WebViews (D9) — served from the
+    // backend so equation rendering works fully offline on the LAN.
+    app.use(
+        '/katex',
+        express.static(path.join(__dirname, '..', 'node_modules', 'katex', 'dist'), {
+            maxAge: '30d',
+            immutable: true,
+        }),
+    );
 
     // ---- Android APK download ------------------------------------------
     // APK_PATH env → the sideload-able release build. The explicit MIME

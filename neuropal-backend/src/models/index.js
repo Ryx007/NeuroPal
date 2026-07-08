@@ -16,4 +16,5 @@ module.exports = {
     SpendingLog: require('./SpendingLog'),
     TtsCache: require('./TtsCache'),
     AuditLog: require('./AuditLog'),
+    Annotation: require('./Annotation'),
 };

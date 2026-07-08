@@ -78,7 +78,7 @@ router.post(
                 (req.body?.title || '').trim() ||
                 req.file.originalname.replace(/\.[^.]+$/, ''),
             subtitle: (req.body?.subtitle || '').trim() || undefined,
-            type: typeFromMime(req.file.mimetype),
+            type: typeFromUpload(req.file.mimetype, req.file.originalname),
             file: {
                 relativePath,
                 sizeBytes: req.file.size,
@@ -151,14 +151,18 @@ router.get(
 
         const chunks = await DocumentChunk.find({ documentId: doc._id })
             .sort({ chunkIndex: 1 })
-            .select('text chunkIndex')
+            .select('text chunkIndex overlapChars')
             .lean();
 
         if (chunks.length > 0) {
             return res.json({
                 id: doc._id,
                 title: doc.title,
-                text: chunks.map((c) => c.text).join('\n\n'),
+                // slice off each chunk's RAG overlap so the reading text has
+                // no duplicated sentences at chunk boundaries
+                text: chunks
+                    .map((c) => (c.overlapChars ? c.text.slice(c.overlapChars) : c.text))
+                    .join('\n\n'),
                 pageCount: doc.pageCount,
                 wordCount: doc.wordCount,
                 source: 'chunks',
@@ -217,6 +221,88 @@ router.patch(
 );
 
 // ---------------------------------------------------------------------------
+// GET  /api/documents/:id/raw   — the verbatim on-disk source (md/txt only)
+// PUT  /api/documents/:id/raw   — overwrite it and reingest ("edit on the fly")
+//
+// Restricted to plain-text formats: for binary types the on-disk file is not
+// meaningfully editable and serving it as utf-8 would be garbage.
+// ---------------------------------------------------------------------------
+const RAW_EDITABLE_TYPES = new Set(['md', 'txt']);
+
+router.get(
+    '/:id/raw',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        }).lean();
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+        if (!RAW_EDITABLE_TYPES.has(doc.type)) {
+            return res
+                .status(400)
+                .json({ error: `raw editing is only available for markdown and txt (this is ${doc.type})` });
+        }
+        if (!doc.file?.relativePath) {
+            return res.status(404).json({ error: 'file path missing on document' });
+        }
+        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+        try {
+            const text = await fs.readFile(absPath, 'utf-8');
+            res.json({ id: doc._id, title: doc.title, type: doc.type, text });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return res.status(404).json({ error: 'file not on disk' });
+            }
+            throw err;
+        }
+    }),
+);
+
+router.put(
+    '/:id/raw',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const { text } = req.body || {};
+        if (typeof text !== 'string' || !text.trim()) {
+            return res.status(400).json({ error: 'text is required' });
+        }
+
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        });
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+        if (!RAW_EDITABLE_TYPES.has(doc.type)) {
+            return res
+                .status(400)
+                .json({ error: `raw editing is only available for markdown and txt (this is ${doc.type})` });
+        }
+        if (!doc.file?.relativePath) {
+            return res.status(404).json({ error: 'file path missing on document' });
+        }
+
+        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+        await fs.writeFile(absPath, text, 'utf-8');
+        doc.file.sizeBytes = Buffer.byteLength(text, 'utf-8');
+        doc.status = 'pending';
+        await doc.save();
+
+        // Same wipe-then-reingest flow as POST /:id/reingest — the edited
+        // text replaces the chunks/vectors so reader + RAG see the new copy.
+        await deleteDocumentChunks(doc._id);
+        ingestDocument(doc._id).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('[raw-edit] reingest kickoff failed:', err);
+        });
+
+        res.json(doc);
+    }),
+);
+
+// ---------------------------------------------------------------------------
 // GET /api/documents/:id/page/:n
 // Renders page N of a PDF to a JPEG (pdftoppm), cached on disk. Powers the
 // reader's "Original pages" view — true visual fidelity incl. equations.
@@ -233,7 +319,8 @@ router.get(
             deletedAt: null,
         }).lean();
         if (!doc) return res.status(404).json({ error: 'document not found' });
-        if (doc.type !== 'pdf') {
+        // 'arxiv' documents are PDFs on disk (search import) — same renderer.
+        if (doc.type !== 'pdf' && doc.type !== 'arxiv') {
             return res
                 .status(400)
                 .json({ error: 'page rendering is only available for PDF documents' });
@@ -385,7 +472,23 @@ router.delete(
 
 // ---- helpers ---------------------------------------------------------------
 
-function typeFromMime(mime) {
+// Extension checked FIRST: browsers/Android send application/octet-stream
+// (or text/plain) for .md, .djvu and .pptx, so mime alone misroutes them.
+function typeFromUpload(mime, originalname = '') {
+    const ext = (originalname.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+    const byExt = {
+        pdf: 'pdf',
+        epub: 'epub',
+        docx: 'docx',
+        pptx: 'pptx',
+        md: 'md',
+        markdown: 'md',
+        txt: 'txt',
+        djvu: 'djvu',
+        djv: 'djvu',
+    }[ext];
+    if (byExt) return byExt;
+
     switch (mime) {
         case 'application/pdf':
             return 'pdf';
@@ -393,6 +496,13 @@ function typeFromMime(mime) {
             return 'epub';
         case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
             return 'docx';
+        case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+            return 'pptx';
+        case 'text/markdown':
+            return 'md';
+        case 'image/vnd.djvu':
+        case 'image/x-djvu':
+            return 'djvu';
         case 'text/plain':
             return 'txt';
         default:

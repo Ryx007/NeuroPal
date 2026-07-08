@@ -30,14 +30,18 @@ function chunkText(fullText) {
         const idx = out.length;
         let text = buf;
 
-        // Prepend overlap from the previous chunk for continuity.
+        // Prepend overlap from the previous chunk for continuity (RAG
+        // retrieval only) — record its length so readers can strip it and
+        // reconstruct clean, duplicate-free text.
+        let overlapChars = 0;
         if (idx > 0) {
             const prev = out[out.length - 1].text;
             const tail = takeTail(prev, OVERLAP_CHARS);
+            overlapChars = tail.length + 2; // + the joining \n\n
             text = `${tail}\n\n${text}`;
         }
 
-        out.push(buildChunk(text, idx, bufStartParaIdx));
+        out.push(buildChunk(text, idx, bufStartParaIdx, overlapChars));
         buf = '';
     };
 
@@ -73,13 +77,14 @@ function chunkText(fullText) {
     return out;
 }
 
-function buildChunk(text, chunkIndex, paragraphIndex) {
+function buildChunk(text, chunkIndex, paragraphIndex, overlapChars = 0) {
     return {
         text,
         chunkIndex,
         pageEstimate: Math.floor(chunkIndex / 3) + 1,
         paragraphIndex,
         tokenEstimate: Math.ceil(text.length / 4),
+        overlapChars,
     };
 }
 

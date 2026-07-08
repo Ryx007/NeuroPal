@@ -87,8 +87,32 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `POST /api/documents/:id/explain` | `{passage, depth[,provider]}` | same envelope; retrieval-grounded on the passage |
 | `POST /api/documents/:id/flashcards` | `{count≤40[,provider]}` | `{cards:[{front,back}], …}` — schema-enforced structured output (`aiProvider.generateStructured`), NOT marker parsing (models won't hold a text format) |
 | `PATCH /api/documents/:id` | `{title?,subtitle?}` | rename (library long-press UI) |
-| `GET /api/documents/:id/page/:n` | — | rendered PDF page JPEG (reader "Original pages" view), disk-cached |
+| `GET /api/documents/:id/page/:n` | — | rendered PDF page JPEG (reader "Original pages" view), disk-cached; works for `pdf` and `arxiv` types |
+| `GET /api/documents/:id/annotations` | — | Annotation[] (highlights + bookmarks, word-index anchored) |
+| `POST /api/documents/:id/annotations` | `{kind:'highlight'\|'bookmark', wordStart, wordEnd[,color,excerpt,note,page]}` | 201 Annotation |
+| `PATCH /api/annotations/:id` | `{color?,note?}` | updated Annotation |
+| `DELETE /api/annotations/:id` | — | soft-delete |
+| `GET /api/documents/:id/raw` | — | `{id,title,type,text}` — verbatim on-disk source; **md/txt only** (400 otherwise) |
+| `PUT /api/documents/:id/raw` | `{text}` | overwrites the file, wipes chunks, reingests ("edit on the fly") |
+| `GET /api/search/papers` | `?q=…&source=arxiv\|scholar\|all` | `{query, results:[{source,id,title,authors,year,venue,abstract,pdfUrl,url,citationCount}], warnings}` — arXiv Atom API + Semantic Scholar (OpenAlex auto-fallback when S2 rate-limits; optional `SEMANTIC_SCHOLAR_API_KEY` in .env) |
+| `POST /api/search/papers/import` | `{title, pdfUrl(https)[,source,authors,year,id]}` | 201 Document — backend downloads the PDF (rejects non-PDF bodies) and ingests |
+| `POST /api/viz/spec` | `{prompt[,provider]}` | `{title,blurb,sliders,drawJs,model,provider}` — LLM-written canvas sim in the visualizer's runtime contract, hard-validated (bad spec → 502) |
 | `GET /api/ai/provider` | — | active provider + models + localMode |
+
+Non-`/api` static mounts: `/katex` serves the katex dist from backend
+node_modules (offline LaTeX rendering on LAN devices), `/` = web app,
+`/apk` = Android build.
+
+`GET /:id/text` strips each chunk's `overlapChars` (RAG overlap prefix,
+recorded by the chunker since 2026-07-08) so the reader gets duplicate-free
+text. Chunks ingested BEFORE that have `overlapChars:0` and still show
+boundary duplicates until the doc is reingested — all library docs were
+reingested on 2026-07-08.
+
+Upload formats: pdf, epub, docx (mammoth), pptx (zip+XML slide text), md
+(syntax stripped for ingest; raw kept for the editor), txt, djvu (djvutxt —
+needs `brew install djvulibre`). Type detection is extension-first (Android
+sends octet-stream for md/djvu).
 
 Error envelope everywhere: `{error: "<message>"}`. Mapping: validation→422,
 duplicate→409, bad ObjectId→400, file too large→413, unknown→500.

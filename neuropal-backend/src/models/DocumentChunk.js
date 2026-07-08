@@ -58,6 +58,10 @@ const DocumentChunkSchema = new Schema(
         text: { type: String, required: true, maxlength: 8000 },
         tokenCount: { type: Number, min: 0 },
 
+        // Chars at the start of `text` that duplicate the previous chunk's
+        // tail (RAG overlap). Strip when reconstructing reading text.
+        overlapChars: { type: Number, min: 0, default: 0 },
+
         // Source position
         sectionId: { type: String },
         sectionHeading: { type: String },

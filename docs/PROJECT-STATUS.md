@@ -48,6 +48,7 @@ Ollama), all other devices are LAN clients. See
 | **4 — Exam-prep endpoints** | **DONE + UI** | `routes/study.js`: summarize/quiz/cheatsheet/explain on `aiProvider` with even chunk-sampling (budget: gemini 120k chars, ollama 8k). Gemini now schema-constrained JSON + tolerantParse escape-repair/salvage (LaTeX answers broke the old parser). `StudySheet` modal in the Reader (school icon). Verified on the QFT notes + Moby Dick. |
 | **5 — APK + accessibility** | **APK PIPELINE UP (local Gradle)** | `expo prebuild` + `gradlew assembleRelease` on the Mini. Gotchas solved: JDK17 toolchain (user-level Temurin + gradle.properties), `expo-build-properties` for cleartext HTTP, `babel-preset-expo@55` pin (57 broke Hermes). See BRAIN §6 runbook. Accessibility sweep still pending. |
 | **Extras (2026-07-08)** | **DONE** | Real EPUB extractor (adm-zip, OPF spine). Ingest `progress` 0→1 on Document (books show live % while embedding). **Inbox drop-folder**: `~/NeuroPal-Inbox` watched (chokidar) — drop a book, it auto-ingests (verified with a 216k-word EPUB). |
+| **Redesign D1–D12 + feature battery (2026-07-08)** | **DONE (browser-verified)** | D1 drawer nav, D2 Settings screen, D5 glass toasts, D7 Toolbox, D8 Play-Books reader (top bar/TOC/display sheet), D9 KaTeX (served from `/katex`), D10 Tidal player (WPM→950), D11 collapsible arXiv+Scholar search in Library, D12 Qiskit-grade Bloch sphere (drag state, presets, dotted arcs, live ⟨σ⟩) + AI viz via `POST /api/viz/spec`. Annotations/highlights/bookmarks (backend-persisted, word-anchored), text selection (long-press native / menu-armed web), go-to-page, chapter TOC jump, md/docx/pptx/djvu/txt import, markdown edit-on-the-fly (`/raw`), notes color wheel + hex, note export PDF/PNG/SVG. Reader text de-dup via chunk `overlapChars` (all docs reingested). |
 
 ## Decisions log (locked — do not re-litigate)
 
@@ -83,6 +84,12 @@ Ollama), all other devices are LAN clients. See
 
 ## Next actions (in order)
 
+0. **Redesign acceptance on the S24 Ultra** — rebuild the APK (BRAIN §6),
+   then on-device: drawer swipe, reader long-press selection → highlight,
+   TOC/bookmarks, go-to-page, 950 wpm playback, paper search → import,
+   markdown edit, note color wheel + export share sheet, Bloch drag +
+   AI-generated viz. (All of this is browser-verified; native gestures and
+   share sheets are what need the phone.)
 1. **Phase 2 acceptance on the S24 Ultra** — on the Mini:
    `cd ~/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start`,
    scan the QR with Expo Go on the S24 (same WiFi). Then: pick a PDF →
