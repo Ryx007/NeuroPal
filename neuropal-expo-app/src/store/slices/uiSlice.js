@@ -10,6 +10,9 @@ const initialState = {
   lineSpacing: 1.7,
   wpm: 225,
   voice: "soft",
+  // P1 — how TTS handles equations: 'off' (skip silently), 'placeholder'
+  // (say "equation"), 'aloud' (rule-based LaTeX→speech).
+  speakEquations: "placeholder",
   // System TTS voice identifier (from Speech.getAvailableVoicesAsync).
   // null = platform default. Distinct from `voice` (the tone/pitch preset).
   voiceId: null,
@@ -56,6 +59,9 @@ const uiSlice = createSlice({
     setVoiceId(state, action) {
       state.voiceId = action.payload;
     },
+    setSpeakEquations(state, action) {
+      state.speakEquations = action.payload;
+    },
     setTweaksOpen(state, action) {
       state.tweaksOpen = action.payload;
     },
@@ -74,6 +80,7 @@ export const {
   setTweaksOpen,
   setVoice,
   setVoiceId,
+  setSpeakEquations,
   setWpm,
 } = uiSlice.actions;
 

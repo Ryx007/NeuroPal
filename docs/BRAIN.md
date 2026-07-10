@@ -38,6 +38,7 @@ call (Gemini free tier) for reasoning.
                                                    ├─ Docker  MongoDB :27017 (neuropal-mongo)
                                                    ├─ Docker  Qdrant  :6333  (neuropal-qdrant)
                                                    ├─ Ollama          :11434 (nomic-embed-text, qwen2.5:7b)
+                                                   ├─ mathserve       :8077  (pm2: neuropal-mathserve — nougat PDF→Markdown)
                                                    └─ ~/NeuroPal-Inbox       (watched drop-folder)
                                        Gemini API (cloud, free) — default reasoning only
 ```
@@ -144,15 +145,29 @@ retrieves top-8 by passage embedding first, falls back to the sample.
 ## 5. The pipelines (what happens where)
 
 **Ingest:** upload/inbox → `services/ingestPipeline.js`: extractText
-(`textExtractor.js` — pdf-parse for PDF; **scanned PDFs (<100 chars/page)
-auto-OCR via `services/ocr.js`**: poppler `pdftoppm` rasterizes 200dpi
+(`textExtractor.js` — **extraction tiers (P1, 2026-07-09)**: ① `arxiv-latex` —
+docs with `meta.arxivId` (search-import persists it; legacy ids parsed from
+the filename) fetch the author's LaTeX from arxiv.org/e-print, resolve
+\input/\include, and convert to text with math preserved as `$…$/$$…$$`
+(`services/arxivLatex.js`); ② `nougat` — born-digital PDFs whose pdf-parse
+text trips the math-glyph density probe (`MATH_DENSITY_MIN`/1000 chars) go
+through the local **neuropal-mathserve** microservice (FastAPI +
+facebook/nougat-small on MPS, job submit + poll, `MATHSERVE_URL`) — service
+down/short output ⇒ graceful fallback; ③ pdf-parse for plain PDFs; **scanned
+PDFs (<100 chars/page) auto-OCR via `services/ocr.js`**: poppler `pdftoppm` rasterizes 200dpi
 grayscale → `tesseract --psm 1` per page, concurrency 3, ~1-2s/page on the
 M4, progress 0→0.4 of the bar; needs `brew install tesseract poppler`,
 installed 2026-07-08; OCR runs ONLY in ingest, never in the query
 fallback; real EPUB extraction via adm-zip → OPF spine walk → XHTML→text;
 TXT raw; DOCX still raw-fallback w/ warning) →
-`chunker.js` (paragraph-aware ~2000 chars, 200 overlap, never mid-sentence)
-→ `embedder.js` embedBatch (Ollama, concurrency 4, onProgress) → Mongo
+`chunker.js` (paragraph-aware ~2000 chars, 200 overlap, never mid-sentence,
+**math-atomic**: cuts and overlap tails never land inside `$…$/$$…$$`;
+oversized display blocks stay whole). `Document.extractor` records which
+tier ran ('arxiv-latex'|'nougat'|'pdf-parse'|'ocr'|format name)
+→ `embedder.js` embedBatch (Ollama, concurrency 4, onProgress,
+**`num_ctx: 8192` on every embed call** — Ollama's default 2048 500s on
+dense-LaTeX chunks ("input length exceeds the context length"); a chunk
+that still overflows embeds its truncated head instead of failing the book) → Mongo
 `DocumentChunk` rows first, then Qdrant points (batch 100, shared UUID
 `vectorId`) → `ready`. Qdrant collection name == embedding model name
 (`nomic-embed-text-v1.5`).
@@ -198,7 +213,15 @@ paragraphs (≤180 words each) grouped into **Parts of 40 paragraphs**; one
 Part rendered at a time (a 216k-word book = 112 parts, ~250 text nodes
 instead of ~216k); view auto-follows the voice across parts.
 
-**TTS (`services/tts.js`):** expo-speech on ALL platforms. Words are spoken
+**TTS (`services/tts.js`):** expo-speech on ALL platforms. **Equations are
+never vocalised as raw LaTeX (P1):** the reader builds parallel
+`words`/`speechWords` arrays — an equation ($$ block, unicode-math card, or
+inline $…$) is ONE karaoke unit whose spoken form follows
+`ui.speakEquations`: 'off' (silent skip) / 'placeholder' ("equation",
+default) / 'aloud' (rule-based LaTeX→speech, `utils/mathSpeech.js` — kets,
+fractions, Greek, operators). Toggle lives in the reader's Aa sheet +
+Settings. Inline math renders as unicode-prettified gold serif Text
+(`utils/math.js#latexToUnicode`); display math stays KaTeX. Words are spoken
 in ~3000-char chunked utterances (Android hard-caps ~4k/utterance — a book
 as one string would silently fail) chained by `onDone`. Highlight driver:
 `onBoundary` charIndex → per-chunk offset table → global word index (exact

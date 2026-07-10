@@ -7,6 +7,7 @@ import {
   setFontSize,
   setLineSpacing,
   setReaderFont,
+  setSpeakEquations,
   setTheme,
 } from "../../store/slices/uiSlice";
 import { usePalette } from "../../theme/ThemeProvider";
@@ -27,6 +28,12 @@ const THEMES = [
   ["sepia", "Sepia"],
   ["light", "Light"],
   ["contrast", "Contrast"],
+];
+// P1 — what TTS does when the karaoke cursor crosses an equation.
+const EQ_MODES = [
+  ["off", "Skip"],
+  ["placeholder", "Say \u201cequation\u201d"],
+  ["aloud", "Read aloud"],
 ];
 
 export function DisplayOptionsSheet({ visible, onClose }) {
@@ -84,6 +91,17 @@ export function DisplayOptionsSheet({ visible, onClose }) {
                 label={label}
                 selected={tweaks.readerFont === key}
                 onPress={() => dispatch(setReaderFont(key))}
+              />
+            ))}
+          </Row>
+
+          <Row label="SPEAK EQUATIONS">
+            {EQ_MODES.map(([key, label]) => (
+              <Chip
+                key={key}
+                label={label}
+                selected={tweaks.speakEquations === key}
+                onPress={() => dispatch(setSpeakEquations(key))}
               />
             ))}
           </Row>

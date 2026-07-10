@@ -23,7 +23,34 @@ const SCANNED_PDF_CHARS_PER_PAGE = 100;
 async function extractText(filePath, docType, opts = {}) {
     const buf = await fs.readFile(filePath);
 
-    if (docType === 'pdf') {
+    // ---- P1 Tier A: arXiv → author's LaTeX source (perfect math) ----------
+    // The on-disk file stays the PDF (original-pages view, page renders);
+    // only the READING TEXT comes from the .tex. A null result (pdf-only
+    // submission, network failure) falls through to the PDF tiers below.
+    if (opts.arxivId) {
+        const { extractArxivLatex } = require('./arxivLatex');
+        const latex = await extractArxivLatex(opts.arxivId);
+        if (latex) {
+            let pageCount = Math.max(1, Math.ceil(latex.text.length / 3000));
+            try {
+                const pdfParse = require('pdf-parse');
+                const info = await pdfParse(buf, { max: 1 }); // metadata pass
+                if (info.numpages) pageCount = info.numpages;
+            } catch (e) {
+                // keep the estimate
+            }
+            return {
+                text: latex.text,
+                pageCount,
+                wordCount: latex.wordCount,
+                extractor: 'arxiv-latex',
+            };
+        }
+        // eslint-disable-next-line no-console
+        console.warn(`[extractor] no LaTeX source for arXiv:${opts.arxivId} — falling back to PDF tiers`);
+    }
+
+    if (docType === 'pdf' || docType === 'arxiv') {
         // Lazy-require so the heavy native-bindings load happens only when
         // someone actually uploads a PDF (keeps server boot fast).
         const pdfParse = require('pdf-parse');
@@ -68,7 +95,42 @@ async function extractText(filePath, docType, opts = {}) {
                         `(${Math.round(density)} chars/page) but OCR is not enabled for this call`,
                 );
             }
-            return { text, pageCount, wordCount: countWords(text) };
+
+            // ---- P1 Tier B: born-digital math PDF → nougat microservice --
+            // Gated on opts.allowMath (ingest only — the query raw-file
+            // fallback must stay fast) and on a glyph-density probe so prose
+            // books never pay the neural-extraction cost.
+            if (opts.allowMath) {
+                const { extractWithNougat, mathDensity } = require('./mathserve');
+                const glyphs = mathDensity(text);
+                const threshold = parseFloat(process.env.MATH_DENSITY_MIN || '1.5');
+                if (glyphs >= threshold) {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `[extractor] math density ${glyphs.toFixed(2)}/1000 ≥ ${threshold} — trying nougat`,
+                    );
+                    const nougat = await extractWithNougat(filePath, {
+                        onProgress: opts.onOcrProgress,
+                    });
+                    // sanity guard: a degenerate/truncated neural output
+                    // must not replace a healthy text layer
+                    if (nougat && nougat.text.length > text.length * 0.3) {
+                        return {
+                            text: nougat.text,
+                            pageCount,
+                            wordCount: countWords(nougat.text),
+                            extractor: 'nougat',
+                        };
+                    }
+                    if (nougat) {
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                            `[extractor] nougat output suspiciously short (${nougat.text.length} vs ${text.length} chars) — keeping pdf-parse text`,
+                        );
+                    }
+                }
+            }
+            return { text, pageCount, wordCount: countWords(text), extractor: 'pdf-parse' };
         }
 
         // Scanned PDF → OCR.
@@ -88,6 +150,7 @@ async function extractText(filePath, docType, opts = {}) {
             text: ocr.text,
             pageCount: ocr.pageCount || pageCount,
             wordCount: countWords(ocr.text),
+            extractor: 'ocr',
         };
     }
 
@@ -97,11 +160,12 @@ async function extractText(filePath, docType, opts = {}) {
             text,
             pageCount: Math.max(1, Math.ceil(text.length / 3000)),
             wordCount: countWords(text),
+            extractor: 'txt',
         };
     }
 
     if (docType === 'epub') {
-        return extractEpub(buf);
+        return { ...extractEpub(buf), extractor: 'epub' };
     }
 
     if (docType === 'md') {
@@ -110,6 +174,7 @@ async function extractText(filePath, docType, opts = {}) {
             text,
             pageCount: Math.max(1, Math.ceil(text.length / 3000)),
             wordCount: countWords(text),
+            extractor: 'md',
         };
     }
 
@@ -122,15 +187,16 @@ async function extractText(filePath, docType, opts = {}) {
             text,
             pageCount: Math.max(1, Math.ceil(text.length / 3000)),
             wordCount: countWords(text),
+            extractor: 'docx',
         };
     }
 
     if (docType === 'pptx') {
-        return extractPptx(buf);
+        return { ...extractPptx(buf), extractor: 'pptx' };
     }
 
     if (docType === 'djvu') {
-        return extractDjvu(filePath);
+        return { ...(await extractDjvu(filePath)), extractor: 'djvu' };
     }
 
     const text = buf.toString('utf-8');
@@ -138,6 +204,7 @@ async function extractText(filePath, docType, opts = {}) {
         text,
         pageCount: Math.max(1, Math.ceil(text.length / 3000)),
         wordCount: countWords(text),
+        extractor: 'raw',
     };
 }
 

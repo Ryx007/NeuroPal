@@ -78,11 +78,39 @@ async function embedOllama(text) {
     const model = ollamaEmbedModelTag();
     if (!url) throw new Error('OLLAMA_URL is not set');
 
-    const { data } = await axios.post(
-        `${url.replace(/\/+$/, '')}/api/embeddings`,
-        { model, prompt: text },
-        { timeout: 30000 },
-    );
+    const post = (prompt) =>
+        axios.post(
+            `${url.replace(/\/+$/, '')}/api/embeddings`,
+            {
+                model,
+                prompt,
+                // Ollama's embed default num_ctx is 2048 — dense-LaTeX chunks
+                // (P1 math extraction, ≈1 token/char) blow past it and 500
+                // with "input length exceeds the context length". nomic-embed
+                // supports 8192.
+                options: { num_ctx: 8192 },
+            },
+            { timeout: 60000 },
+        );
+
+    let data;
+    try {
+        ({ data } = await post(text));
+    } catch (err) {
+        const msg = String(err.response?.data?.error || '');
+        if (err.response?.status === 500 && /context length/i.test(msg)) {
+            // pathological chunk (giant equation run) — embed a truncated
+            // view rather than failing the whole book's ingest; retrieval
+            // on the head of the chunk still beats no chunk at all
+            // eslint-disable-next-line no-console
+            console.warn(
+                `[embedder] chunk exceeds embed context (${text.length} chars) — embedding truncated head`,
+            );
+            ({ data } = await post(text.slice(0, 4000)));
+        } else {
+            throw err;
+        }
+    }
     if (!Array.isArray(data?.embedding)) {
         throw new Error('Ollama returned no embedding');
     }

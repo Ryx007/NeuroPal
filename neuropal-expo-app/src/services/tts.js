@@ -27,6 +27,12 @@ const CHUNK_CHARS = Platform.OS === "web" ? 1200 : 3000;
 
 export function speakWords({
   words,
+  // Parallel array (same length as words): what the ENGINE says for each
+  // token. Karaoke indexes stay aligned because offsets are computed on
+  // the speech text itself. Equations use this to speak "equation" / a
+  // LaTeX→speech rendering / nothing, while DISPLAYING the math. Defaults
+  // to `words`.
+  speechWords,
   startIndex = 0,
   rate = 1,
   pitch = 1,
@@ -36,7 +42,7 @@ export function speakWords({
   onDone,
   onError,
 }) {
-  const chunks = buildChunks(words, startIndex);
+  const chunks = buildChunks(speechWords || words, startIndex);
   let stopped = false;
   let chunkIdx = 0;
 
@@ -48,6 +54,12 @@ export function speakWords({
     }
     const chunk = chunks[chunkIdx++];
     if (onChunkStart) onChunkStart(chunk.firstWordIndex);
+    // a chunk of silenced tokens (equations with "speak: off") has nothing
+    // to say — engines can error on whitespace-only utterances
+    if (!chunk.text.trim()) {
+      speakNext();
+      return;
+    }
     Speech.speak(chunk.text, {
       rate,
       pitch,

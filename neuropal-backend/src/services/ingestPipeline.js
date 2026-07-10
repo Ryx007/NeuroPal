@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { Document, DocumentChunk } = require('../models');
 const { getQdrant } = require('../db/qdrant');
 const { extractText } = require('./textExtractor');
+const { arxivIdFromPath } = require('./arxivLatex');
 const { chunkText } = require('./chunker');
 const { embedBatch, getModelName, getDim } = require('./embedder');
 
@@ -50,8 +51,16 @@ async function ingestDocument(documentId) {
             ).catch(() => {});
         };
 
-        const { text, pageCount, wordCount } = await extractText(absPath, doc.type, {
+        // arXiv id enables the LaTeX-source tier; legacy imports carry it
+        // only in the filename, so fall back to parsing it out of the path.
+        const arxivId =
+            doc.meta?.arxivId ||
+            (doc.type === 'arxiv' ? arxivIdFromPath(doc.file.relativePath) : null);
+
+        const { text, pageCount, wordCount, extractor } = await extractText(absPath, doc.type, {
             allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
+            allowMath: true, // born-digital math PDFs → nougat (ingest only)
+            arxivId,
             onOcrProgress,
         });
         if (!text || !text.trim()) {
@@ -60,7 +69,21 @@ async function ingestDocument(documentId) {
 
         doc.pageCount = pageCount;
         doc.wordCount = wordCount;
+        doc.extractor = extractor;
         await doc.save();
+
+        // Best-effort arxivId backfill for legacy imports — a duplicate-key
+        // clash (soft-deleted twin, double legacy import) must never fail an
+        // ingest whose extraction already succeeded.
+        if (arxivId && !doc.meta?.arxivId) {
+            Document.updateOne(
+                { _id: doc._id },
+                { $set: { 'meta.arxivId': arxivId } },
+            ).catch((e) => {
+                // eslint-disable-next-line no-console
+                console.warn('[ingest] arxivId backfill skipped:', e.message);
+            });
+        }
 
         // ---- 2) chunking ----
         doc.status = 'chunking';

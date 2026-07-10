@@ -91,6 +91,7 @@ function getPersistedSlices(state) {
       wpm: state.ui.wpm,
       voice: state.ui.voice,
       voiceId: state.ui.voiceId,
+      speakEquations: state.ui.speakEquations,
     }),
     [STORAGE_KEYS.onboarding]: JSON.stringify(state.onboarding),
     [STORAGE_KEYS.home]: JSON.stringify({

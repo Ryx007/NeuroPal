@@ -225,6 +225,24 @@ router.post(
             return res.status(400).json({ error: 'pdfUrl must be https' });
         }
 
+        // Re-importing the same paper would trip the unique
+        // {userId, meta.arxivId} index AFTER the download — check first.
+        // The index's partialFilterExpression ignores deletedAt, so a
+        // soft-deleted twin also blocks; surface both cases clearly.
+        if (source === 'arxiv' && id) {
+            const existing = await Document.findOne({
+                userId: req.userId,
+                'meta.arxivId': String(id),
+            }).select('deletedAt title');
+            if (existing) {
+                return res.status(409).json({
+                    error: existing.deletedAt
+                        ? 'this paper was recently deleted — it is kept 30 days; restore or wait before re-importing'
+                        : 'this paper is already in your library',
+                });
+            }
+        }
+
         let response;
         try {
             response = await axios.get(pdfUrl, {
@@ -265,6 +283,9 @@ router.post(
                 .filter(Boolean)
                 .join(' · ') || undefined,
             type: source === 'arxiv' ? 'arxiv' : 'pdf',
+            // The id enables the arxiv-latex extraction tier (P1): ingest
+            // fetches the author's LaTeX source instead of parsing the PDF.
+            meta: source === 'arxiv' && id ? { arxivId: String(id) } : undefined,
             file: {
                 relativePath: path.posix.join('documents', String(req.userId), filename),
                 sizeBytes: buf.length,

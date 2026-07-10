@@ -57,7 +57,12 @@ import {
   setReaderWord,
 } from "../store/slices/readerSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
-import { blockMathOf, isUnicodeMathParagraph } from "../utils/math";
+import {
+  blockMathOf,
+  isUnicodeMathParagraph,
+  tokenizeMathParagraph,
+} from "../utils/math";
+import { latexToSpeech } from "../utils/mathSpeech";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 
 // D8/D9/D10 — the Play-Books-style immersive reader.
@@ -84,7 +89,7 @@ export function ReaderScreen() {
   const { id } = route.params || {};
 
   const document = useSelector((state) => selectDocumentById(state, id));
-  const { readerLayout, voice, wpm } = useSelector(selectUiState);
+  const { readerLayout, voice, wpm, speakEquations } = useSelector(selectUiState);
   const playback = useSelector(selectReaderPlayback);
   const chat = useSelector(selectReaderMessages);
   const asking = useSelector(selectReaderAsking);
@@ -172,19 +177,37 @@ export function ReaderScreen() {
               : null
     : null;
 
-  // ---- words / ranges / spans (math paragraphs contribute no words: D9) ---
-  const { words, ranges, sectionSpans } = useMemo(() => {
+  // ---- words / ranges / spans (P1: equations are single karaoke units) ----
+  // Two parallel same-length arrays: `words` is what's DISPLAYED (inline
+  // math prettified to unicode), `speechWords` is what the ENGINE says for
+  // that token — "" (skip) / "equation" / a LaTeX→speech rendering, per the
+  // speakEquations setting. A display-math paragraph is exactly one unit,
+  // so the whole equation highlights together and is never vocalised as
+  // raw LaTeX.
+  const { words, speechWords, ranges, sectionSpans } = useMemo(() => {
     const nextWords = [];
+    const nextSpeech = [];
     const nextRanges = [];
     const nextSpans = [];
+
+    const speechFor = (latex) => {
+      if (speakEquations === "off") return "";
+      if (speakEquations === "aloud" && latex) return latexToSpeech(latex);
+      return "equation";
+    };
 
     sections.forEach((section) => {
       const sectionStart = nextWords.length;
       section.paragraphs.forEach((paragraph, index) => {
         const start = nextWords.length;
-        if (!blockMathOf(paragraph) && !isUnicodeMathParagraph(paragraph)) {
-          for (const word of paragraph.split(/\s+/)) {
-            nextWords.push(word);
+        const latex = blockMathOf(paragraph);
+        if (latex || isUnicodeMathParagraph(paragraph)) {
+          nextWords.push("[equation]");
+          nextSpeech.push(speechFor(latex));
+        } else {
+          for (const tok of tokenizeMathParagraph(paragraph)) {
+            nextWords.push(tok.display);
+            nextSpeech.push(tok.latex ? speechFor(tok.latex) : tok.display);
           }
         }
         nextRanges.push({
@@ -196,8 +219,13 @@ export function ReaderScreen() {
       nextSpans.push({ start: sectionStart, end: nextWords.length });
     });
 
-    return { words: nextWords, ranges: nextRanges, sectionSpans: nextSpans };
-  }, [sections]);
+    return {
+      words: nextWords,
+      speechWords: nextSpeech,
+      ranges: nextRanges,
+      sectionSpans: nextSpans,
+    };
+  }, [sections, speakEquations]);
 
   // Highlights clipped per paragraph — computed once per annotations change
   // so ParagraphText's memo keeps working (stable array identities).
@@ -312,6 +340,7 @@ export function ReaderScreen() {
 
       ttsRef.current = speakWords({
         words,
+        speechWords,
         startIndex,
         rate,
         pitch,
@@ -333,7 +362,14 @@ export function ReaderScreen() {
 
       simTimerRef.current = setInterval(() => {
         if (!boundaryLiveRef.current) {
-          dispatch(advanceReader());
+          // hold at the LAST word instead of advancing past it — the
+          // estimator ticks faster than long spoken equations, and
+          // advanceReader's auto-pause would cut audio mid-sentence; the
+          // engine's own onDone ends playback at the true finish.
+          const st = appStore.getState().reader;
+          if (st.wordIndex + 1 < st.totalWords) {
+            dispatch(advanceReader());
+          }
         }
         if (!appStore.getState().reader.playing && simTimerRef.current) {
           clearInterval(simTimerRef.current);
@@ -341,7 +377,7 @@ export function ReaderScreen() {
         }
       }, 60000 / wpm);
     },
-    [dispatch, voice, wpm, words]
+    [dispatch, voice, wpm, words, speechWords]
   );
 
   const togglePlay = useCallback(() => {
@@ -528,7 +564,7 @@ export function ReaderScreen() {
     const range =
       ranges.find((r) => idx >= r.start && idx < r.end) || ranges[0];
     if (!range) return { pid: null, paragraph: "" };
-    const section = sections.find((s) => range.pid.startsWith(s.id));
+    const section = sections.find((s) => range.pid.startsWith(s.id + "-"));
     const paraIndex = parseInt(range.pid.split("-").pop(), 10);
     return { pid: range.pid, paragraph: section?.paragraphs?.[paraIndex] || "" };
   }
@@ -1044,9 +1080,25 @@ function ReaderBody({
               return (
                 <View key={paragraphId} style={{ marginVertical: 8 }}>
                   {latex ? (
-                    <MathView latex={latex} color={equationColor} fontSize={17} />
+                    <View
+                      style={
+                        currentWordIndex === range.start && range.end > range.start
+                          ? {
+                              borderLeftWidth: 3,
+                              borderLeftColor: palette.accent,
+                              backgroundColor: withAlpha(palette.accent, 0.06),
+                              borderRadius: 8,
+                            }
+                          : null
+                      }
+                    >
+                      <MathView latex={latex} color={equationColor} fontSize={17} />
+                    </View>
                   ) : isUnicodeMathParagraph(paragraph) ? (
-                    <EquationCard text={paragraph} />
+                    <EquationCard
+                      text={paragraph}
+                      active={currentWordIndex === range.start && range.end > range.start}
+                    />
                   ) : (
                     <ParagraphText
                       text={paragraph}
@@ -1083,7 +1135,7 @@ function ReaderBody({
 // A PDF-extracted equation (unicode, no LaTeX source): centered serif card,
 // visually distinct from prose, excluded from TTS. True typesetting lives in
 // the Original-pages view.
-function EquationCard({ text }) {
+function EquationCard({ text, active }) {
   const palette = usePalette();
   return (
     <View
@@ -1093,9 +1145,13 @@ function EquationCard({ text }) {
         paddingVertical: 12,
         paddingHorizontal: 16,
         borderRadius: 12,
-        backgroundColor: withAlpha(palette.tertiary, 0.06),
-        borderLeftWidth: 2,
-        borderLeftColor: withAlpha(palette.tertiary, 0.45),
+        backgroundColor: active
+          ? withAlpha(palette.accent, 0.1)
+          : withAlpha(palette.tertiary, 0.06),
+        borderLeftWidth: active ? 3 : 2,
+        borderLeftColor: active
+          ? palette.accent
+          : withAlpha(palette.tertiary, 0.45),
       }}
     >
       <Text
@@ -1162,7 +1218,9 @@ const ParagraphText = memo(function ParagraphText({
   askActive,
 }) {
   const palette = usePalette();
-  const words = text.split(/\s+/);
+  // MUST be the same tokenizer the words/karaoke memo uses — a divergence
+  // would shift every highlight after the first inline equation.
+  const tokens = tokenizeMathParagraph(text);
 
   return (
     <View
@@ -1182,7 +1240,7 @@ const ParagraphText = memo(function ParagraphText({
           color: palette.onSurface,
         }}
       >
-        {words.map((word, index) => {
+        {tokens.map(({ display: word, latex }, index) => {
           const globalIndex = firstWordIndex + index;
           const isRead = globalIndex < currentWordIndex;
           const isCurrent = globalIndex === currentWordIndex;
@@ -1206,7 +1264,17 @@ const ParagraphText = memo(function ParagraphText({
               style={{
                 color: isRead
                   ? withAlpha(palette.onSurfaceVariant, 0.55)
-                  : palette.onSurface,
+                  : latex
+                    ? palette.tertiary
+                    : palette.onSurface,
+                // inline math: serif italic + gold tint — visibly "math"
+                // while staying a real Text node (karaoke + selection work)
+                fontFamily: latex
+                  ? Platform.OS === "web"
+                    ? "Georgia, 'Times New Roman', serif"
+                    : "serif"
+                  : undefined,
+                fontStyle: latex ? "italic" : "normal",
                 backgroundColor: isCurrent
                   ? withAlpha(palette.accent, 0.22)
                   : isSelected
@@ -1219,7 +1287,7 @@ const ParagraphText = memo(function ParagraphText({
               }}
             >
               {word}
-              {index === words.length - 1 ? "" : " "}
+              {index === tokens.length - 1 ? "" : " "}
             </Text>
           );
         })}

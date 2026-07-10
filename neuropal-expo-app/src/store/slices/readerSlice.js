@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 import { mockReaderMessages } from "../../data/mockData";
+import { blockMathOf, splitParagraphMathSafe } from "../../utils/math";
 import {
   askReaderQuestion,
   createAnnotationApi,
@@ -117,12 +118,13 @@ function textToSections({ documentId, title, text }) {
       continue;
     }
     const words = p.split(" ");
-    if (words.length <= MAX_PARAGRAPH_WORDS) {
+    // equations are atomic (P1): whole-display paragraphs are never split,
+    // and long prose paragraphs split WITHOUT cutting inside $…$ islands —
+    // a severed pair mis-pairs with the next equation and swallows prose.
+    if (words.length <= MAX_PARAGRAPH_WORDS || blockMathOf(p)) {
       current.paragraphs.push(p);
     } else {
-      for (let i = 0; i < words.length; i += MAX_PARAGRAPH_WORDS) {
-        current.paragraphs.push(words.slice(i, i + MAX_PARAGRAPH_WORDS).join(" "));
-      }
+      current.paragraphs.push(...splitParagraphMathSafe(p, MAX_PARAGRAPH_WORDS));
     }
   }
   if (current.paragraphs.length > 0 || current.heading) chapters.push(current);

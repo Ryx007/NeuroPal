@@ -11,6 +11,7 @@ import {
   setLineSpacing,
   setReaderFont,
   setReaderLayout,
+  setSpeakEquations,
   setTheme,
   setVoice,
   setWpm,
@@ -184,6 +185,16 @@ export function SettingsScreen() {
             ["deep", "Deep"],
           ]}
           onChange={(value) => dispatch(setVoice(value))}
+        />
+        <SegmentRow
+          label="Speak equations"
+          value={tweaks.speakEquations}
+          entries={[
+            ["off", "Skip"],
+            ["placeholder", "\u201cEquation\u201d"],
+            ["aloud", "Read aloud"],
+          ]}
+          onChange={(value) => dispatch(setSpeakEquations(value))}
         />
         <View style={{ height: 6 }} />
         <VoicePicker />

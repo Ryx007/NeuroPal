@@ -1,0 +1,12 @@
+# neuropal-mathserve — nougat-small via the maintained transformers runtime.
+# Install:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Run:      .venv/bin/python server.py   (or via pm2, see README)
+fastapi>=0.115
+uvicorn>=0.30
+torch>=2.6
+transformers>=4.45,<5
+pypdfium2>=5,<6
+pillow>=10
+# nougat's processor pulls these at runtime
+python-Levenshtein>=0.25
+nltk>=3.9

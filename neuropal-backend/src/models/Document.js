@@ -56,6 +56,14 @@ const DocumentSchema = new Schema(
         pageCount: { type: Number, min: 0, default: 0 },
         wordCount: { type: Number, min: 0, default: 0 },
 
+        // Which extraction tier produced the ingested text (P1 equations):
+        //   arxiv-latex  — author's LaTeX source from arxiv.org/e-print
+        //   nougat       — facebook/nougat math-aware PDF→Markdown (mathserve)
+        //   pdf-parse    — plain text layer (no math awareness)
+        //   ocr          — tesseract (scanned PDFs)
+        //   epub/native  — format-specific extractors (epub, docx, pptx, …)
+        extractor: { type: String, trim: true },
+
         // INGEST progress 0→1 (dominated by the embedding stage on big
         // books). Not reading progress — that lives in ReadingSession.
         progress: { type: Number, min: 0, max: 1 },
