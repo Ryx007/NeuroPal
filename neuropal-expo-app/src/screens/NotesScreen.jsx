@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Pressable,
@@ -13,6 +13,7 @@ import Svg, { Path } from "react-native-svg";
 import Toast from "../components/toast";
 
 import { ColorPickerSheet } from "../components/notes/ColorPickerSheet";
+import { TypedNoteEditor } from "../components/notes/TypedNoteEditor";
 import {
   buildNoteSvg,
   exportNoteImage,
@@ -21,23 +22,47 @@ import {
   strokeToPath,
 } from "../utils/noteExport";
 import {
-  createNote,
-  deleteNote,
+  clearPendingOpenNote,
+  createNoteRemote,
+  loadNotes,
+  migrateLocalNotes,
+  removeNoteRemote,
   saveNote,
+  updateNoteRemote,
 } from "../store/slices/notesSlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
-// Handwritten notes — S-pen/stylus/finger ink on an SVG canvas.
-// Freehand pen (3 quick colors + full wheel/hex picker, 3 widths), stroke
-// eraser, undo, clear, multiple titled notes persisted locally, and export
-// to PDF / PNG / SVG via the share sheet (download on web).
+// Notes — TWO kinds through one synced backend model (P6):
+//   ink   — S-pen/stylus/finger strokes on an SVG canvas (PDF/PNG/SVG export)
+//   typed — Markdown with inline $…$ / $$…$$ math, live preview,
+//           .md/.txt export
+// Both sync via the Mini; pre-P6 local ink notes are migrated up on first
+// open.
 
 export function NotesScreen() {
+  const dispatch = useDispatch();
   const [openId, setOpenId] = useState(null);
+  const notes = useSelector((s) => s.notes.items);
 
-  if (openId) {
-    return <NoteEditor noteId={openId} onBack={() => setOpenId(null)} />;
+  // The Reader's "Typed note here" hands the target over via redux (route
+  // params don't reliably reach never-unmounting drawer screens) — consume
+  // and clear it.
+  const pendingOpenId = useSelector((s) => s.notes.pendingOpenId);
+  useEffect(() => {
+    if (pendingOpenId) {
+      setOpenId(pendingOpenId);
+      dispatch(clearPendingOpenNote());
+    }
+  }, [pendingOpenId, dispatch]);
+
+  const openNote = notes.find((n) => n.id === openId);
+  if (openId && openNote) {
+    return openNote.kind === "typed" ? (
+      <TypedNoteEditor note={openNote} onBack={() => setOpenId(null)} />
+    ) : (
+      <NoteEditor noteId={openId} onBack={() => setOpenId(null)} />
+    );
   }
   return <NotesList onOpen={setOpenId} />;
 }
@@ -50,11 +75,34 @@ function NotesList({ onOpen }) {
   const palette = usePalette();
   const dispatch = useDispatch();
   const notes = useSelector((s) => s.notes.items);
+  const notesError = useSelector((s) => s.notes.error);
 
-  function newNote() {
-    const id = `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    dispatch(createNote({ id, title: `Note ${notes.length + 1}` }));
-    onOpen(id);
+  // fetch from the backend + migrate any pre-P6 local ink notes, once per open
+  useEffect(() => {
+    dispatch(migrateLocalNotes());
+  }, [dispatch]);
+
+  async function newNote(kind) {
+    try {
+      const note = await dispatch(
+        createNoteRemote({
+          kind,
+          title: `Note ${notes.length + 1}`,
+          ...(kind === "typed" ? { contentMarkdown: "" } : { strokes: [] }),
+        })
+      ).unwrap();
+      onOpen(note.id);
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Could not create note", text2: error?.message });
+    }
+  }
+
+  async function remove(note) {
+    try {
+      await dispatch(removeNoteRemote({ id: note.id })).unwrap();
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Delete failed", text2: error?.message });
+    }
   }
 
   return (
@@ -84,6 +132,19 @@ function NotesList({ onOpen }) {
           Ink first, organize never.
         </Text>
 
+        {notesError ? (
+          <Text
+            style={{
+              marginTop: 12,
+              color: palette.error,
+              fontFamily: "Inter_500Medium",
+              fontSize: 13,
+            }}
+          >
+            {notesError}
+          </Text>
+        ) : null}
+
         <View style={{ marginTop: 20, gap: 12 }}>
           {notes.length === 0 ? (
             <Text
@@ -93,7 +154,7 @@ function NotesList({ onOpen }) {
                 fontSize: 14,
               }}
             >
-              No notes yet — tap + to start writing with the S-Pen.
+              No notes yet — start a typed note or an S-Pen sketch below.
             </Text>
           ) : (
             notes.map((note) => (
@@ -108,7 +169,11 @@ function NotesList({ onOpen }) {
                   alignItems: "center",
                 }}
               >
-                <MaterialIcons name="gesture" size={22} color={palette.accent} />
+                <MaterialIcons
+                  name={note.kind === "typed" ? "notes" : "gesture"}
+                  size={22}
+                  color={palette.accent}
+                />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text
                     style={{
@@ -120,6 +185,7 @@ function NotesList({ onOpen }) {
                     {note.title}
                   </Text>
                   <Text
+                    numberOfLines={1}
                     style={{
                       color: palette.onSurfaceVariant,
                       fontFamily: "JetBrainsMono_400Regular",
@@ -127,11 +193,14 @@ function NotesList({ onOpen }) {
                       marginTop: 3,
                     }}
                   >
-                    {note.strokes.length} strokes · {new Date(note.updatedAt).toLocaleString()}
+                    {note.kind === "typed"
+                      ? `${(note.contentMarkdown || "").replace(/\s+/g, " ").trim().slice(0, 44) || "empty"} · ${new Date(note.updatedAt).toLocaleString()}`
+                      : `${(note.strokes || []).length} strokes · ${new Date(note.updatedAt).toLocaleString()}`}
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => dispatch(deleteNote(note.id))}
+                  onPress={() => remove(note)}
+                  accessibilityRole="button"
                   accessibilityLabel={`Delete ${note.title}`}
                   style={{ padding: 8 }}
                 >
@@ -143,24 +212,45 @@ function NotesList({ onOpen }) {
         </View>
       </ScrollView>
 
-      <Pressable
-        onPress={newNote}
-        accessibilityLabel="New note"
-        style={{
-          position: "absolute",
-          right: 20,
-          bottom: 28,
-          width: 60,
-          height: 60,
-          borderRadius: 18,
-          backgroundColor: palette.primary,
-          alignItems: "center",
-          justifyContent: "center",
-          elevation: 8,
-        }}
-      >
-        <MaterialIcons name="add" size={30} color={palette.onPrimary} />
-      </Pressable>
+      {/* two entry points, both labelled (P6): typed + ink */}
+      <View style={{ position: "absolute", right: 20, bottom: 28, gap: 10, alignItems: "flex-end" }}>
+        {[
+          ["typed", "keyboard", "New typed note"],
+          ["ink", "gesture", "New handwritten note"],
+        ].map(([kind, icon, label]) => (
+          <Pressable
+            key={kind}
+            onPress={() => newNote(kind)}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              minHeight: 48,
+              paddingHorizontal: 16,
+              borderRadius: 16,
+              backgroundColor: kind === "typed" ? palette.primary : palette.surfaceHighest,
+              elevation: 8,
+            }}
+          >
+            <MaterialIcons
+              name={icon}
+              size={20}
+              color={kind === "typed" ? palette.onPrimary : palette.accent}
+            />
+            <Text
+              style={{
+                marginLeft: 8,
+                color: kind === "typed" ? palette.onPrimary : palette.onSurface,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+              }}
+            >
+              {kind === "typed" ? "Typed" : "Ink"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -205,6 +295,23 @@ function NoteEditor({ noteId, onBack }) {
       dispatch(saveNote({ id: noteId, strokes: nextStrokes, title }));
     },
     [dispatch, noteId, title]
+  );
+
+  // Local dispatches keep drawing responsive; the SERVER gets one write when
+  // the note is left (P6 sync). Un-migrated legacy notes (no _id) stay local
+  // until migrateLocalNotes pushes them.
+  const syncRemote = useCallback(
+    (nextStrokes, nextTitle) => {
+      if (!note?._id) return;
+      dispatch(
+        updateNoteRemote({ id: note._id, strokes: nextStrokes, title: nextTitle })
+      )
+        .unwrap()
+        .catch((error) =>
+          Toast.show({ type: "error", text1: "Note sync failed", text2: error?.message })
+        );
+    },
+    [dispatch, note?._id]
   );
 
   function eraseAt(x, y) {
@@ -314,6 +421,7 @@ function NoteEditor({ noteId, onBack }) {
         <Pressable
           onPress={() => {
             persist(strokes);
+            syncRemote(strokes, title);
             onBack();
           }}
           accessibilityLabel="Back to notes"

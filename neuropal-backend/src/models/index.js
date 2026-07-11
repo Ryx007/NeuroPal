@@ -18,4 +18,5 @@ module.exports = {
     AuditLog: require('./AuditLog'),
     Annotation: require('./Annotation'),
     SavedSimulation: require('./SavedSimulation'),
+    Note: require('./Note'),
 };

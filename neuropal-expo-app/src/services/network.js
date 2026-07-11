@@ -415,6 +415,50 @@ export async function deleteSimulationApi(id) {
   }
 }
 
+// ---- Notes (P6 — typed + ink, synced through the Mini) ----------------------
+
+export async function listNotesApi(documentId) {
+  if (USE_MOCK) return [];
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get("notes", {
+      params: documentId ? { documentId } : undefined,
+    });
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function createNoteApi(payload) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post("notes", payload);
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function updateNoteApi(id, payload) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.put(`notes/${id}`, payload);
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function deleteNoteApi(id) {
+  assertConfigured();
+  try {
+    await apiClient.delete(`notes/${id}`);
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
 // ---- Raw markdown/txt editing ----------------------------------------------
 
 export async function fetchRawDocumentApi(documentId) {

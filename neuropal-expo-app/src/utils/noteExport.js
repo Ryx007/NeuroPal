@@ -114,6 +114,44 @@ export async function exportNoteImage({ svg, width, height, title, viewShotRef }
   });
 }
 
+// ---- typed-note export (P6): canonical .md + stripped .txt ------------------
+
+async function exportTextFile({ title, content, ext, mime }) {
+  const filename = `${safeFilename(title)}.${ext}`;
+  if (Platform.OS === "web") {
+    downloadBlobWeb(new Blob([content], { type: `${mime};charset=utf-8` }), filename);
+    return;
+  }
+  const FileSystem = require("expo-file-system/legacy");
+  const path = `${FileSystem.cacheDirectory}${filename}`;
+  await FileSystem.writeAsStringAsync(path, content);
+  const Sharing = require("expo-sharing");
+  await Sharing.shareAsync(path, { mimeType: mime, dialogTitle: title || "Note" });
+}
+
+export async function exportNoteMarkdown({ title, markdown }) {
+  const body = `# ${title || "Note"}\n\n${markdown || ""}`.trim() + "\n";
+  await exportTextFile({ title, content: body, ext: "md", mime: "text/markdown" });
+}
+
+// .txt = markdown syntax stripped, math kept verbatim ($…$ reads fine as text)
+export function markdownToTxt(markdown) {
+  return String(markdown || "")
+    .replace(/^```[a-z]*\n?/gm, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^[-*]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export async function exportNoteTxt({ title, markdown }) {
+  const body = `${title || "Note"}\n\n${markdownToTxt(markdown)}\n`;
+  await exportTextFile({ title, content: body, ext: "txt", mime: "text/plain" });
+}
+
 export async function exportNoteSvg({ svg, title }) {
   if (Platform.OS === "web") {
     downloadBlobWeb(new Blob([svg], { type: "image/svg+xml" }), `${safeFilename(title)}.svg`);

@@ -57,6 +57,7 @@ import {
   setReaderTotalWords,
   setReaderWord,
 } from "../store/slices/readerSlice";
+import { createNoteRemote, setPendingOpenNote } from "../store/slices/notesSlice";
 import { setVoice, setWpm } from "../store/slices/uiSlice";
 import {
   blockMathOf,
@@ -636,6 +637,35 @@ export function ReaderScreen() {
     }
   }
 
+  // P6 — a typed note anchored to the reading position: created on the
+  // backend (documentId + word/page anchor), then the Notes screen opens
+  // straight into the editor. The current paragraph is quoted as a seed so
+  // the note starts with its context.
+  async function noteHere() {
+    if (!document) return;
+    const idx = appStore.getState().reader.wordIndex;
+    const { paragraph } = paragraphAtCursor();
+    try {
+      const note = await dispatch(
+        createNoteRemote({
+          kind: "typed",
+          title: `${activeDocument.title} — note`,
+          contentMarkdown: paragraph ? `> ${paragraph.slice(0, 300)}\n\n` : "",
+          documentId: activeDocument.id,
+          anchor: {
+            wordStart: idx,
+            wordEnd: idx,
+            page: pageSync.pageAtWord(idx) ?? undefined,
+          },
+        })
+      ).unwrap();
+      dispatch(setPendingOpenNote(note.id));
+      navigation.navigate("Notes");
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Could not create note", text2: error?.message });
+    }
+  }
+
   // ---- ask / q&a -----------------------------------------------------------
   // The paragraph under the reading cursor — shown as context in the Ask
   // sheet and attached to the question as the grounding excerpt.
@@ -775,6 +805,9 @@ export function ReaderScreen() {
       : []),
     ...(document
       ? [{ icon: "bookmark-add", label: "Bookmark here", onPress: bookmarkHere }]
+      : []),
+    ...(document && !USE_MOCK
+      ? [{ icon: "edit-note", label: "Typed note here", onPress: noteHere }]
       : []),
   ];
 

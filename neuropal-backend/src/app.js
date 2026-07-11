@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 
 const annotationsRoutes = require('./routes/annotations');
+const notesRoutes = require('./routes/notes');
 const searchRoutes = require('./routes/search');
 const simulationsRoutes = require('./routes/simulations');
 const vizRoutes = require('./routes/viz');
@@ -40,6 +41,7 @@ function buildApp() {
     app.use('/api/search', searchRoutes); // arXiv + Semantic Scholar paper search/import
     app.use('/api/viz', vizRoutes); // AI-generated visualization specs
     app.use('/api/simulations', simulationsRoutes); // saved visualizer sims (P5)
+    app.use('/api/notes', notesRoutes); // typed + ink notes, synced (P6)
 
     // KaTeX assets for the reader's equation WebViews (D9) — served from the
     // backend so equation rendering works fully offline on the LAN.
