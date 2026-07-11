@@ -40,33 +40,29 @@ Rules for drawJs:
 - Physics must be dimensionally sane and integrate stably (use small fixed substeps for ODEs).
 - Keep it under 120 lines.`;
 
-// The sandbox blocks all of these anyway (iframe sandbox / WebView with
-// network+storage off) — rejecting here just fails fast with a clear error
-// instead of a silently dead canvas.
-const FORBIDDEN_JS = /\b(fetch|XMLHttpRequest|WebSocket|importScripts|localStorage|indexedDB|document\.cookie|import\s*\(|eval)\b/;
+const { validateSpec } = require('../utils/vizSpec');
 
-function validateSpec(data) {
-    if (!data || typeof data !== 'object') return 'no JSON object in response';
-    const { title, blurb, sliders, drawJs } = data;
-    if (typeof title !== 'string' || !title.trim()) return 'missing title';
-    if (typeof drawJs !== 'string' || drawJs.trim().length < 40) {
-        return 'missing or trivial drawJs';
-    }
-    if (drawJs.length > 20000) return 'drawJs too large';
-    if (FORBIDDEN_JS.test(drawJs)) return 'drawJs uses a forbidden API';
-    if (!Array.isArray(sliders) || sliders.length > 4) {
-        return 'sliders must be an array of at most 4';
-    }
-    for (const s of sliders) {
-        if (!/^[a-zA-Z][a-zA-Z0-9]{0,30}$/.test(String(s.id || ''))) {
-            return `bad slider id: ${s.id}`;
-        }
-        for (const k of ['min', 'max', 'step', 'value']) {
-            if (typeof s[k] !== 'number' || !Number.isFinite(s[k])) {
-                return `slider ${s.id}: ${k} must be a finite number`;
-            }
-        }
-        if (typeof s.label !== 'string') return `slider ${s.id}: missing label`;
+// P5 §6.1(a): the VERIFIED hand-written templates come first. If the prompt
+// clearly asks for physics we already have a correct template for, return
+// the template reference instead of letting the LLM free-write physics.
+// Patterns are deliberately TIGHT — a false positive here blocks a
+// legitimately novel sim, which is worse than a redundant generation.
+const TEMPLATE_MATCHERS = [
+    { id: 'hom', re: /hong[\s-]*ou[\s-]*mandel|\bhom\b(?!e)|photon\s+bunch|two[\s-]*photon.*beam[\s-]*splitter|coincidence.*dip/i },
+    { id: 'doubleslit', re: /(double|two|young)['s]*[\s-]*slit/i },
+    { id: 'wells', re: /(infinite|finite|square|potential)[\s-]*well|quantum\s+harmonic\s+oscillator|tunnel(l)?ing|potential\s+barrier/i },
+    { id: 'machzehnder', re: /mach[\s-]*zehnder/i },
+    { id: 'hydrogen3d', re: /orbital.{0,20}(3[\s-]*d|cloud|iso)|3[\s-]*d.{0,20}orbital/i },
+    { id: 'hydrogen', re: /hydrogen\s+(atom|orbital|wave|radial|density)|radial\s+(probability|density)|spherical\s+harmonic/i },
+    { id: 'bloch', re: /bloch\s+sphere|qubit\s+(state|precession)|larmor/i },
+    { id: 'pendulum', re: /pendulum/i },
+    { id: 'standing', re: /standing\s+wave|vibrating\s+string|string\s+harmonic/i },
+    { id: 'lissajous', re: /lissajous/i },
+];
+
+function matchTemplate(prompt) {
+    for (const m of TEMPLATE_MATCHERS) {
+        if (m.re.test(prompt)) return m.id;
     }
     return null;
 }
@@ -110,6 +106,12 @@ router.post(
         if (!prompt) return res.status(400).json({ error: 'prompt is required' });
         if (prompt.length > 600) {
             return res.status(400).json({ error: 'prompt too long (600 chars max)' });
+        }
+
+        // verified template first — free-generate only for genuinely novel asks
+        const template = matchTemplate(prompt);
+        if (template && req.body?.force !== true) {
+            return res.json({ template });
         }
 
         const { data, model, provider } = await generateStructured({

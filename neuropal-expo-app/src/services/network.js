@@ -363,7 +363,10 @@ export async function importPaperApi(paper) {
 }
 
 // POST /api/viz/spec — AI-generated visualization spec for the Visualizer.
-// Returns { title, blurb, sliders, drawJs, model, provider }.
+// Returns { title, blurb, sliders, drawJs, model, provider } — OR
+// { template: '<id>' } when the prompt matched a verified built-in (P5:
+// the backend refuses to let the LLM re-derive physics we already have
+// correct templates for).
 export async function generateVizApi(prompt) {
   assertConfigured();
   try {
@@ -374,6 +377,39 @@ export async function generateVizApi(prompt) {
       { timeout: 300000 }
     );
     return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// ---- Saved simulations (P5) -------------------------------------------------
+
+export async function listSimulationsApi() {
+  if (USE_MOCK) return [];
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get("simulations");
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// payload: { title, kind:'template'|'ai', templateId?, spec? }
+export async function saveSimulationApi(payload) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post("simulations", payload);
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+export async function deleteSimulationApi(id) {
+  assertConfigured();
+  try {
+    await apiClient.delete(`simulations/${id}`);
   } catch (error) {
     throw new Error(describeNetworkError(error));
   }

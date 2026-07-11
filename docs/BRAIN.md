@@ -99,7 +99,8 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `PUT /api/documents/:id/raw` | `{text}` | overwrites the file, wipes chunks, reingests ("edit on the fly") |
 | `GET /api/search/papers` | `?q=…&source=arxiv\|scholar\|all` | `{query, results:[{source,id,title,authors,year,venue,abstract,pdfUrl,url,citationCount}], warnings}` — arXiv Atom API + Semantic Scholar (OpenAlex auto-fallback when S2 rate-limits; optional `SEMANTIC_SCHOLAR_API_KEY` in .env) |
 | `POST /api/search/papers/import` | `{title, pdfUrl(https)[,source,authors,year,id]}` | 201 Document — backend downloads the PDF (rejects non-PDF bodies) and ingests |
-| `POST /api/viz/spec` | `{prompt[,provider]}` | `{title,blurb,sliders,drawJs,model,provider}` — LLM-written canvas sim in the visualizer's runtime contract, hard-validated (bad spec → 502) |
+| `POST /api/viz/spec` | `{prompt[,provider,force]}` | P5: `{template:'<id>'}` when the prompt matches a VERIFIED client template (the LLM is never allowed to re-derive physics we ship correct: HOM, double-slit, wells/tunnelling, Mach–Zehnder, hydrogen (2D+3D), Bloch, pendulum, standing waves, Lissajous — `force:true` bypasses); else `{title,blurb,sliders,drawJs,model,provider}` — LLM-written canvas sim, hard-validated via `utils/vizSpec.js` (bad spec → 502), ALWAYS labelled "AI-generated — unverified physics" in the UI |
+| `GET/POST /api/simulations`, `DELETE /:id` | POST: `{title, kind:'template'\|'ai', templateId?/spec?}` | P5 saved sims (model `SavedSimulation`, soft-delete). The SPEC is persisted, never a render — saved sims re-open live and sync across devices; 'ai' specs re-run the same validator before persisting |
 | `GET /api/ai/provider` | — | active provider + models + localMode |
 
 Non-`/api` static mounts: `/katex` serves the katex dist from backend

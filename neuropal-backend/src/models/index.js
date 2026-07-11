@@ -17,4 +17,5 @@ module.exports = {
     TtsCache: require('./TtsCache'),
     AuditLog: require('./AuditLog'),
     Annotation: require('./Annotation'),
+    SavedSimulation: require('./SavedSimulation'),
 };
