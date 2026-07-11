@@ -290,6 +290,20 @@ sync where the engine emits boundaries: iOS/web/most Android); a WPM timer
 estimator paces platforms without boundaries and is permanently disabled on
 the first real boundary event; every chunk start resyncs the estimator.
 
+**Notifications (P8, `services/notify.js`):** Android CHANNEL PER CATEGORY
+(medication = MAX importance/heavy vibration, anchor, reminder, pomodoro =
+soft) — schedule with `scheduleAt(date, title, body, {category, data})` or
+`scheduleDaily(hour, minute, …)`; every schedule is tagged
+`data.{kind, refId}`. **Reboot survival:** Android drops OS schedules on
+restart; `rearmSchedules()` runs in the AppProviders bootstrap on every
+launch — cancels+rebuilds anchor DAILYs and reschedules dropped one-shots
+(idempotent, permission-checked without prompting). Anchors schedule a
+daily OS notification each (med-shaped titles auto-ride the medication
+channel; edits resync via a debounced store subscription). §12-approved
+scopes: `expo-calendar` (device-calendar button per reminder) and
+`expo-location` (anchor pinned to current position fires on foreground
+in-radius, 45-min cooldown).
+
 ## 6. Runbooks
 
 ### Backend day-2
@@ -354,7 +368,8 @@ npx expo start                                     # + QR for Expo Go phones
 - **DOCX** parsing is still raw-fallback (mammoth integration pending). PDF (incl. scanned via OCR)/EPUB/TXT are real.
 - **OCR is English-only for now** (`-l eng`); other languages need `brew install tesseract-lang` + a language option. Equations OCR imperfectly (φ→¢ etc.) — prose is what TTS/Q&A consume.
 - **EPUB page numbers** are estimates (chars/3000) — citations on EPUBs cite estimated "pages".
-- **DocCard "% completed"** shows `Document.progress` = INGEST progress (100% once ready). Reading progress (ReadingSession + PATCH /progress) is not yet wired into the UI.
+- ~~DocCard "% completed" shows ingest progress~~ FIXED in P4: `GET /documents` joins ReadingSession, cards show real "% read", Home's resume card uses lastReadAt.
+- **Location anchors are foreground-only** (P8): a place-pinned anchor fires when the app opens/focuses in-radius. True closed-app geofencing (background location + TaskManager) deliberately deferred — needs on-device iteration; time-based anchors cover closed-app via the OS scheduler.
 - **Web TTS boundaries**: expo-speech web emits boundary events in Chrome/Safari with local voices; headless/exotic browsers fall back to the estimator. Fine in practice.
 - **Ollama study context** is capped at 8k chars — whole-book summaries via the offline model are shallow by design (Gemini is the default for study features).
 - **WPM slider changes don't re-pace an in-flight playback** (pause → play applies them). Pre-existing; low priority.
