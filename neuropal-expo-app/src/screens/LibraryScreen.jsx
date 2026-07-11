@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Modal,
@@ -43,22 +43,27 @@ function normaliseDoc(d) {
   const status = d.status;
   const processing = PROCESSING_STATUSES.includes(status);
   const rawProgress = typeof d.progress === "number" ? d.progress : 0;
+  // P4: GET /documents now joins ReadingSession — readingProgress (0..1) and
+  // lastReadAt are REAL reading state, distinct from d.progress (ingest %).
+  const readingProgress =
+    typeof d.readingProgress === "number" ? d.readingProgress : 0;
   return {
     ...d,
     id: d.id || d._id,
     type: d.type || "pdf",
-    // Backend docs carry INGEST progress in d.progress — showing it as
-    // reading progress after `ready` would be a lie ("100% completed" on a
-    // never-opened book). Bar shows ingest % while processing, then resets
-    // until real ReadingSession reading-progress is wired in. Mock docs
-    // (no status field) keep their sample reading progress.
-    progress: status ? (processing ? rawProgress : 0) : rawProgress,
+    readingProgress: status ? readingProgress : rawProgress,
+    lastReadAt: d.lastReadAt || null,
+    // Bar shows ingest % while processing, then real reading progress.
+    // Mock docs (no status field) keep their sample reading progress.
+    progress: status ? (processing ? rawProgress : readingProgress) : rawProgress,
     progressLabel: status
       ? processing
         ? `Ingesting ${Math.round(rawProgress * 100)}%`
         : status === "failed"
           ? "Ingest failed"
-          : "Ready"
+          : readingProgress > 0
+            ? `${Math.round(readingProgress * 100)}% read`
+            : "Ready"
       : null,
     subtitle:
       d.subtitle ||
@@ -70,13 +75,55 @@ function normaliseDoc(d) {
   };
 }
 
+// Semantic filter chips (P4). `match` runs per doc; mock docs have no status
+// field, so predicates lean on the normalised readingProgress fallback.
+const FILTERS = [
+  { key: "all", label: "All", match: () => true },
+  {
+    key: "inprogress",
+    label: "In progress",
+    match: (d) => d.readingProgress > 0 && d.readingProgress < 1,
+  },
+  { key: "unread", label: "Unread", match: (d) => !d.readingProgress },
+  { key: "pdf", label: "PDF", match: (d) => d.type === "pdf" },
+  { key: "epub", label: "EPUB", match: (d) => d.type === "epub" },
+  { key: "arxiv", label: "arXiv", match: (d) => d.type === "arxiv" },
+  {
+    key: "other",
+    label: "Other",
+    match: (d) => !["pdf", "epub", "arxiv"].includes(d.type),
+  },
+];
+
 export function LibraryScreen() {
   const palette = usePalette();
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { fetchData } = useApiRequest();
   const documents = useSelector(selectDocuments);
-  const [activeFilter, setActiveFilter] = useState(0);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  // Filtering is render-derived on purpose: hydrateLibrary wholesale-replaces
+  // the slice every 2.5s while anything is ingesting, so any filtered list
+  // written into redux would be clobbered on the next poll tick.
+  const visibleDocs = useMemo(() => {
+    const f = FILTERS.find((x) => x.key === activeFilter) || FILTERS[0];
+    const needle = search.trim().toLowerCase();
+    let list = documents.filter(
+      (d) =>
+        f.match(d) &&
+        (!needle ||
+          `${d.title || ""} ${d.subtitle || ""}`.toLowerCase().includes(needle))
+    );
+    if (activeFilter === "inprogress") {
+      // recently-read first — the whole point of the chip
+      list = [...list].sort(
+        (a, b) => new Date(b.lastReadAt || 0) - new Date(a.lastReadAt || 0)
+      );
+    }
+    return list;
+  }, [documents, activeFilter, search]);
   const [actionDoc, setActionDoc] = useState(null); // long-pressed card → rename/delete sheet
   const [editingDoc, setEditingDoc] = useState(null); // md/txt source editor
   const [connectionError, setConnectionError] = useState(
@@ -175,6 +222,10 @@ export function LibraryScreen() {
     }
 
     dispatch(addDocument(normaliseDoc(created)));
+    // an active filter/search could hide the doc that was just added —
+    // reset so the upload is always visibly IN the grid
+    setActiveFilter("all");
+    setSearch("");
     Toast.show({
       type: "success",
       text1: "Upload received",
@@ -291,40 +342,89 @@ export function LibraryScreen() {
           showsHorizontalScrollIndicator={false}
           style={{ marginTop: 20 }}
         >
-          {["All", "In progress", "Unread", "PDF", "EPUB", "arXiv"].map(
-            (filter, index) => {
-              const selected = index === activeFilter;
-              return (
-                <Pressable
-                  key={filter}
-                  onPress={() => setActiveFilter(index)}
+          {FILTERS.map((filter) => {
+            const selected = filter.key === activeFilter;
+            return (
+              <Pressable
+                key={filter.key}
+                onPress={() => setActiveFilter(filter.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter: ${filter.label}`}
+                accessibilityState={{ selected }}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 99,
+                  backgroundColor: selected
+                    ? withAlpha(palette.accent, 0.14)
+                    : palette.surfaceContainer,
+                  borderWidth: 1,
+                  borderColor: selected
+                    ? withAlpha(palette.accent, 0.45)
+                    : "transparent",
+                }}
+              >
+                <Text
                   style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 99,
-                    backgroundColor: selected
-                      ? withAlpha(palette.accent, 0.14)
-                      : palette.surfaceContainer,
-                    borderWidth: 1,
-                    borderColor: selected
-                      ? withAlpha(palette.accent, 0.45)
-                      : "transparent",
+                    color: selected ? palette.accent : palette.onSurfaceVariant,
+                    fontFamily: "Inter_500Medium",
+                    fontSize: 13,
                   }}
                 >
-                  <Text
-                    style={{
-                      color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_500Medium",
-                      fontSize: 13,
-                    }}
-                  >
-                    {filter}
-                  </Text>
-                </Pressable>
-              );
-            }
-          )}
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
+
+        {/* local title search — narrows the grid; PaperSearch above is the
+            REMOTE arXiv/Scholar import and stays untouched */}
+        <View
+          style={{
+            marginTop: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            borderRadius: 14,
+            backgroundColor: palette.surfaceContainer,
+            paddingHorizontal: 12,
+          }}
+        >
+          <MaterialIcons
+            name="search"
+            size={18}
+            color={palette.onSurfaceVariant}
+          />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search your library"
+            placeholderTextColor={palette.onSurfaceVariant}
+            accessibilityLabel="Search your library by title"
+            style={{
+              flex: 1,
+              paddingVertical: 12,
+              paddingHorizontal: 8,
+              color: palette.onSurface,
+              fontFamily: "Inter_400Regular",
+              fontSize: 14,
+            }}
+          />
+          {search ? (
+            <Pressable
+              onPress={() => setSearch("")}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              hitSlop={10}
+            >
+              <MaterialIcons
+                name="close"
+                size={18}
+                color={palette.onSurfaceVariant}
+              />
+            </Pressable>
+          ) : null}
+        </View>
 
         <View
           style={{
@@ -334,7 +434,7 @@ export function LibraryScreen() {
             gap: 16,
           }}
         >
-          {documents.map((document) => (
+          {visibleDocs.map((document) => (
             <View
               key={document.id}
               style={{
@@ -349,6 +449,59 @@ export function LibraryScreen() {
               />
             </View>
           ))}
+          {documents.length > 0 && visibleDocs.length === 0 ? (
+            <View
+              style={{
+                width: "100%",
+                alignItems: "center",
+                paddingVertical: 36,
+                gap: 12,
+              }}
+            >
+              <MaterialIcons
+                name="filter-list-off"
+                size={28}
+                color={palette.onSurfaceVariant}
+              />
+              <Text
+                style={{
+                  color: palette.onSurfaceVariant,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 14,
+                  textAlign: "center",
+                }}
+              >
+                Nothing matches{search.trim() ? ` “${search.trim()}”` : ""} in{" "}
+                {FILTERS.find((f) => f.key === activeFilter)?.label ?? "this filter"}.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setActiveFilter("all");
+                  setSearch("");
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear filters"
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 11,
+                  borderRadius: 14,
+                  backgroundColor: withAlpha(palette.accent, 0.14),
+                  borderWidth: 1,
+                  borderColor: withAlpha(palette.accent, 0.4),
+                }}
+              >
+                <Text
+                  style={{
+                    color: palette.accent,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  Clear filters
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View
             style={{
               width:

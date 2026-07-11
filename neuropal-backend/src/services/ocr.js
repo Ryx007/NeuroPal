@@ -100,12 +100,12 @@ async function ocrPdf(absPath, { onProgress } = {}) {
             Array.from({ length: Math.min(CONCURRENCY, pages.length) }, worker),
         );
 
-        const text = texts
-            .map((t) => (t || '').trim())
-            .filter(Boolean)
-            .join('\n\n');
+        const trimmed = texts.map((t) => (t || '').trim());
+        const text = trimmed.filter(Boolean).join('\n\n');
 
-        return { text, pageCount: pages.length };
+        // pagesText keeps EMPTY slots so pagesText[i] is always page i+1
+        // (P4 page anchors index by original page number)
+        return { text, pageCount: pages.length, pagesText: trimmed };
     } finally {
         fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }

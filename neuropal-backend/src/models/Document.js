@@ -72,6 +72,19 @@ const DocumentSchema = new Schema(
             },
         ],
 
+        // P4 word↔page agreement: the first canonical /text paragraph of
+        // each locatable original page (same paragraph domain as
+        // toc.startParagraph). Only tiers that KNOW real pages emit entries
+        // (pdf-parse, nougat, OCR, djvu, pptx, arXiv-via-PDF-text-layer);
+        // empty means the reader maps views proportionally.
+        pageMap: [
+            {
+                page: { type: Number, min: 1 },
+                startParagraph: { type: Number, min: 0 },
+                _id: false,
+            },
+        ],
+
         // Which extraction tier produced the ingested text (P1 equations):
         //   arxiv-latex  — author's LaTeX source from arxiv.org/e-print
         //   nougat       — facebook/nougat math-aware PDF→Markdown (mathserve)

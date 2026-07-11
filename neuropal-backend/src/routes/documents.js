@@ -100,18 +100,63 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// GET /api/documents
+// GET /api/documents?type=&status=&q=
+//
+// P4: optional filters. The app filters client-side (its poll re-fetches the
+// whole list anyway); these params serve curl/scripts and any future paging.
+// 'processing' is accepted as a status alias for the four in-flight states.
+// Each doc is enriched with readingProgress/lastReadAt from ReadingSession —
+// the list payload is otherwise UNDECIDABLE for read/unread chips.
 // ---------------------------------------------------------------------------
+const DOC_TYPES = ['pdf', 'epub', 'docx', 'pptx', 'md', 'txt', 'djvu', 'arxiv', 'web'];
+const DOC_STATUSES = ['pending', 'parsing', 'chunking', 'embedding', 'ready', 'failed'];
+const PROCESSING_STATUSES = ['pending', 'parsing', 'chunking', 'embedding'];
+
 router.get(
     '/',
     requireAuth,
     asyncHandler(async (req, res) => {
-        const docs = await Document.find({
+        const type = String(req.query.type || '').trim().toLowerCase();
+        const status = String(req.query.status || '').trim().toLowerCase();
+        const q = String(req.query.q || '').trim();
+
+        const filter = { userId: req.userId, deletedAt: null };
+        if (type) {
+            if (!DOC_TYPES.includes(type)) {
+                return res.status(400).json({ error: `invalid type (one of: ${DOC_TYPES.join(', ')})` });
+            }
+            filter.type = type;
+        }
+        if (status) {
+            if (status === 'processing') filter.status = { $in: PROCESSING_STATUSES };
+            else if (DOC_STATUSES.includes(status)) filter.status = status;
+            else return res.status(400).json({ error: `invalid status (one of: processing, ${DOC_STATUSES.join(', ')})` });
+        }
+        if (q) {
+            // escaped substring match — $text is tokenized and misses partial words
+            const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.$or = [
+                { title: { $regex: safe, $options: 'i' } },
+                { subtitle: { $regex: safe, $options: 'i' } },
+            ];
+        }
+
+        const docs = await Document.find(filter).sort({ createdAt: -1 }).lean();
+
+        // one batch lookup — reading state per doc (progress 0..1, last opened)
+        const sessions = await ReadingSession.find({
             userId: req.userId,
-            deletedAt: null,
+            documentId: { $in: docs.map((d) => d._id) },
         })
-            .sort({ createdAt: -1 })
+            .select('documentId progress lastOpenedAt completedAt')
             .lean();
+        const byDoc = new Map(sessions.map((s) => [String(s.documentId), s]));
+        for (const d of docs) {
+            const s = byDoc.get(String(d._id));
+            d.readingProgress = s ? s.progress || 0 : 0;
+            d.lastReadAt = s ? s.lastOpenedAt || null : null;
+        }
+
         res.json(docs);
     }),
 );
@@ -168,6 +213,8 @@ router.get(
                 // real chapter structure (P2) — startParagraph indexes this
                 // exact text's paragraph list
                 toc: doc.toc || [],
+                // real page anchors (P4) — same paragraph domain as toc
+                pageMap: doc.pageMap || [],
                 source: 'chunks',
             });
         }

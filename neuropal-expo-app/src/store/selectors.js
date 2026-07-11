@@ -33,7 +33,18 @@ export const selectNextAnchor = createSelector([selectAnchors], (anchors) => {
   );
 });
 
+// Home's RESUME READING card: the most recently READ in-progress document
+// (readingProgress is real ReadingSession data since P4). Falls back to the
+// newest doc only when nothing has ever been opened.
 export const selectResumeDocument = createSelector([selectDocuments], (docs) => {
+  const inProgress = docs.filter(
+    (doc) => doc.readingProgress > 0 && doc.readingProgress < 1
+  );
+  if (inProgress.length > 0) {
+    return inProgress.reduce((a, b) =>
+      new Date(b.lastReadAt || 0) - new Date(a.lastReadAt || 0) > 0 ? b : a
+    );
+  }
   return docs.find((doc) => doc.progress > 0 && doc.progress < 1) || docs[0];
 });
 
@@ -51,10 +62,17 @@ export const selectReaderDoc = createSelector(
   (reader) => ({
     docId: reader.docId,
     sections: reader.docSections,
+    pageMap: reader.docPageMap,
     loading: reader.docLoading,
     error: reader.docError,
   })
 );
 
+// No docs[0] fallback (P4): a missing/unknown id must yield undefined — the
+// Reader shows its "No document selected" placeholder for that. The old
+// silent fallback opened the newest-created document whenever navigation
+// arrived without params (the drawer's Reader item wipes them), which read
+// as "it opens a book I never picked" and then corrupted that book's
+// reading session via the progress heartbeat.
 export const selectDocumentById = (state, id) =>
-  state.library.docs.find((doc) => doc.id === id) || state.library.docs[0];
+  id ? state.library.docs.find((doc) => doc.id === id) : undefined;

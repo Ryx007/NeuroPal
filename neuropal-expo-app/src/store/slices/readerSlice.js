@@ -45,6 +45,7 @@ export const fetchReaderDocument = createAsyncThunk(
       text: data?.text,
       toc: data?.toc,
       pageCount: data?.pageCount,
+      pageMap: data?.pageMap,
     };
   }
 );
@@ -118,21 +119,55 @@ function expandLongParagraphs(paragraphs) {
   return out;
 }
 
+// Same split, but each display paragraph remembers which CANONICAL paragraph
+// it came from (P4: the word↔page map lives in the canonical domain, so the
+// reader must be able to hop display ↔ canonical in both directions).
+function expandWithOrigin(paragraphs, startIdx) {
+  const texts = [];
+  const origins = []; // absolute canonical index per display paragraph
+  paragraphs.forEach((p, i) => {
+    const words = p.split(" ");
+    if (words.length <= MAX_PARAGRAPH_WORDS || blockMathOf(p)) {
+      texts.push(p);
+      origins.push(startIdx + i);
+    } else {
+      for (const piece of splitParagraphMathSafe(p, MAX_PARAGRAPH_WORDS)) {
+        texts.push(piece);
+        origins.push(startIdx + i);
+      }
+    }
+  });
+  return { texts, origins };
+}
+
 // Real chapters from Document.toc (P2): slice the raw paragraph list at the
 // server-resolved anchors; page-only anchors (PDF outlines) map
 // proportionally. Falls back to null when the anchors don't hold — the
 // caller then uses the synthetic path.
-function sectionsFromToc({ documentId, title, rough, toc, pageCount }) {
-  // Two tiers: EXACT paragraph anchors are authoritative; page-only anchors
-  // (PDF outlines) are proportional ESTIMATES and must never displace an
-  // exact one — an overshooting estimate placed first would silently drop
-  // every exact anchor behind it. Estimates are clamped between their exact
-  // neighbours.
+function sectionsFromToc({ documentId, title, rough, toc, pageCount, pageMap }) {
+  // Three tiers of anchor quality: EXACT paragraph anchors are authoritative;
+  // page-only anchors resolve through the P4 pageMap when the ingest built
+  // one (also exact — same paragraph domain); otherwise they are
+  // proportional ESTIMATES clamped between their exact neighbours so an
+  // overshooting estimate can never silently drop the exact anchors behind it.
+  const paragraphForPage = (page) => {
+    if (!Array.isArray(pageMap) || pageMap.length === 0) return null;
+    let hit = null;
+    for (const e of pageMap) {
+      if (e.page <= page) hit = e.startParagraph;
+      else break;
+    }
+    return hit;
+  };
   const raw = toc.map((entry, i) => {
-    const exact =
+    let exact =
       typeof entry.startParagraph === "number" && entry.startParagraph >= 0
         ? Math.min(entry.startParagraph, rough.length - 1)
         : null;
+    if (exact === null && entry.startPage) {
+      const mapped = paragraphForPage(entry.startPage);
+      if (mapped !== null) exact = Math.min(mapped, rough.length - 1);
+    }
     const est =
       exact === null && entry.startPage && pageCount > 0
         ? Math.min(
@@ -161,49 +196,56 @@ function sectionsFromToc({ documentId, title, rough, toc, pageCount }) {
   if (anchors.length < 2) return null;
 
   const sections = [];
-  const pushSection = (heading, paragraphs) => {
+  const pushSection = (heading, paragraphs, origins) => {
     if (paragraphs.length === 0) return;
     sections.push({
       id: `doc-${documentId}-s-${sections.length + 1}`,
       heading,
       paragraphs,
+      // P4: canonical-paragraph provenance for the word↔page map
+      startParagraph: origins[0],
+      paraOrigin: origins,
     });
   };
-  const pushChapter = (heading, paragraphs) => {
-    const expanded = expandLongParagraphs(paragraphs);
-    if (expanded.length <= SECTION_PARAGRAPHS) {
-      pushSection(heading, expanded);
+  const pushChapter = (heading, paragraphs, startIdx) => {
+    const { texts, origins } = expandWithOrigin(paragraphs, startIdx);
+    if (texts.length <= SECTION_PARAGRAPHS) {
+      pushSection(heading, texts, origins);
       return;
     }
-    const pieces = Math.ceil(expanded.length / SECTION_PARAGRAPHS);
+    const pieces = Math.ceil(texts.length / SECTION_PARAGRAPHS);
     for (let i = 0; i < pieces; i++) {
       pushSection(
         i === 0 ? heading : `${heading} (cont. ${i + 1})`,
-        expanded.slice(i * SECTION_PARAGRAPHS, (i + 1) * SECTION_PARAGRAPHS)
+        texts.slice(i * SECTION_PARAGRAPHS, (i + 1) * SECTION_PARAGRAPHS),
+        origins.slice(i * SECTION_PARAGRAPHS, (i + 1) * SECTION_PARAGRAPHS)
       );
     }
   };
 
   if (anchors[0].idx > 0) {
-    pushChapter(title || "Front matter", rough.slice(0, anchors[0].idx));
+    pushChapter(title || "Front matter", rough.slice(0, anchors[0].idx), 0);
   }
   anchors.forEach((a, i) => {
     const end = anchors[i + 1]?.idx ?? rough.length;
-    pushChapter(a.title, rough.slice(a.idx, end));
+    pushChapter(a.title, rough.slice(a.idx, end), a.idx);
   });
   return sections.length >= 2 ? sections : null;
 }
 
-function textToSections({ documentId, title, text, toc, pageCount }) {
+function textToSections({ documentId, title, text, toc, pageCount, pageMap }) {
   const rough = (text || "")
     .split(/\n{2,}/)
     .map((p) => p.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
   // Real structure first (P2) — synthetic windows only when the document
-  // genuinely has none.
+  // genuinely has none. (The synthetic paths below re-order paragraphs while
+  // merging heading slivers, so canonical origins — and with them exact
+  // page↔view sync — exist only on this TOC path; elsewhere the reader keeps
+  // its proportional page math.)
   if (Array.isArray(toc) && toc.length >= 2) {
-    const real = sectionsFromToc({ documentId, title, rough, toc, pageCount });
+    const real = sectionsFromToc({ documentId, title, rough, toc, pageCount, pageMap });
     if (real) return real;
   }
 
@@ -303,11 +345,13 @@ const initialState = {
   playing: false,
   wordIndex: 0,
   totalWords: 0,
+  playerExpanded: false,
   asking: false,
   // Fetched document text, keyed by docId so stale sections from the
   // previously opened document are never rendered under a new one.
   docId: null,
   docSections: null,
+  docPageMap: [],
   docLoading: false,
   docError: null,
   // Highlights + bookmarks for the open document (backend-persisted).
@@ -336,9 +380,15 @@ const readerSlice = createSlice({
     resetReader(state) {
       state.playing = false;
       state.wordIndex = 0;
+      state.playerExpanded = false;
     },
     setReaderWord(state, action) {
       state.wordIndex = action.payload;
+    },
+    // P4: global so the nav FAB (mounted outside the Reader) can duck under
+    // the full-screen now-playing view
+    setPlayerExpanded(state, action) {
+      state.playerExpanded = Boolean(action.payload);
     },
     setReaderTotalWords(state, action) {
       state.totalWords = action.payload;
@@ -374,6 +424,7 @@ const readerSlice = createSlice({
       .addCase(fetchReaderDocument.pending, (state, action) => {
         state.docId = action.meta.arg.documentId;
         state.docSections = null;
+        state.docPageMap = [];
         state.docLoading = true;
         state.docError = null;
         state.annotations = [];
@@ -397,6 +448,11 @@ const readerSlice = createSlice({
         if (action.meta.arg.documentId !== state.docId) return;
         state.docLoading = false;
         state.docSections = textToSections(action.payload);
+        // P4: word↔page anchors for the view-sync helpers ([] = tier had no
+        // real pages → reader keeps proportional math)
+        state.docPageMap = Array.isArray(action.payload.pageMap)
+          ? action.payload.pageMap
+          : [];
       })
       .addCase(fetchReaderDocument.rejected, (state, action) => {
         if (action.meta.arg.documentId !== state.docId) return;
@@ -413,6 +469,7 @@ export const {
   pauseReader,
   playReader,
   resetReader,
+  setPlayerExpanded,
   setReaderTotalWords,
   setReaderWord,
 } = readerSlice.actions;

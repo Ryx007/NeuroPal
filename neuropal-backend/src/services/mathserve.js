@@ -96,24 +96,44 @@ async function extractWithNougat(absPath, { onProgress } = {}) {
         if (status.status === 'done') {
             const markdown = String(status.markdown || '');
             if (!markdown.trim()) return null;
-            const normalized = normalizeNougatMarkdown(markdown);
+            const headings = nougatHeadings(markdown);
+
+            // P4: when the service returns per-page markdown, build the text
+            // BY PAGE (transform each page, join) so pagesText concatenates
+            // to exactly the final text — page anchors then match the
+            // canonical paragraphs by construction. Older service builds
+            // without markdown_pages keep the joined path (no page anchors).
+            const mdPages =
+                Array.isArray(status.markdown_pages) && status.markdown_pages.length > 0
+                    ? status.markdown_pages
+                    : null;
+            let text;
+            let pagesText;
+            if (mdPages) {
+                pagesText = mdPages.map((p) => nougatBody(String(p || '')));
+                text = pagesText.filter(Boolean).join('\n\n');
+            } else {
+                text = nougatBody(markdown);
+            }
+            if (!text.trim()) return null;
             return {
-                text: normalized.text,
-                headings: normalized.headings,
+                text,
+                headings,
                 pages: status.total || 0,
+                pagesText,
             };
         }
     }
 }
 
 // Nougat emits MultiMarkdown: math as \(…\) / \[…\], headings as #, tables as
-// markdown. Convert math delimiters to the app-wide $…$ / $$…$$ contract and
-// soften the markdown syntax the reader doesn't render.
-function normalizeNougatMarkdown(md) {
-    // Markdown headings become TOC entries (P2). Papers structure at ##,
-    // books at # — when enough level-1 headings exist, level-2 is
-    // subsection noise (a 40-chapter book would flood the TOC with x.y
-    // entries otherwise).
+// markdown. Split into two passes so the body transform can run PER PAGE
+// (P4 page anchors) while heading policy stays corpus-wide.
+
+// Markdown headings become TOC entries (P2). Papers structure at ##, books
+// at # — when enough level-1 headings exist, level-2 is subsection noise (a
+// 40-chapter book would flood the TOC with x.y entries otherwise).
+function nougatHeadings(md) {
     const all = [];
     md.replace(/^(#{1,2})\s+(.+)$/gm, (_, hashes, title) => {
         const t = title.trim().replace(/[#*_]+$/g, '').trim();
@@ -121,8 +141,13 @@ function normalizeNougatMarkdown(md) {
         return _;
     });
     const level1 = all.filter((h) => h.level === 1);
-    const headings = (level1.length >= 3 ? level1 : all).map((h) => h.title);
-    const text = (
+    return (level1.length >= 3 ? level1 : all).map((h) => h.title);
+}
+
+// Convert math delimiters to the app-wide $…$ / $$…$$ contract and soften
+// the markdown syntax the reader doesn't render.
+function nougatBody(md) {
+    return (
         md
             // math delimiters → $ contract (display first). Blank lines
             // inside display bodies are collapsed (they'd sever the block at
@@ -140,7 +165,11 @@ function normalizeNougatMarkdown(md) {
             .replace(/\n{3,}/g, '\n\n')
             .trim()
     );
-    return { text, headings };
+}
+
+// kept for existing callers/tests — composes the two passes
+function normalizeNougatMarkdown(md) {
+    return { text: nougatBody(md), headings: nougatHeadings(md) };
 }
 
 // Corpus-level "is this a math document?" probe run on the pdf-parse text.

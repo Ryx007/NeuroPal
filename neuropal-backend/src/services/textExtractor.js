@@ -20,6 +20,38 @@ const fs = require('fs/promises');
 // metadata/watermark junk).
 const SCANNED_PDF_CHARS_PER_PAGE = 100;
 
+// pdf-parse with a per-page collector (same line-building logic as its
+// default renderer) — the pages[] feed outline titles, heading detection and
+// P4 page anchors BY PAGE INDEX, so a failed page still occupies its slot.
+async function parsePdfWithPages(buf) {
+    const pdfParse = require('pdf-parse'); // lazy: heavy native bindings
+    const pages = [];
+    const data = await pdfParse(buf, {
+        pagerender: (pageData) =>
+            pageData
+                .getTextContent()
+                .then((tc) => {
+                    let lastY;
+                    let pageText = '';
+                    for (const item of tc.items) {
+                        if (lastY === item.transform[5] || lastY === undefined) {
+                            pageText += item.str;
+                        } else {
+                            pageText += `\n${item.str}`;
+                        }
+                        lastY = item.transform[5];
+                    }
+                    pages.push(pageText);
+                    return pageText;
+                })
+                .catch(() => {
+                    pages.push('');
+                    return '';
+                }),
+    });
+    return { data, pages };
+}
+
 async function extractText(filePath, docType, opts = {}) {
     const buf = await fs.readFile(filePath);
 
@@ -32,18 +64,24 @@ async function extractText(filePath, docType, opts = {}) {
         const latex = await extractArxivLatex(opts.arxivId);
         if (latex) {
             let pageCount = Math.max(1, Math.ceil(latex.text.length / 3000));
+            let pagesText;
             try {
-                const pdfParse = require('pdf-parse');
-                const info = await pdfParse(buf, { max: 1 }); // metadata pass
-                if (info.numpages) pageCount = info.numpages;
+                // Full text-layer pass (not just metadata): the per-page text
+                // lets resolvePageAnchors fingerprint the LaTeX-derived
+                // reading text against the real PDF pages — prose lines match
+                // after normalization even though the math renders differ.
+                const parsed = await parsePdfWithPages(buf);
+                if (parsed.data.numpages) pageCount = parsed.data.numpages;
+                pagesText = parsed.pages;
             } catch (e) {
-                // keep the estimate
+                // keep the estimate; no page anchors
             }
             return {
                 text: latex.text,
                 pageCount,
                 wordCount: latex.wordCount,
                 extractor: 'arxiv-latex',
+                pagesText,
                 // \section titles — the ingest resolver anchors them to
                 // their heading paragraphs in the final text
                 toc: (latex.sections || []).map((title, i) => ({
@@ -59,39 +97,7 @@ async function extractText(filePath, docType, opts = {}) {
     }
 
     if (docType === 'pdf' || docType === 'arxiv') {
-        // Lazy-require so the heavy native-bindings load happens only when
-        // someone actually uploads a PDF (keeps server boot fast).
-        const pdfParse = require('pdf-parse');
-
-        // Collect per-page text (same line-building logic as pdf-parse's
-        // default renderer) so the cleanup pass can see page structure.
-        const pages = [];
-        const data = await pdfParse(buf, {
-            pagerender: (pageData) =>
-                pageData
-                    .getTextContent()
-                    .then((tc) => {
-                        let lastY;
-                        let pageText = '';
-                        for (const item of tc.items) {
-                            if (lastY === item.transform[5] || lastY === undefined) {
-                                pageText += item.str;
-                            } else {
-                                pageText += `\n${item.str}`;
-                            }
-                            lastY = item.transform[5];
-                        }
-                        pages.push(pageText);
-                        return pageText;
-                    })
-                    // a failed page must still occupy its slot — pages[i]
-                    // feeds outline titles/heading detection BY PAGE INDEX,
-                    // and a skipped push would shift every later page
-                    .catch(() => {
-                        pages.push('');
-                        return '';
-                    }),
-        });
+        const { data, pages } = await parsePdfWithPages(buf);
 
         // P2: the embedded outline is the authoritative chapter structure —
         // read it once here; every PDF-tier return below carries it.
@@ -155,6 +161,10 @@ async function extractText(filePath, docType, opts = {}) {
                             pageCount,
                             wordCount: countWords(nougat.text),
                             extractor: 'nougat',
+                            // mathserve's per-page markdown (exact match with
+                            // the joined text); the pdf text layer is a
+                            // usable fallback for older mathserve builds
+                            pagesText: nougat.pagesText || pages,
                             toc: nougatToc,
                         };
                     }
@@ -171,6 +181,7 @@ async function extractText(filePath, docType, opts = {}) {
                 pageCount,
                 wordCount: countWords(text),
                 extractor: 'pdf-parse',
+                pagesText: pages,
                 toc: fallbackToc,
             };
         }
@@ -193,6 +204,7 @@ async function extractText(filePath, docType, opts = {}) {
             pageCount: ocr.pageCount || pageCount,
             wordCount: countWords(ocr.text),
             extractor: 'ocr',
+            pagesText: ocr.pagesText,
             toc: fallbackToc,
         };
     }
@@ -668,6 +680,7 @@ function extractPptx(buf) {
         text,
         pageCount: slideEntries.length,
         wordCount: countWords(text),
+        pagesText: slides, // 1 slide = 1 "page" — exact anchors by construction
     };
 }
 
@@ -695,10 +708,8 @@ async function extractDjvu(filePath) {
     }
 
     const pages = stdout.split('\f');
-    const text = pages
-        .map((pg) => pg.replace(/[ \t]+/g, ' ').trim())
-        .filter(Boolean)
-        .join('\n\n');
+    const cleaned = pages.map((pg) => pg.replace(/[ \t]+/g, ' ').trim());
+    const text = cleaned.filter(Boolean).join('\n\n');
     if (!text) {
         throw new Error(
             'this .djvu has no text layer (pure scan) — convert to PDF and upload that so OCR can run',
@@ -708,6 +719,8 @@ async function extractDjvu(filePath) {
         text,
         pageCount: Math.max(1, pages.length - 1),
         wordCount: countWords(text),
+        // empty pages keep their slot so pagesText[i] stays page i+1
+        pagesText: cleaned,
     };
 }
 

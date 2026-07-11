@@ -53,6 +53,7 @@ import {
   removeAnnotation,
   requestReaderAnswer,
   resetReader,
+  setPlayerExpanded,
   setReaderTotalWords,
   setReaderWord,
 } from "../store/slices/readerSlice";
@@ -86,7 +87,12 @@ export function ReaderScreen() {
     readerLineHeight,
     readerExtraLetterSpacing,
   } = useTheme();
-  const { id } = route.params || {};
+  const readerDoc = useSelector(selectReaderDoc);
+  // P4: the drawer's Reader item navigates WITHOUT params, and RN7's router
+  // then REPLACES the existing {id} with undefined — falling back to the
+  // live session's docId re-summons what was playing instead of (the old
+  // behavior) silently opening whatever docs[0] happened to be.
+  const id = route.params?.id ?? readerDoc.docId ?? undefined;
 
   const document = useSelector((state) => selectDocumentById(state, id));
   const { readerLayout, voice, wpm, speakEquations } = useSelector(selectUiState);
@@ -94,7 +100,6 @@ export function ReaderScreen() {
   const chat = useSelector(selectReaderMessages);
   const asking = useSelector(selectReaderAsking);
   const voiceId = useSelector((st) => st.ui.voiceId);
-  const readerDoc = useSelector(selectReaderDoc);
   const annotations = useSelector((s) => s.reader.annotations);
 
   const [askingId, setAskingId] = useState(null);
@@ -106,7 +111,9 @@ export function ReaderScreen() {
   const [activeSection, setActiveSection] = useState(0);
   const [viewMode, setViewMode] = useState("text"); // 'text' | 'pages'
   const [chromeVisible, setChromeVisible] = useState(true);
-  const [playerExpanded, setPlayerExpanded] = useState(false); // A ↔ B
+  // A ↔ B — in redux (P4) so the global nav FAB can duck under the
+  // full-screen now-playing view
+  const playerExpanded = useSelector((s) => s.reader.playerExpanded);
   const [selection, setSelection] = useState(null); // {start, end} inclusive
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -250,6 +257,68 @@ export function ReaderScreen() {
     [annotations]
   );
 
+  // ---- P4: word↔page agreement --------------------------------------------
+  // pageMap anchors original pages to canonical /text paragraphs; sections
+  // built from a TOC carry paraOrigin (display→canonical). When either is
+  // missing the callers keep their old proportional math.
+  const pageMap = readerDoc.docId === targetId ? readerDoc.pageMap : null;
+  const pageSync = useMemo(() => {
+    const hasMap = Array.isArray(pageMap) && pageMap.length > 0;
+    const paragraphForPage = (page) => {
+      let hit = null;
+      for (const e of pageMap) {
+        if (e.page <= page) hit = e.startParagraph;
+        else break;
+      }
+      return hit;
+    };
+    const pageForParagraph = (para) => {
+      let hit = null;
+      for (const e of pageMap) {
+        if (e.startParagraph <= para) hit = e.page;
+        else break;
+      }
+      return hit;
+    };
+    // current word → canonical paragraph (via the section's paraOrigin)
+    const canonicalAtWord = (idx) => {
+      const range = ranges.find((r) => idx >= r.start && idx < r.end);
+      if (!range) return null;
+      const section = sections.find((s) => range.pid.startsWith(s.id + "-"));
+      const dIdx = parseInt(range.pid.split("-").pop(), 10);
+      return section?.paraOrigin?.[dIdx] ?? null;
+    };
+    // canonical paragraph → first word of the display paragraph holding it
+    const wordForCanonical = (para) => {
+      let si = -1;
+      sections.forEach((s, i) => {
+        if (typeof s.startParagraph === "number" && s.startParagraph <= para) si = i;
+      });
+      if (si === -1) return null;
+      const s = sections[si];
+      let dIdx = 0;
+      for (let i = 0; i < (s.paraOrigin?.length || 0); i++) {
+        if (s.paraOrigin[i] <= para) dIdx = i;
+        else break;
+      }
+      const range = ranges.find((r) => r.pid === `${s.id}-${dIdx}`);
+      return range ? { wordIndex: range.start, sectionIndex: si } : null;
+    };
+    return {
+      hasMap,
+      pageAtWord: (idx) => {
+        if (!hasMap) return null;
+        const para = canonicalAtWord(idx);
+        return para === null ? null : pageForParagraph(para);
+      },
+      wordForPage: (page) => {
+        if (!hasMap) return null;
+        const para = paragraphForPage(page);
+        return para === null ? null : wordForCanonical(para);
+      },
+    };
+  }, [pageMap, ranges, sections]);
+
   // ---- playback engine (carried over intact) ------------------------------
   const stopSpeech = useCallback(() => {
     if (ttsRef.current) {
@@ -281,7 +350,8 @@ export function ReaderScreen() {
     setViewMode("text");
     setSelection(null);
     setChromeVisible(true);
-    setPlayerExpanded(false); // never carry the full-screen B into a new doc
+    // (playerExpanded cleared inside resetReader — never carry the
+    // full-screen B into a new doc)
     return () => {
       stopSpeech();
       dispatch(pauseReader());
@@ -318,15 +388,16 @@ export function ReaderScreen() {
     if (!playback.playing) stopSpeech();
   }, [playback.playing, stopSpeech]);
 
-  // The Reader never unmounts (drawer destination) — losing focus stops it.
+  // The Reader never unmounts (drawer destination). P4: losing focus no
+  // longer kills the session — audio keeps playing across navigation (the
+  // global now-playing pill controls it from other screens); we only save
+  // the resume point. Switching DOCUMENTS still stops via the reset effect.
   useFocusEffect(
     useCallback(() => {
       return () => {
-        stopSpeech();
-        dispatch(pauseReader());
         persistProgress();
       };
-    }, [stopSpeech, dispatch, persistProgress])
+    }, [persistProgress])
   );
 
   const startPlaybackFrom = useCallback(
@@ -388,10 +459,18 @@ export function ReaderScreen() {
       persistProgress();
       return;
     }
+    // P4: an ENDED session restarts from the top instead of replaying the
+    // final word — play always does something obvious
+    const atEnd = words.length > 0 && playback.wordIndex >= words.length - 1;
+    const from = atEnd ? 0 : playback.wordIndex;
+    if (atEnd) {
+      dispatch(setReaderWord(0));
+      setActiveSection(0);
+    }
     dispatch(playReader());
-    startPlaybackFrom(playback.wordIndex);
+    startPlaybackFrom(from);
     setChromeVisible(false); // Play-Books: chrome auto-hides while reading
-  }, [dispatch, playback.playing, playback.wordIndex, startPlaybackFrom, stopSpeech, persistProgress]);
+  }, [dispatch, playback.playing, playback.wordIndex, words.length, startPlaybackFrom, stopSpeech, persistProgress]);
 
   const seekTo = useCallback(
     (index) => {
@@ -411,13 +490,13 @@ export function ReaderScreen() {
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (playerExpanded) {
-        setPlayerExpanded(false);
+        dispatch(setPlayerExpanded(false));
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [playerExpanded]);
+  }, [playerExpanded, dispatch]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
@@ -534,7 +613,8 @@ export function ReaderScreen() {
     if (!document) return;
     const idx =
       viewMode === "pages"
-        ? Math.floor(
+        ? pageSync.wordForPage(currentPage)?.wordIndex ??
+          Math.floor(
             ((currentPage - 1) / Math.max(1, activeDocument.pageCount)) *
               Math.max(1, words.length)
           )
@@ -604,13 +684,51 @@ export function ReaderScreen() {
     if (viewMode === "pages") {
       pagesListRef.current?.scrollToIndex({ index: clamped - 1, animated: true });
     } else if (words.length > 0) {
-      const idx = Math.floor(((clamped - 1) / pageCount) * words.length);
-      seekTo(idx);
-      const next = sectionSpans.findIndex((s) => idx >= s.start && idx < s.end);
-      if (next >= 0) setActiveSection(next);
+      // exact via pageMap when the ingest anchored real pages (P4);
+      // proportional guess otherwise
+      const hit = pageSync.wordForPage(clamped);
+      if (hit) {
+        seekTo(hit.wordIndex);
+        setActiveSection(hit.sectionIndex);
+      } else {
+        const idx = Math.floor(((clamped - 1) / pageCount) * words.length);
+        seekTo(idx);
+        const next = sectionSpans.findIndex((s) => idx >= s.start && idx < s.end);
+        if (next >= 0) setActiveSection(next);
+      }
     }
     setCurrentPage(clamped);
     setGotoOpen(false);
+  }
+
+  // P4: switching views resolves the position from ONE shared anchor — the
+  // reading cursor going text→pages, the visible page coming back. Without a
+  // pageMap this falls back to the proportional estimate both directions.
+  function toggleViewMode() {
+    const pageCount = Math.max(1, activeDocument.pageCount || 1);
+    if (viewMode === "text") {
+      const idx = appStore.getState().reader.wordIndex;
+      const page =
+        pageSync.pageAtWord(idx) ??
+        Math.max(
+          1,
+          Math.min(
+            pageCount,
+            1 + Math.floor((idx / Math.max(1, words.length)) * pageCount)
+          )
+        );
+      setCurrentPage(page);
+      setViewMode("pages");
+    } else {
+      const hit = pageSync.wordForPage(currentPage);
+      // move the cursor only when the views actually DISAGREE — flipping
+      // back without scrolling must never nudge the reading position
+      if (hit && pageSync.pageAtWord(appStore.getState().reader.wordIndex) !== currentPage) {
+        seekTo(hit.wordIndex);
+        setActiveSection(hit.sectionIndex);
+      }
+      setViewMode("text");
+    }
   }
 
   const visibleSections =
@@ -640,12 +758,15 @@ export function ReaderScreen() {
           },
         ]
       : []),
-    ...(document && document.type === "pdf" && document.pageCount > 0 && !USE_MOCK
+    ...(document &&
+    (document.type === "pdf" || document.type === "arxiv") && // /page/:n renders both
+    document.pageCount > 0 &&
+    !USE_MOCK
       ? [
           {
             icon: viewMode === "text" ? "auto-stories" : "subject",
             label: viewMode === "text" ? "Original pages" : "Text reader",
-            onPress: () => setViewMode((m) => (m === "text" ? "pages" : "text")),
+            onPress: toggleViewMode,
           },
         ]
       : []),
@@ -664,6 +785,7 @@ export function ReaderScreen() {
           listRef={pagesListRef}
           documentId={activeDocument.id}
           pageCount={activeDocument.pageCount}
+          initialPage={currentPage}
           onPageChange={setCurrentPage}
           onTapPage={() => setChromeVisible((v) => !v)}
         />
@@ -753,6 +875,50 @@ export function ReaderScreen() {
         />
       ) : null}
 
+      {/* P4 §5.2 — the always-reachable re-summon affordance: while chrome is
+          hidden (immersive playback) this is the one persistent control that
+          brings the player back; tapping the text still works, but margins
+          and muscle-memory both get a real target. ≥44px (WCAG 2.5.5). */}
+      {!chromeVisible && !playerExpanded && viewMode === "text" && words.length > 0 ? (
+        <Pressable
+          onPress={() => setChromeVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Show player"
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: 24,
+            minWidth: 44,
+            minHeight: 44,
+            paddingHorizontal: 14,
+            borderRadius: 999,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: withAlpha(palette.surfaceContainer, 0.85),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+            zIndex: 20,
+          }}
+        >
+          <MaterialIcons
+            name={playback.playing ? "graphic-eq" : "play-arrow"}
+            size={18}
+            color={palette.accent}
+          />
+          <Text
+            style={{
+              marginLeft: 6,
+              color: palette.accent,
+              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontSize: 13,
+            }}
+          >
+            Player
+          </Text>
+        </Pressable>
+      ) : null}
+
       {(chromeVisible || playerExpanded) && viewMode === "text" && words.length > 0 ? (
         <TidalPlayer
           playing={playback.playing}
@@ -765,9 +931,9 @@ export function ReaderScreen() {
           docTitle={activeDocument.title}
           docSubtitle={activeDocument.subtitle}
           expanded={playerExpanded}
-          onExpand={() => setPlayerExpanded(true)}
+          onExpand={() => dispatch(setPlayerExpanded(true))}
           onCollapse={() => {
-            setPlayerExpanded(false);
+            dispatch(setPlayerExpanded(false));
             setChromeVisible(true); // reveal the mini-player, not a bare page
           }}
           onAsk={() => setAskOpen(true)}
@@ -1389,7 +1555,7 @@ function MarginNote({ note }) {
 // Original pages view
 // ---------------------------------------------------------------------------
 
-function PdfPagesView({ listRef, documentId, pageCount, onPageChange, onTapPage }) {
+function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChange, onTapPage }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
   const pageWidth = Math.min(width - 16, 900);
@@ -1413,6 +1579,10 @@ function PdfPagesView({ listRef, documentId, pageCount, onPageChange, onTapPage 
       initialNumToRender={2}
       maxToRenderPerBatch={3}
       windowSize={5}
+      // P4: open on the page that matches the reading cursor — the view
+      // remounts on every toggle, so initialScrollIndex is enough
+      initialScrollIndex={Math.max(0, Math.min(pageCount - 1, (initialPage || 1) - 1))}
+      onScrollToIndexFailed={() => {}}
       onViewableItemsChanged={onViewableItemsChanged}
       viewabilityConfig={{ itemVisiblePercentThreshold: 55 }}
       getItemLayout={(_, index) => ({

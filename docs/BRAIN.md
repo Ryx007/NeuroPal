@@ -75,9 +75,9 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `GET /api/auth/me` | — | public user `{id, email, name, tweaks…}` (added 2026-07-07; client boot probe) |
 | `POST /api/auth/register` / `login` | `{email,password[,name]}` | `{token, user}` |
 | `POST /api/documents/upload` | multipart field `file` (+`title`,`subtitle`) | 201 Document (status `pending`; ingest is fire-and-forget) |
-| `GET /api/documents` | — | Document[] (newest first, soft-deleted excluded) |
+| `GET /api/documents` | `?type=&status=&q=` all optional (P4; `status=processing` = the 4 in-flight states; `q` = escaped title/subtitle substring; bad values → 400) | Document[] (newest first, soft-deleted excluded) — each doc carries `readingProgress` 0..1 + `lastReadAt` joined from ReadingSession (real reading state; `progress` remains INGEST progress) |
 | `GET /api/documents/:id` | — | Document — poll this or the list for `status`/`progress` |
-| `GET /api/documents/:id/text` | — | `{id,title,text,pageCount,wordCount,toc,source:'chunks'\|'raw-file'}` — reader/TTS source. `toc` = real chapters (P2): `[{title,order,startParagraph,startPage}]`, startParagraph indexes THIS text's paragraph list. `raw-file` = ingest not finished; for binary types that's mojibake, so the client only fetches when status is `ready`. |
+| `GET /api/documents/:id/text` | — | `{id,title,text,pageCount,wordCount,toc,pageMap,source:'chunks'\|'raw-file'}` — reader/TTS source. `toc` = real chapters (P2): `[{title,order,startParagraph,startPage}]`, startParagraph indexes THIS text's paragraph list. `pageMap` (P4) = `[{page,startParagraph}]` real page anchors in the same paragraph domain (empty when the tier knew no pages). `raw-file` = ingest not finished; for binary types that's mojibake, so the client only fetches when status is `ready`. |
 | `POST /api/documents/:id/query` | `{question[,threadId][,provider]}` | `{answer, citations:[{chunkId,page,excerpt}], verbatim[], threadId, mode:'rag'\|'fallback', model, provider, chunksUsed}` |
 | `GET /api/documents/:id/chat` | `?threadId=` | ChatMessage[] (oldest first, cap 100) |
 | `GET /api/documents/:id/progress` | — | `{progress,lastWordIndex,lastPage,lastOpenedAt}` — reader resume point (Audible-style); nulls when never opened |
@@ -173,7 +173,18 @@ pages, else honest "pp. X–Y"; no outline → strict running-head detection
 with dedupe). `resolveTocAnchors` (ingestPipeline) matches titles against
 the CHUNK-RECONSTRUCTED text so `Document.toc[].startParagraph` can never
 drift from the client's paragraph indexes; <2 survivors → no toc and the
-reader keeps its synthetic Parts
+reader keeps its synthetic Parts.
+**Real page anchors (P4, 2026-07-11):** tiers that KNOW pages return
+`pagesText[]` (pdf-parse/arXiv pdf text layer, mathserve `markdown_pages`,
+OCR, djvu, pptx slides; index i = page i+1, empty slots kept) and
+`resolvePageAnchors` fingerprints each page (normalized line prefixes ≥24
+chars: first lines + a mid-page line) against the same chunk-reconstructed
+paragraph list → `Document.pageMap [{page,startParagraph}]` + a REAL
+`anchor.page` per chunk (null when unknown — citation chips then fall back
+to "source N" instead of the old fabricated chunkIndex/3 numbers). <30% of
+pages locatable (or a 60-page dry streak) → no map; the reader keeps
+proportional page math. Docs ingested before P4 need a reingest to gain
+pageMap/real citation pages
 → `embedder.js` embedBatch (Ollama, concurrency 4, onProgress,
 **`num_ctx: 8192` on every embed call** — Ollama's default 2048 500s on
 dense-LaTeX chunks ("input length exceeds the context length"); a chunk
@@ -232,12 +243,34 @@ but is never routed to — re-gate it only for a future LOCAL_MODE=false build.
 opt-in). Reader: backend docs carry no `sections` → `fetchReaderDocument`
 pulls `/text` **only once status is `ready`** (mojibake guard). With a
 `toc` (P2) the reader builds REAL chapters at the server anchors (page-only
-anchors map proportionally; oversized chapters become "(cont. N)" parts;
-leading material = a front-matter section) — synthetic Parts of 40
-paragraphs remain only for structureless docs. Long paragraphs split ≤180
-words AFTER toc slicing (anchors index the unsplit list); one
-Part rendered at a time (a 216k-word book = 112 parts, ~250 text nodes
-instead of ~216k); view auto-follows the voice across parts.
+anchors resolve EXACTLY through `pageMap` when present, else map
+proportionally; oversized chapters become "(cont. N)" parts; leading
+material = a front-matter section) — synthetic Parts of 40 paragraphs
+remain only for structureless docs. Long paragraphs split ≤180 words AFTER
+toc slicing (anchors index the unsplit list); TOC-path sections carry
+`startParagraph` + `paraOrigin` (display→canonical map) so ReaderScreen's
+`pageSync` can hop word↔page in BOTH directions (P4 §5.1: toggling views
+resolves position from one shared anchor; goToPage/bookmarks use it too;
+synthetic-path docs keep proportional math). One Part rendered at a time
+(a 216k-word book = 112 parts, ~250 text nodes instead of ~216k); view
+auto-follows the voice across parts.
+**Reader nav + player (P4):** `selectDocumentById` has NO docs[0] fallback
+(missing/unknown id → "No document selected" — the old fallback silently
+opened the newest doc when the drawer wiped route params, then corrupted
+its ReadingSession via heartbeats); the Reader resolves
+`route.params?.id ?? reader.docId` and the drawer's Reader item forwards
+the live docId. Losing focus NO LONGER stops playback — a "Now playing"
+pill (per-screen `screenLayout` overlay in AppNavigator) jumps back to the
+session from any screen, and a "Player" re-summon pill (bottom-right)
+returns the chrome while immersive. Play on an ended session restarts from
+the top. `playerExpanded` lives in readerSlice (the nav FAB hides under
+the full-screen player). Nav: ≥44px labelled FAB (bottom-left, all drawer
+screens incl. Reader — lifted above the docked player band) opens the
+drawer; edge-swipe stays native-only (web = FAB/hamburger primary).
+Library (P4 §5.4): chips filter for real (type/read-state via the
+ReadingSession join), local title search, empty-state with Clear filters;
+filtering is render-derived (the 2.5s ingest poll wholesale-replaces the
+slice).
 
 **TTS (`services/tts.js`):** expo-speech on ALL platforms. **Equations are
 never vocalised as raw LaTeX (P1):** the reader builds parallel

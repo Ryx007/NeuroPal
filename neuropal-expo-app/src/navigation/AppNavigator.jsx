@@ -7,7 +7,7 @@ import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "../components/toast";
 
@@ -69,6 +69,8 @@ function AppHeader({ navigation }) {
         <Pressable
           onPress={() => navigation.openDrawer()}
           style={{ padding: 6 }}
+          hitSlop={5} // 34px visual + 5 → 44px target (WCAG 2.5.5)
+          accessibilityRole="button"
           accessibilityLabel="Open navigation menu"
         >
           <MaterialIcons name="menu" size={22} color={palette.accent} />
@@ -99,6 +101,8 @@ function AppHeader({ navigation }) {
             borderWidth: 2,
             borderColor: withAlpha(palette.accent, 0.28),
           }}
+          hitSlop={5}
+          accessibilityRole="button"
           accessibilityLabel="Open profile"
         >
           <MaterialIcons
@@ -118,6 +122,10 @@ function DrawerContent({ navigation, state }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name;
+  // P4: RN7's router REPLACES a screen's params on every navigate — a
+  // params-less "Reader" tap used to wipe {id} and land on nothing. Forward
+  // the live session's doc so the drawer re-summons what was open.
+  const readerDocId = useSelector((s) => s.reader.docId);
 
   return (
     <GlassPanel radius={0} intensity={60} style={{ flex: 1, borderRadius: 0 }}>
@@ -156,7 +164,14 @@ function DrawerContent({ navigation, state }) {
           return (
             <Pressable
               key={item.route}
-              onPress={() => navigation.navigate(item.route)}
+              onPress={() =>
+                navigation.navigate(
+                  item.route,
+                  item.route === "Reader" && readerDocId
+                    ? { id: readerDocId }
+                    : undefined
+                )
+              }
               accessibilityRole="button"
               accessibilityLabel={item.label}
               accessibilityState={{ selected: focused }}
@@ -227,9 +242,20 @@ function DrawerChrome() {
           backgroundColor: "transparent",
         },
         overlayColor: withAlpha("#000000", 0.5),
-        swipeEnabled: true,
+        // P4 §5.3: left-edge swipe on TOUCH; on web the drawer library
+        // itself defaults this off (pointer drags fight text selection) —
+        // there the FAB/hamburger is the primary control.
+        swipeEnabled: Platform.OS !== "web",
         swipeEdgeWidth: 60, // D1: swipe right from the left edge opens it
       })}
+      // one overlay mounted per screen, wrapping ALL drawer destinations:
+      // the nav FAB (+ now-playing pill) rides above every screen including
+      // the header-less Reader
+      screenLayout={({ route, navigation, children }) => (
+        <NavOverlay route={route} navigation={navigation}>
+          {children}
+        </NavOverlay>
+      )}
     >
       {DRAWER_CONFIG.map((item) => (
         <Drawer.Screen
@@ -240,6 +266,89 @@ function DrawerChrome() {
         />
       ))}
     </Drawer.Navigator>
+  );
+}
+
+// P4 §5.3 — the always-reachable navigation affordance. A ≥44px labelled FAB
+// (bottom-left) opens the drawer from ANY screen, Reader included (whose
+// header is nulled for immersion). On Reader it sits above the docked
+// player's band and hides under the full-screen now-playing view. A
+// now-playing pill (bottom-right, non-Reader screens) jumps back to the live
+// session — playback survives navigation since P4, so it needs a handle.
+const READER_DOCKED_PLAYER_CLEARANCE = 232; // docked TidalPlayer ≈208px + gap
+
+function NavOverlay({ route, navigation, children }) {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
+  const playing = useSelector((s) => s.reader.playing);
+  const playerExpanded = useSelector((s) => s.reader.playerExpanded);
+  const readerDocId = useSelector((s) => s.reader.docId);
+  const isReader = route.name === "Reader";
+
+  const fabBottom = isReader
+    ? Math.max(insets.bottom, 12) + READER_DOCKED_PLAYER_CLEARANCE
+    : insets.bottom + 16;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {children}
+      {!(isReader && playerExpanded) ? (
+        <Pressable
+          onPress={() => navigation.openDrawer()}
+          accessibilityRole="button"
+          accessibilityLabel="Open navigation menu"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: fabBottom,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: withAlpha(palette.surfaceContainer, 0.88),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+            zIndex: 40,
+          }}
+        >
+          <MaterialIcons name="menu" size={22} color={palette.accent} />
+        </Pressable>
+      ) : null}
+      {playing && !isReader && readerDocId ? (
+        <Pressable
+          onPress={() => navigation.navigate("Reader", { id: readerDocId })}
+          accessibilityRole="button"
+          accessibilityLabel="Now playing — back to the reader"
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: insets.bottom + 16,
+            minHeight: 44,
+            paddingHorizontal: 14,
+            borderRadius: 999,
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: withAlpha(palette.surfaceContainer, 0.88),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+            zIndex: 40,
+          }}
+        >
+          <MaterialIcons name="graphic-eq" size={16} color={palette.accent} />
+          <Text
+            style={{
+              marginLeft: 8,
+              color: palette.accent,
+              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontSize: 13,
+            }}
+          >
+            Now playing
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

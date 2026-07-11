@@ -57,7 +57,7 @@ async function ingestDocument(documentId) {
             doc.meta?.arxivId ||
             (doc.type === 'arxiv' ? arxivIdFromPath(doc.file.relativePath) : null);
 
-        const { text, pageCount, wordCount, extractor, toc: tocDraft } = await extractText(absPath, doc.type, {
+        const { text, pageCount, wordCount, extractor, toc: tocDraft, pagesText } = await extractText(absPath, doc.type, {
             allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
             allowMath: true, // born-digital math PDFs → nougat (ingest only)
             arxivId,
@@ -100,6 +100,16 @@ async function ingestDocument(documentId) {
         if (doc.toc.length > 0) {
             // eslint-disable-next-line no-console
             console.log(`[ingest] toc: ${doc.toc.length} chapters for ${doc._id}`);
+        }
+
+        // P4: real page anchors in the same canonical-paragraph domain as the
+        // TOC. Tiers without per-page text return empty — the client then
+        // keeps its proportional mapping (honest absence, never fabrication).
+        const { pageMap, chunkPages } = resolvePageAnchors(chunks, pagesText);
+        doc.pageMap = pageMap;
+        if (pageMap.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(`[ingest] pageMap: ${pageMap.length}/${pagesText?.length ?? 0} pages anchored for ${doc._id}`);
         }
 
         // ---- 3) embedding ----
@@ -145,7 +155,10 @@ async function ingestDocument(documentId) {
                 tokenCount: c.tokenEstimate,
                 overlapChars: c.overlapChars || 0,
                 anchor: {
-                    page: c.pageEstimate,
+                    // real page when the tier knew pages; null otherwise —
+                    // citation chips fall back to "source N" on null, which
+                    // beats the fabricated chunkIndex/3 numbers of old
+                    page: chunkPages[i] ?? null,
                     paragraphIndex: c.paragraphIndex,
                 },
                 vectorId,
@@ -161,7 +174,7 @@ async function ingestDocument(documentId) {
                     documentId: doc._id.toString(),
                     userId: doc.userId.toString(),
                     chunkIndex: c.chunkIndex,
-                    page: c.pageEstimate,
+                    page: chunkPages[i] ?? null,
                 },
             });
         }
@@ -256,6 +269,108 @@ async function resumeStuckIngests() {
             console.error('[ingest] resume failed:', doc._id, err.message || err);
         });
     }
+}
+
+// P4 — real page anchors. Each page's raw text is fingerprinted (normalized
+// line prefixes: first lines + a mid-page line, since running heads and page
+// numbers often die in cleaning) and located in the canonical
+// chunk-reconstructed paragraph list via one monotonic indexOf sweep.
+// Returns { pageMap: [{page, startParagraph}], chunkPages: page per chunk }.
+// Too few locatable pages → empty (a sparse map would jump around worse
+// than the client's proportional fallback).
+function resolvePageAnchors(chunks, pagesText) {
+    const empty = { pageMap: [], chunkPages: chunks.map(() => null) };
+    if (!Array.isArray(pagesText) || pagesText.length < 2) return empty;
+
+    // canonical paragraphs + the paragraph index each chunk starts at
+    const paragraphs = [];
+    const chunkStartPara = [];
+    for (const c of chunks) {
+        chunkStartPara.push(paragraphs.length);
+        const piece = c.overlapChars ? c.text.slice(c.overlapChars) : c.text;
+        for (const p of piece.split(/\n{2,}/)) {
+            const t = p.trim();
+            if (t) paragraphs.push(t);
+        }
+    }
+
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+    // one normalized haystack + paragraph start offsets → each fingerprint
+    // is a single indexOf from a monotonic cursor. Joining without a
+    // separator lets a fingerprint that ends in a hyphenated/rejoined word
+    // still match as a prefix of the joined form.
+    const offsets = [];
+    let haystack = '';
+    for (const p of paragraphs) {
+        offsets.push(haystack.length);
+        haystack += norm(p);
+    }
+    const paraAt = (charIdx) => {
+        let lo = 0;
+        let hi = offsets.length - 1;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if (offsets[mid] <= charIdx) lo = mid;
+            else hi = mid - 1;
+        }
+        return lo;
+    };
+
+    const fingerprints = (raw) => {
+        const lines = String(raw || '')
+            .split('\n')
+            .map((l) => norm(l))
+            .filter((l) => l.length >= 24); // shorter is too ambiguous
+        const cands = lines.slice(0, 3);
+        const mid = lines[Math.floor(lines.length / 2)];
+        if (mid && !cands.includes(mid)) cands.push(mid);
+        return cands.map((c) => c.slice(0, 64));
+    };
+
+    const pageMap = [];
+    let cursor = 0;
+    let consecutiveMisses = 0;
+    for (let i = 0; i < pagesText.length; i++) {
+        // every miss scans cursor→end of the whole haystack — on a book
+        // whose page text simply doesn't correspond to the canonical text
+        // (heavy OCR garble, image-only pages) that's O(pages × text) for
+        // nothing; a long dry streak this early means the domains don't
+        // match and the 30% threshold below would reject the map anyway
+        if (consecutiveMisses >= 60 && pageMap.length < i * 0.05) {
+            return empty;
+        }
+        let best = -1;
+        for (const fp of fingerprints(pagesText[i])) {
+            const at = haystack.indexOf(fp, cursor);
+            if (at !== -1 && (best === -1 || at < best)) best = at;
+        }
+        if (best === -1) {
+            consecutiveMisses += 1;
+            continue;
+        }
+        consecutiveMisses = 0;
+        const para = paraAt(best);
+        // strictly-advancing anchors only — two pages may share a paragraph
+        // (short pages), in which case the later page adds nothing
+        if (pageMap.length === 0 || para > pageMap[pageMap.length - 1].startParagraph) {
+            pageMap.push({ page: i + 1, startParagraph: para });
+        }
+        cursor = best;
+    }
+
+    if (pageMap.length < Math.max(2, Math.floor(pagesText.length * 0.3))) {
+        return empty;
+    }
+
+    const pageForPara = (para) => {
+        let page = pageMap[0].page;
+        for (const e of pageMap) {
+            if (e.startParagraph <= para) page = e.page;
+            else break;
+        }
+        return page;
+    };
+    return { pageMap, chunkPages: chunkStartPara.map(pageForPara) };
 }
 
 // Map extractor TOC drafts onto the canonical paragraph list. Title-anchored

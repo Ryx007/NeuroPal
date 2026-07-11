@@ -181,6 +181,9 @@ def worker():
                             ) from page_err
                     job["done"] = i - start + 1
                 job["markdown"] = "\n\n".join(p for p in pages_md if p.strip())
+                # per-page markdown (P4 page anchors) — empty slots kept so
+                # index i is always original page start_page + i
+                job["markdown_pages"] = pages_md
                 job["status"] = "done"
             finally:
                 pdf.close()
@@ -258,6 +261,7 @@ def job_status(job_id: str, request: Request):
     }
     if job["status"] == "done":
         out["markdown"] = job.get("markdown", "")
+        out["markdown_pages"] = job.get("markdown_pages", [])
     if job["status"] == "error":
         out["error"] = job.get("error", "unknown error")
     return out
