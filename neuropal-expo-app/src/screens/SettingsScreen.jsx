@@ -16,6 +16,7 @@ import {
   setVoice,
   setWpm,
 } from "../store/slices/uiSlice";
+import { ConnectionStatus } from "../components/ConnectionStatus";
 import { VoicePicker } from "../components/VoicePicker";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
@@ -198,6 +199,11 @@ export function SettingsScreen() {
         />
         <View style={{ height: 6 }} />
         <VoicePicker />
+      </Group>
+
+      {/* P3 — which backend the app is talking to, and whether it's alive */}
+      <Group title="Backend connection">
+        <ConnectionStatus />
       </Group>
     </KeyboardAwareScrollView>
   );

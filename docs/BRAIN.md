@@ -52,7 +52,8 @@ call (Gemini free tier) for reasoning.
 | Fact | Value |
 |---|---|
 | Repo path | `/Users/ryx/Documents/Gitkraken/NeuroPal` (older MacBook path `…/App Dev/NeuroPal` is DEAD) |
-| LAN IP | **WiFi = `en1`**, currently `192.168.3.169` (`ipconfig getifaddr en1`). en0 is unplugged Ethernet. The `.213` seen in older notes is stale DHCP. **Verify before wiring any client; get a router DHCP reservation.** |
+| LAN IP | **WiFi = `en1`**, currently `192.168.3.169` (`ipconfig getifaddr en1`). en0 is unplugged Ethernet. The `.213` seen in older notes is stale DHCP. Since P3 clients prefer the MagicDNS name; the LAN IP is a baked fallback. A router DHCP reservation (MAC below) is still worth doing. |
+| Tailscale | **MagicDNS `ryx-mac-mini.tail73ed8.ts.net`** (100.80.166.68), account `onlyfortailscale7@`, brought up 2026-07-11 — THE client-facing hostname (P3). GUI app at `/Applications/Tailscale.app` (CLI: `…/Contents/MacOS/Tailscale status`). The S24 (`samsung-sm-s928b`) is already enrolled in the tailnet. **Confirm "Start on login" in the menu-bar app** so it survives reboots. |
 | Backend service | pm2 app `neuropal-api` (`pm2 logs neuropal-api`). `pm2 startup` (reboot persistence) NOT yet run — needs owner's sudo once. |
 | Databases | `docker compose up -d` in `neuropal-backend/` (data in named volumes; only `down -v` wipes) |
 | Java | Oracle JDK 21 in `/Library/Java/…` **plus Temurin JDK 17 at `~/Library/Java/JavaVirtualMachines/jdk-17.0.19+10`** — RN's Gradle toolchain requires 17; it is registered via `~/.gradle/gradle.properties` (`org.gradle.java.installations.paths=…`). Do not delete either. |
@@ -206,9 +207,21 @@ NOT axios: on native, RN's FormData/XHR multipart dies with an opaque
 uses the picker's real `File` in a real FormData. Do not resurrect an
 axios-based upload path.
 
-**Frontend data flow:** `store/ApiLink.js` derives everything from
-`EXPO_PUBLIC_API_BASE_URL` (bundle-time inlined; restart bundler after
-changing). `services/network.js` is the reader/study client (opt-in mock via
+**Frontend data flow:** `store/ApiLink.js` resolves the backend from a
+CANDIDATE LIST (P3): on web the page's own hostname `:4000` first (the
+backend serves the web build, so the origin that delivered the bundle IS the
+API), then `EXPO_PUBLIC_API_BASE_URL` (Tailscale MagicDNS
+`http://ryx-mac-mini.tail73ed8.ts.net:4000` — on-LAN + off-LAN, survives
+DHCP drift), then `EXPO_PUBLIC_API_FALLBACK_URLS` (comma-sep; the LAN IP =
+"home WiFi, Tailscale off"). A `/healthz` probe (startup, manual "Check
+now", and after any no-response error) switches to the first REACHABLE
+candidate in preference order — never fastest-wins, or devices would pin to
+an address that dies off-LAN. Exports are live bindings; the two axios
+instances re-point via `subscribeApi`. Settings → "Backend connection"
+shows active host + per-candidate reachability. All EXPO_PUBLIC_* are
+bundle-time inlined: restart the bundler / rebuild the APK to CHANGE the
+list — the probe only picks among baked candidates.
+`services/network.js` is the reader/study client (opt-in mock via
 `EXPO_PUBLIC_USE_MOCK=true`, NEVER silent fallback — unreachable backend must
 be a visible error: Library banner + Retry, reader error notes, boot toast).
 **There is NO login screen** (removed 2026-07-08 per owner): the navigator
@@ -267,7 +280,8 @@ cd android && export JAVA_HOME=$(/usr/libexec/java_home) ANDROID_HOME=~/Library/
 # → app/build/outputs/apk/release/app-release.apk
 # Publish to the phone: just replace the file the backend serves —
 cp app/build/outputs/apk/release/app-release.apk ~/NeuroPal-APK/neuropal.apk
-# On the phone's browser:  http://192.168.3.169:4000/apk  → install
+# On the phone's browser:  http://ryx-mac-mini.tail73ed8.ts.net:4000/apk
+# (or http://192.168.3.169:4000/apk on home WiFi)  → install
 # (the backend's GET /apk sets the Android package MIME type — a generic
 #  static server labels APKs as zip and the phone saves "neuropal.apk.zip")
 ```
@@ -276,7 +290,8 @@ cp app/build/outputs/apk/release/app-release.apk ~/NeuroPal-APK/neuropal.apk
 ```bash
 cd neuropal-expo-app && npx expo export -p web        # → dist/
 pm2 restart neuropal-api                               # backend serves it
-# App URL from ANY device on the WiFi:  http://192.168.3.169:4000/
+# App URL from ANY device (Tailscale on): http://ryx-mac-mini.tail73ed8.ts.net:4000/
+# or on home WiFi:                        http://192.168.3.169:4000/
 ```
 The backend serves `WEB_DIST` (env → the dist/ folder) at `/` with an SPA
 fallback, and `APK_PATH` at `/apk`. Re-export + restart after frontend
@@ -285,7 +300,7 @@ Hard-won build facts:
 - RN Gradle wants a **JDK 17 toolchain**; JDK 21 alone makes Gradle try to download one via a broken foojay resolver (`IBM_SEMERU` crash). Fixed by the user-level Temurin 17 + `~/.gradle/gradle.properties` (see §3).
 - `usesCleartextTraffic` MUST come from the `expo-build-properties` plugin in `app.json` (a bare `android.usesCleartextTraffic` key is silently ignored) — without it the release APK cannot talk to `http://…` at all and every screen shows network errors.
 - `babel-preset-expo` must be a direct devDependency for release bundling.
-- The APK inlines `EXPO_PUBLIC_API_BASE_URL` at build time. **If the Mini's IP changes, rebuild the APK** (or finally do the DHCP reservation).
+- The APK inlines `EXPO_PUBLIC_API_BASE_URL` **and** `EXPO_PUBLIC_API_FALLBACK_URLS` at build time. Since P3 the primary is the Tailscale MagicDNS name (IP drift no longer breaks it); the LAN IP rides along as a baked fallback, so rebuild only when EITHER address genuinely changes.
 - Release signs with the debug keystore (fine for personal sideloading; EAS or a real keystore only if ever distributing).
 
 ### Web / development

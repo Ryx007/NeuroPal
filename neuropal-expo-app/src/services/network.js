@@ -1,7 +1,14 @@
 import axios from "axios";
 import { Platform } from "react-native";
 
-import { apiConfigured, apiHost, baseUrl, getHeaders } from "../store/ApiLink";
+import {
+  apiConfigured,
+  apiHost,
+  baseUrl,
+  getHeaders,
+  recheckApi,
+  subscribeApi,
+} from "../store/ApiLink";
 
 // Mock mode is OPT-IN ONLY via EXPO_PUBLIC_USE_MOCK=true — it exists so the
 // UI can be developed with no backend on the LAN. It is never a silent
@@ -15,6 +22,12 @@ export const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+// ApiLink's health probe may switch the active host (MagicDNS ↔ LAN IP);
+// the instance captured baseURL at create(), so follow the switch.
+subscribeApi(() => {
+  apiClient.defaults.baseURL = baseUrl || undefined;
 });
 
 // Same JWT injection as ApiRequest.js — a no-op in LOCAL_MODE (the backend
@@ -49,7 +62,11 @@ export function describeNetworkError(error) {
     return `The backend at ${apiHost || "(unset)"} did not answer in time — it may still be working; try again.`;
   }
   if (error?.request) {
-    return `Cannot reach the backend at ${apiHost || "(unset)"} — is the Mac Mini server running and this device on the same network?`;
+    // the request never got an answer — the active host may be the wrong one
+    // for where this device is right now; re-probe so the NEXT attempt can
+    // ride a fallback (coalesced + fire-and-forget inside ApiLink)
+    recheckApi();
+    return `Cannot reach the backend at ${apiHost || "(unset)"} — is the Mac Mini running, and is Tailscale on (or this device on home WiFi)?`;
   }
   return error?.message || "Unknown network error";
 }

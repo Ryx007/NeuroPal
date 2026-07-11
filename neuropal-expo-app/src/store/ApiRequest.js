@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import Toast from '../components/toast';
 
-import { baseUrl, clearSession, getHeaders } from './ApiLink';
+import { baseUrl, clearSession, getHeaders, recheckApi, subscribeApi } from './ApiLink';
 import { socket } from './Socket';
 import { updateLogin } from './slices/authSlice';
 
@@ -21,6 +21,12 @@ import { updateLogin } from './slices/authSlice';
 const axiosInstance = axios.create({
     baseURL: baseUrl,
     timeout: 30000,
+});
+
+// ApiLink's health probe may switch the active host (MagicDNS ↔ LAN IP);
+// the instance captured baseURL at create(), so follow the switch.
+subscribeApi(() => {
+    axiosInstance.defaults.baseURL = baseUrl;
 });
 
 axiosInstance.interceptors.request.use(
@@ -49,6 +55,11 @@ export const useApiRequest = () => {
                 } catch (e) {}
                 return;
             }
+
+            // no HTTP response at all → the active host may be wrong for
+            // where this device is; re-probe so the next attempt can ride a
+            // fallback (coalesced + fire-and-forget inside ApiLink)
+            if (!status) recheckApi();
 
             Toast.show({
                 type: 'error',
