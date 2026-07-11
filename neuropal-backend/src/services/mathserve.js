@@ -96,7 +96,12 @@ async function extractWithNougat(absPath, { onProgress } = {}) {
         if (status.status === 'done') {
             const markdown = String(status.markdown || '');
             if (!markdown.trim()) return null;
-            return { text: normalizeNougatMarkdown(markdown), pages: status.total || 0 };
+            const normalized = normalizeNougatMarkdown(markdown);
+            return {
+                text: normalized.text,
+                headings: normalized.headings,
+                pages: status.total || 0,
+            };
         }
     }
 }
@@ -105,7 +110,19 @@ async function extractWithNougat(absPath, { onProgress } = {}) {
 // markdown. Convert math delimiters to the app-wide $…$ / $$…$$ contract and
 // soften the markdown syntax the reader doesn't render.
 function normalizeNougatMarkdown(md) {
-    return (
+    // Markdown headings become TOC entries (P2). Papers structure at ##,
+    // books at # — when enough level-1 headings exist, level-2 is
+    // subsection noise (a 40-chapter book would flood the TOC with x.y
+    // entries otherwise).
+    const all = [];
+    md.replace(/^(#{1,2})\s+(.+)$/gm, (_, hashes, title) => {
+        const t = title.trim().replace(/[#*_]+$/g, '').trim();
+        if (t) all.push({ level: hashes.length, title: t });
+        return _;
+    });
+    const level1 = all.filter((h) => h.level === 1);
+    const headings = (level1.length >= 3 ? level1 : all).map((h) => h.title);
+    const text = (
         md
             // math delimiters → $ contract (display first). Blank lines
             // inside display bodies are collapsed (they'd sever the block at
@@ -123,6 +140,7 @@ function normalizeNougatMarkdown(md) {
             .replace(/\n{3,}/g, '\n\n')
             .trim()
     );
+    return { text, headings };
 }
 
 // Corpus-level "is this a math document?" probe run on the pdf-parse text.

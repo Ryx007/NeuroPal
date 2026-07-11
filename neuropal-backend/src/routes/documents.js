@@ -165,6 +165,9 @@ router.get(
                     .join('\n\n'),
                 pageCount: doc.pageCount,
                 wordCount: doc.wordCount,
+                // real chapter structure (P2) — startParagraph indexes this
+                // exact text's paragraph list
+                toc: doc.toc || [],
                 source: 'chunks',
             });
         }

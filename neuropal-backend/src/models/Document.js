@@ -56,6 +56,22 @@ const DocumentSchema = new Schema(
         pageCount: { type: Number, min: 0, default: 0 },
         wordCount: { type: Number, min: 0, default: 0 },
 
+        // Real document structure (P2 chapters): extracted per tier —
+        // LaTeX \section headings, nougat markdown headings, EPUB spine +
+        // ncx titles, PDF outline. startParagraph indexes the canonical
+        // paragraph list of /text (computed against the chunk-reconstructed
+        // text so client indexes can never drift); startPage anchors the
+        // original-pages view. Either may be null; entries are ordered.
+        toc: [
+            {
+                title: { type: String, trim: true, maxlength: 300 },
+                order: { type: Number, min: 0 },
+                startParagraph: { type: Number, min: 0, default: null },
+                startPage: { type: Number, min: 1, default: null },
+                _id: false,
+            },
+        ],
+
         // Which extraction tier produced the ingested text (P1 equations):
         //   arxiv-latex  — author's LaTeX source from arxiv.org/e-print
         //   nougat       — facebook/nougat math-aware PDF→Markdown (mathserve)

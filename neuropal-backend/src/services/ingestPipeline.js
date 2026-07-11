@@ -57,7 +57,7 @@ async function ingestDocument(documentId) {
             doc.meta?.arxivId ||
             (doc.type === 'arxiv' ? arxivIdFromPath(doc.file.relativePath) : null);
 
-        const { text, pageCount, wordCount, extractor } = await extractText(absPath, doc.type, {
+        const { text, pageCount, wordCount, extractor, toc: tocDraft } = await extractText(absPath, doc.type, {
             allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
             allowMath: true, // born-digital math PDFs → nougat (ingest only)
             arxivId,
@@ -91,6 +91,16 @@ async function ingestDocument(documentId) {
 
         const chunks = chunkText(text);
         if (chunks.length === 0) throw new Error('chunker produced 0 chunks');
+
+        // P2: anchor the TOC to the paragraph indexes of the text THE CLIENT
+        // WILL SEE (chunks reconstructed exactly as GET /:id/text serves
+        // them) — computing on anything else drifts once a long paragraph
+        // gets length-split.
+        doc.toc = resolveTocAnchors(chunks, tocDraft);
+        if (doc.toc.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(`[ingest] toc: ${doc.toc.length} chapters for ${doc._id}`);
+        }
 
         // ---- 3) embedding ----
         doc.status = 'embedding';
@@ -246,6 +256,93 @@ async function resumeStuckIngests() {
             console.error('[ingest] resume failed:', doc._id, err.message || err);
         });
     }
+}
+
+// Map extractor TOC drafts onto the canonical paragraph list. Title-anchored
+// entries are matched (normalized, forward-scanning) against reconstructed
+// paragraphs — extractor-precomputed indexes are only a fallback, since
+// length-splitting can shift them. Page-only entries pass through for the
+// client's proportional mapping. Fewer than 2 survivors → no TOC (the
+// client keeps its honest synthetic parts).
+function resolveTocAnchors(chunks, draft) {
+    if (!Array.isArray(draft) || draft.length === 0) return [];
+
+    const reconstructed = chunks
+        .map((c) => (c.overlapChars ? c.text.slice(c.overlapChars) : c.text))
+        .join('\n\n');
+    const paragraphs = reconstructed
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+    const norm = (str) => String(str).toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const paraNorms = paragraphs.map(norm);
+
+    // Title scan from a starting paragraph. The book's own PRINTED contents
+    // page is the classic trap: every chapter title appears there first, in
+    // a tight consecutive cluster, and a naive first-match scan anchors all
+    // chapters to that one page (one-line "chapters"). We scan twice: if the
+    // first pass's matches cluster suspiciously (median gap of a real book's
+    // chapters is dozens-to-hundreds of paragraphs; a contents block is ~1),
+    // rescan starting after that cluster.
+    const scan = (fromIdx) => {
+        let cursor = fromIdx;
+        const matches = new Map(); // draft index → paragraph index
+        draft.forEach((entry, di) => {
+            const t = entry.title ? norm(entry.title) : '';
+            if (t.length < 3) return;
+            for (let i = cursor; i < paragraphs.length; i++) {
+                if (
+                    paraNorms[i] === t ||
+                    (paraNorms[i].startsWith(t) && paraNorms[i].length <= t.length + 24)
+                ) {
+                    matches.set(di, i);
+                    cursor = i + 1;
+                    break;
+                }
+            }
+        });
+        return matches;
+    };
+
+    let matches = scan(0);
+    if (matches.size >= 3) {
+        const idxs = [...matches.values()];
+        const span = idxs[idxs.length - 1] - idxs[0];
+        if (span < matches.size * 3) {
+            // contents-page cluster — rescan after it
+            const rescanned = scan(idxs[idxs.length - 1] + 1);
+            if (rescanned.size >= Math.min(2, matches.size)) matches = rescanned;
+        }
+    }
+
+    const out = [];
+    let cursor = 0;
+    draft.forEach((entry, di) => {
+        let startParagraph = matches.has(di) ? matches.get(di) : null;
+        if (startParagraph === null && typeof entry.startParagraph === 'number') {
+            startParagraph = entry.startParagraph;
+        }
+        if (startParagraph !== null) cursor = Math.max(cursor, startParagraph + 1);
+        if (startParagraph === null && entry.startPage == null) return;
+        out.push({
+            title: String(entry.title || '').slice(0, 300),
+            order: out.length,
+            startParagraph,
+            startPage: entry.startPage ?? null,
+        });
+    });
+
+    // paragraph anchors must be strictly increasing
+    let last = -1;
+    const clean = out.filter((e) => {
+        if (e.startParagraph === null) return true;
+        if (e.startParagraph > last) {
+            last = e.startParagraph;
+            return true;
+        }
+        return false;
+    });
+    return clean.length >= 2 ? clean : [];
 }
 
 module.exports = { ingestDocument, deleteDocumentChunks, resumeStuckIngests };

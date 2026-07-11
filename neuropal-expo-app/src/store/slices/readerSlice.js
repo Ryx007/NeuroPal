@@ -39,7 +39,13 @@ export const fetchReaderDocument = createAsyncThunk(
   "reader/fetchReaderDocument",
   async ({ documentId }) => {
     const data = await fetchDocumentText(documentId);
-    return { documentId, title: data?.title, text: data?.text };
+    return {
+      documentId,
+      title: data?.title,
+      text: data?.text,
+      toc: data?.toc,
+      pageCount: data?.pageCount,
+    };
   }
 );
 
@@ -96,11 +102,110 @@ function isHeadingParagraph(p) {
 
 const MIN_CHAPTER_PARAGRAPHS = 5;
 
-function textToSections({ documentId, title, text }) {
+// Long paragraphs are display-capped at MAX_PARAGRAPH_WORDS — applied AFTER
+// TOC slicing so server paragraph anchors (which index the unsplit list)
+// stay valid.
+function expandLongParagraphs(paragraphs) {
+  const out = [];
+  for (const p of paragraphs) {
+    const words = p.split(" ");
+    if (words.length <= MAX_PARAGRAPH_WORDS || blockMathOf(p)) {
+      out.push(p);
+    } else {
+      out.push(...splitParagraphMathSafe(p, MAX_PARAGRAPH_WORDS));
+    }
+  }
+  return out;
+}
+
+// Real chapters from Document.toc (P2): slice the raw paragraph list at the
+// server-resolved anchors; page-only anchors (PDF outlines) map
+// proportionally. Falls back to null when the anchors don't hold — the
+// caller then uses the synthetic path.
+function sectionsFromToc({ documentId, title, rough, toc, pageCount }) {
+  // Two tiers: EXACT paragraph anchors are authoritative; page-only anchors
+  // (PDF outlines) are proportional ESTIMATES and must never displace an
+  // exact one — an overshooting estimate placed first would silently drop
+  // every exact anchor behind it. Estimates are clamped between their exact
+  // neighbours.
+  const raw = toc.map((entry, i) => {
+    const exact =
+      typeof entry.startParagraph === "number" && entry.startParagraph >= 0
+        ? Math.min(entry.startParagraph, rough.length - 1)
+        : null;
+    const est =
+      exact === null && entry.startPage && pageCount > 0
+        ? Math.min(
+            rough.length - 1,
+            Math.round(((entry.startPage - 1) / pageCount) * rough.length)
+          )
+        : null;
+    return { title: entry.title || `Chapter ${i + 1}`, exact, est };
+  });
+
+  const anchors = [];
+  raw.forEach((a, i) => {
+    let idx = a.exact;
+    if (idx === null && a.est !== null) {
+      // clamp the estimate between the nearest exact anchors on both sides
+      let lo = -1;
+      for (let j = i - 1; j >= 0; j--) if (raw[j].exact !== null) { lo = raw[j].exact; break; }
+      let hi = rough.length;
+      for (let j = i + 1; j < raw.length; j++) if (raw[j].exact !== null) { hi = raw[j].exact; break; }
+      idx = Math.max(lo + 1, Math.min(a.est, hi - 1));
+    }
+    if (idx === null) return;
+    if (anchors.length > 0 && idx <= anchors[anchors.length - 1].idx) return;
+    anchors.push({ idx, title: a.title });
+  });
+  if (anchors.length < 2) return null;
+
+  const sections = [];
+  const pushSection = (heading, paragraphs) => {
+    if (paragraphs.length === 0) return;
+    sections.push({
+      id: `doc-${documentId}-s-${sections.length + 1}`,
+      heading,
+      paragraphs,
+    });
+  };
+  const pushChapter = (heading, paragraphs) => {
+    const expanded = expandLongParagraphs(paragraphs);
+    if (expanded.length <= SECTION_PARAGRAPHS) {
+      pushSection(heading, expanded);
+      return;
+    }
+    const pieces = Math.ceil(expanded.length / SECTION_PARAGRAPHS);
+    for (let i = 0; i < pieces; i++) {
+      pushSection(
+        i === 0 ? heading : `${heading} (cont. ${i + 1})`,
+        expanded.slice(i * SECTION_PARAGRAPHS, (i + 1) * SECTION_PARAGRAPHS)
+      );
+    }
+  };
+
+  if (anchors[0].idx > 0) {
+    pushChapter(title || "Front matter", rough.slice(0, anchors[0].idx));
+  }
+  anchors.forEach((a, i) => {
+    const end = anchors[i + 1]?.idx ?? rough.length;
+    pushChapter(a.title, rough.slice(a.idx, end));
+  });
+  return sections.length >= 2 ? sections : null;
+}
+
+function textToSections({ documentId, title, text, toc, pageCount }) {
   const rough = (text || "")
     .split(/\n{2,}/)
     .map((p) => p.replace(/\s+/g, " ").trim())
     .filter(Boolean);
+
+  // Real structure first (P2) — synthetic windows only when the document
+  // genuinely has none.
+  if (Array.isArray(toc) && toc.length >= 2) {
+    const real = sectionsFromToc({ documentId, title, rough, toc, pageCount });
+    if (real) return real;
+  }
 
   // Group paragraphs under detected headings → real chapters in the reader
   // (and the Part navigator shows actual chapter names). Oversized chapters

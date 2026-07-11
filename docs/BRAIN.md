@@ -76,7 +76,7 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `POST /api/documents/upload` | multipart field `file` (+`title`,`subtitle`) | 201 Document (status `pending`; ingest is fire-and-forget) |
 | `GET /api/documents` | — | Document[] (newest first, soft-deleted excluded) |
 | `GET /api/documents/:id` | — | Document — poll this or the list for `status`/`progress` |
-| `GET /api/documents/:id/text` | — | `{id,title,text,pageCount,wordCount,source:'chunks'\|'raw-file'}` — reader/TTS source. `raw-file` = ingest not finished; for binary types that's mojibake, so the client only fetches when status is `ready`. |
+| `GET /api/documents/:id/text` | — | `{id,title,text,pageCount,wordCount,toc,source:'chunks'\|'raw-file'}` — reader/TTS source. `toc` = real chapters (P2): `[{title,order,startParagraph,startPage}]`, startParagraph indexes THIS text's paragraph list. `raw-file` = ingest not finished; for binary types that's mojibake, so the client only fetches when status is `ready`. |
 | `POST /api/documents/:id/query` | `{question[,threadId][,provider]}` | `{answer, citations:[{chunkId,page,excerpt}], verbatim[], threadId, mode:'rag'\|'fallback', model, provider, chunksUsed}` |
 | `GET /api/documents/:id/chat` | `?threadId=` | ChatMessage[] (oldest first, cap 100) |
 | `GET /api/documents/:id/progress` | — | `{progress,lastWordIndex,lastPage,lastOpenedAt}` — reader resume point (Audible-style); nulls when never opened |
@@ -163,7 +163,16 @@ TXT raw; DOCX still raw-fallback w/ warning) →
 `chunker.js` (paragraph-aware ~2000 chars, 200 overlap, never mid-sentence,
 **math-atomic**: cuts and overlap tails never land inside `$…$/$$…$$`;
 oversized display blocks stay whole). `Document.extractor` records which
-tier ran ('arxiv-latex'|'nougat'|'pdf-parse'|'ocr'|format name)
+tier ran ('arxiv-latex'|'nougat'|'pdf-parse'|'ocr'|format name).
+**Real TOC (P2, 2026-07-10):** each tier emits chapter structure — LaTeX
+\section titles, nougat #/## headings, EPUB spine + nav.xhtml/toc.ncx
+titles, PDF embedded outline via pdfjs-dist (`services/pdfOutline.js`;
+junk stitched-download bookmarks get titles re-derived from destination
+pages, else honest "pp. X–Y"; no outline → strict running-head detection
+with dedupe). `resolveTocAnchors` (ingestPipeline) matches titles against
+the CHUNK-RECONSTRUCTED text so `Document.toc[].startParagraph` can never
+drift from the client's paragraph indexes; <2 survivors → no toc and the
+reader keeps its synthetic Parts
 → `embedder.js` embedBatch (Ollama, concurrency 4, onProgress,
 **`num_ctx: 8192` on every embed call** — Ollama's default 2048 500s on
 dense-LaTeX chunks ("input length exceeds the context length"); a chunk
@@ -208,8 +217,12 @@ name/tweaks in the background. `src/screens/LoginScreen.jsx` still exists
 but is never routed to — re-gate it only for a future LOCAL_MODE=false build.
 `store/ApiRequest.js` is the screens' hook (toasts, 401 logout, `rethrow`
 opt-in). Reader: backend docs carry no `sections` → `fetchReaderDocument`
-pulls `/text` **only once status is `ready`** (mojibake guard), splits into
-paragraphs (≤180 words each) grouped into **Parts of 40 paragraphs**; one
+pulls `/text` **only once status is `ready`** (mojibake guard). With a
+`toc` (P2) the reader builds REAL chapters at the server anchors (page-only
+anchors map proportionally; oversized chapters become "(cont. N)" parts;
+leading material = a front-matter section) — synthetic Parts of 40
+paragraphs remain only for structureless docs. Long paragraphs split ≤180
+words AFTER toc slicing (anchors index the unsplit list); one
 Part rendered at a time (a 216k-word book = 112 parts, ~250 text nodes
 instead of ~216k); view auto-follows the voice across parts.
 

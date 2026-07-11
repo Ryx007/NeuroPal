@@ -44,6 +44,14 @@ async function extractText(filePath, docType, opts = {}) {
                 pageCount,
                 wordCount: latex.wordCount,
                 extractor: 'arxiv-latex',
+                // \section titles — the ingest resolver anchors them to
+                // their heading paragraphs in the final text
+                toc: (latex.sections || []).map((title, i) => ({
+                    title,
+                    order: i,
+                    startParagraph: null,
+                    startPage: null,
+                })),
             };
         }
         // eslint-disable-next-line no-console
@@ -60,21 +68,35 @@ async function extractText(filePath, docType, opts = {}) {
         const pages = [];
         const data = await pdfParse(buf, {
             pagerender: (pageData) =>
-                pageData.getTextContent().then((tc) => {
-                    let lastY;
-                    let pageText = '';
-                    for (const item of tc.items) {
-                        if (lastY === item.transform[5] || lastY === undefined) {
-                            pageText += item.str;
-                        } else {
-                            pageText += `\n${item.str}`;
+                pageData
+                    .getTextContent()
+                    .then((tc) => {
+                        let lastY;
+                        let pageText = '';
+                        for (const item of tc.items) {
+                            if (lastY === item.transform[5] || lastY === undefined) {
+                                pageText += item.str;
+                            } else {
+                                pageText += `\n${item.str}`;
+                            }
+                            lastY = item.transform[5];
                         }
-                        lastY = item.transform[5];
-                    }
-                    pages.push(pageText);
-                    return pageText;
-                }),
+                        pages.push(pageText);
+                        return pageText;
+                    })
+                    // a failed page must still occupy its slot — pages[i]
+                    // feeds outline titles/heading detection BY PAGE INDEX,
+                    // and a skipped push would shift every later page
+                    .catch(() => {
+                        pages.push('');
+                        return '';
+                    }),
         });
+
+        // P2: the embedded outline is the authoritative chapter structure —
+        // read it once here; every PDF-tier return below carries it.
+        const { extractPdfOutline, outlineToToc, detectHeadings } = require('./pdfOutline');
+        const outlineEntries = await extractPdfOutline(buf);
 
         let text;
         try {
@@ -85,6 +107,10 @@ async function extractText(filePath, docType, opts = {}) {
             text = data.text || '';
         }
         const pageCount = data.numpages || pages.length || 0;
+        const pdfToc =
+            outlineToToc(outlineEntries, pages, pageCount) ||
+            [];
+        const fallbackToc = pdfToc.length > 0 ? pdfToc : detectHeadings(pages, pageCount);
 
         const density = text.trim().length / Math.max(1, pageCount);
         if (density >= SCANNED_PDF_CHARS_PER_PAGE || !opts.allowOcr) {
@@ -115,11 +141,21 @@ async function extractText(filePath, docType, opts = {}) {
                     // sanity guard: a degenerate/truncated neural output
                     // must not replace a healthy text layer
                     if (nougat && nougat.text.length > text.length * 0.3) {
+                        const nougatToc =
+                            fallbackToc.length > 0
+                                ? fallbackToc
+                                : (nougat.headings || []).map((title, i) => ({
+                                      title,
+                                      order: i,
+                                      startParagraph: null,
+                                      startPage: null,
+                                  }));
                         return {
                             text: nougat.text,
                             pageCount,
                             wordCount: countWords(nougat.text),
                             extractor: 'nougat',
+                            toc: nougatToc,
                         };
                     }
                     if (nougat) {
@@ -130,7 +166,13 @@ async function extractText(filePath, docType, opts = {}) {
                     }
                 }
             }
-            return { text, pageCount, wordCount: countWords(text), extractor: 'pdf-parse' };
+            return {
+                text,
+                pageCount,
+                wordCount: countWords(text),
+                extractor: 'pdf-parse',
+                toc: fallbackToc,
+            };
         }
 
         // Scanned PDF → OCR.
@@ -151,6 +193,7 @@ async function extractText(filePath, docType, opts = {}) {
             pageCount: ocr.pageCount || pageCount,
             wordCount: countWords(ocr.text),
             extractor: 'ocr',
+            toc: fallbackToc,
         };
     }
 
@@ -356,7 +399,12 @@ function extractEpub(buf) {
         (m) => m[1],
     );
 
-    const chapters = [];
+    // Titles come from the navigation document: EPUB3 nav.xhtml (manifest
+    // properties="nav") or EPUB2 toc.ncx — keyed by href so they line up
+    // with spine items. Absent both, the chapter's first line stands in.
+    const { titles: navTitles, byBase: navTitlesByBase } = epubNavTitles(opf, opfDir, readEntry);
+
+    const chapters = []; // { text, title, href }
     for (const id of spineIds) {
         const href = manifest[id];
         if (!href) continue;
@@ -373,18 +421,124 @@ function extractEpub(buf) {
         const html = readEntry(entryPath) ?? readEntry(rawPath);
         if (!html) continue;
         const text = htmlToText(html).trim();
-        if (text) chapters.push(text);
+        if (text) {
+            chapters.push({ text, href: href.split('#')[0], title: null });
+        }
     }
     if (chapters.length === 0) {
         throw new Error('EPUB: no readable chapters found in the spine');
     }
 
-    const text = chapters.join('\n\n');
+    // Real structure (P2): a TOC entry per spine chapter, anchored by its
+    // paragraph offset in the joined text — the boundaries the old
+    // chapters.join used to throw away.
+    const toc = [];
+    let paraCursor = 0;
+    chapters.forEach((ch, i) => {
+        const abs = resolveZipPath(opfDir, ch.href);
+        const title =
+            navTitles.get(abs) ||
+            navTitlesByBase.get(abs.split('/').pop()) ||
+            firstLineTitle(ch.text) ||
+            `Chapter ${i + 1}`;
+        toc.push({ title, order: i, startParagraph: paraCursor, startPage: null });
+        paraCursor += ch.text.split(/\n{2,}/).filter((x) => x.trim()).length;
+    });
+
+    const text = chapters.map((c) => c.text).join('\n\n');
     return {
         text,
         pageCount: Math.max(1, Math.ceil(text.length / 3000)),
         wordCount: countWords(text),
+        toc,
     };
+}
+
+// href → title from nav.xhtml (EPUB3) or toc.ncx (EPUB2). Hrefs inside the
+// nav/ncx are relative to THAT document's directory (which can differ from
+// the OPF's) — everything is normalized to zip-absolute paths, with a
+// basename fallback for sloppy producers. Titles are entity-decoded.
+function decodeEntities(str) {
+    return str
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, ' ');
+}
+
+function dirOf(p) {
+    return p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
+}
+
+// resolve a relative href against a base dir into a normalized zip path
+function resolveZipPath(baseDir, href) {
+    const raw = (baseDir + href.split('#')[0]).split('/');
+    const out = [];
+    for (const seg of raw) {
+        if (!seg || seg === '.') continue;
+        if (seg === '..') out.pop();
+        else out.push(seg);
+    }
+    return out.join('/');
+}
+
+function epubNavTitles(opf, opfDir, readEntry) {
+    const titles = new Map(); // zip-absolute path → title
+    const byBase = new Map(); // basename fallback
+    const put = (docDir, href, title) => {
+        const t = decodeEntities(title).replace(/\s+/g, ' ').trim();
+        if (!href || !t) return;
+        const abs = resolveZipPath(docDir, href);
+        if (abs && !titles.has(abs)) titles.set(abs, t);
+        const base = abs.split('/').pop();
+        if (base && !byBase.has(base)) byBase.set(base, t);
+    };
+
+    // EPUB3 nav document — scope to the epub:type="toc" <nav> when present
+    // (landmarks/page-list navs would otherwise pollute the chapter list)
+    const navHref = (opf.match(/<item\b[^>]*properties=["'][^"']*\bnav\b[^"']*["'][^>]*>/) || [])[0]
+        ?.match(/\bhref=["']([^"']+)["']/)?.[1];
+    if (navHref) {
+        const navPath = resolveZipPath(opfDir, navHref);
+        const nav = readEntry(navPath);
+        if (nav) {
+            const navDir = dirOf(navPath);
+            const tocScope =
+                (nav.match(/<nav\b[^>]*epub:type=["']toc["'][\s\S]*?<\/nav>/) || [])[0] || nav;
+            for (const m of tocScope.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/g)) {
+                put(navDir, m[1], m[2].replace(/<[^>]+>/g, ' '));
+            }
+            if (titles.size > 0) return { titles, byBase };
+        }
+    }
+
+    // EPUB2 ncx
+    const ncxHref = (opf.match(/<item\b[^>]*media-type=["']application\/x-dtbncx\+xml["'][^>]*>/) || [])[0]
+        ?.match(/\bhref=["']([^"']+)["']/)?.[1];
+    if (ncxHref) {
+        const ncxPath = resolveZipPath(opfDir, ncxHref);
+        const ncx = readEntry(ncxPath);
+        if (ncx) {
+            const ncxDir = dirOf(ncxPath);
+            for (const m of ncx.matchAll(/<navPoint[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<content[^>]*src=["']([^"']+)["']/g)) {
+                put(ncxDir, m[2], m[1]);
+            }
+        }
+    }
+    return { titles, byBase };
+}
+
+// A chapter's opening line, if it looks like a title rather than prose.
+function firstLineTitle(text) {
+    const first = text.split(/\n/, 1)[0].trim();
+    if (first.length >= 2 && first.length <= 120 && !/[.!?,;:]$/.test(first)) {
+        return first;
+    }
+    return null;
 }
 
 function htmlToText(html) {
