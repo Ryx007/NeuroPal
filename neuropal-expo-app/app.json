@@ -54,7 +54,19 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "NeuroPal adds your anchors and reminders to your calendar."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NeuroPal uses your location to trigger place-based anchors while the app is open."
+        }
+      ]
     ],
     "experiments": {
       "reactCompiler": true

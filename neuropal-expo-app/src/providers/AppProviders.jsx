@@ -185,6 +185,23 @@ export function AppProviders({ children }) {
         if (active) {
           setReady(true);
         }
+        // P8 — Android drops the OS notification schedule on reboot; rebuild
+        // it from the hydrated state on every launch (idempotent, no boot
+        // receiver needed, never prompts for permission on its own).
+        try {
+          const { rearmSchedules } = require("../services/notify");
+          const { setReminderNotificationId } = require("../store/slices/remindersSlice");
+          const st = appStore.getState();
+          const remap = await rearmSchedules({
+            anchors: st.home.anchors || [],
+            reminders: st.reminders.items || [],
+          });
+          for (const [id, notificationId] of Object.entries(remap)) {
+            appStore.dispatch(setReminderNotificationId({ id, notificationId }));
+          }
+        } catch (e) {
+          // notifications unavailable (web / no permission) — in-app popups remain
+        }
       }
     }
 
@@ -216,6 +233,29 @@ export function AppProviders({ children }) {
     persist();
     const unsubscribe = appStore.subscribe(persist);
     return unsubscribe;
+  }, [ready]);
+
+  // P8 — keep the OS anchor schedule in sync with edits: whenever the
+  // anchors array identity changes, rebuild the daily notifications
+  // (debounced; rearm is idempotent and cancels stale anchor schedules).
+  useEffect(() => {
+    if (!ready) return undefined;
+    let lastAnchors = appStore.getState().home.anchors;
+    let timer = null;
+    const unsubscribe = appStore.subscribe(() => {
+      const anchors = appStore.getState().home.anchors;
+      if (anchors === lastAnchors) return;
+      lastAnchors = anchors;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const { rearmSchedules } = require("../services/notify");
+        rearmSchedules({ anchors, reminders: [] }).catch(() => {});
+      }, 1200);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
   }, [ready]);
 
   const content = useMemo(() => {

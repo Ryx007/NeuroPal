@@ -74,7 +74,7 @@ const homeSlice = createSlice({
     },
     // ---- timed anchors (planner) ----
     addAnchor(state, action) {
-      const { title, subtitle, hour, minute, icon } = action.payload;
+      const { title, subtitle, hour, minute, icon, location } = action.payload;
       if (!String(title || "").trim()) return;
       state.anchors.push({
         id: freshId("a"),
@@ -86,6 +86,8 @@ const homeSlice = createSlice({
         },
         status: "upcoming",
         icon: icon || "flag",
+        // P8: optional place-based trigger {lat, lng, radius}
+        location: location || null,
       });
       state.anchors.sort(
         (a, b) => a.time.hour * 60 + a.time.minute - (b.time.hour * 60 + b.time.minute)
@@ -104,6 +106,8 @@ const homeSlice = createSlice({
         };
       }
       if (patch.icon !== undefined) anchor.icon = patch.icon;
+      // P8: place-based anchor — {lat, lng, radius} or null to detach
+      if (patch.location !== undefined) anchor.location = patch.location;
       state.anchors.sort(
         (a, b) => a.time.hour * 60 + a.time.minute - (b.time.hour * 60 + b.time.minute)
       );

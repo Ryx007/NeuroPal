@@ -13,6 +13,7 @@ import Toast from "../components/toast";
 
 import { Linking } from "react-native";
 import { AnchorEditor } from "../components/planner/AnchorEditor";
+import { addToDeviceCalendar } from "../services/calendar";
 import { cancelScheduled, scheduleAt } from "../services/notify";
 import {
   addAnchor,
@@ -138,7 +139,8 @@ function PomodoroCard() {
       focus.phase === "work" ? "Focus block done 🎯" : "Break over",
       focus.phase === "work"
         ? `${focus.workMin} minutes complete — time for a ${focus.breakMin} minute break.`
-        : "Back to it — next focus block is ready."
+        : "Back to it — next focus block is ready.",
+      { category: "pomodoro" }
     );
     dispatch(startPhase({ endsAt, notificationId }));
   }
@@ -374,6 +376,9 @@ function RemindersCard() {
   const items = useSelector((s) => s.reminders.items);
   const [title, setTitle] = useState("");
   const [customMin, setCustomMin] = useState("");
+  // P8: medication reminders ride their own Android channel (MAX importance,
+  // heavier vibration) so a dose alert never feels like a nudge.
+  const [category, setCategory] = useState("reminder");
 
   async function add(minutes) {
     const text = title.trim();
@@ -382,13 +387,20 @@ function RemindersCard() {
       return;
     }
     const at = minutes === null ? nextMorning() : Date.now() + minutes * 60000;
-    const notificationId = await scheduleAt(new Date(at), "Reminder", text);
+    const id = `r-${at}-${Math.random().toString(36).slice(2, 7)}`;
+    const notificationId = await scheduleAt(
+      new Date(at),
+      category === "medication" ? "Medication" : "Reminder",
+      text,
+      { category, data: { refId: id } }
+    );
     dispatch(
       addReminder({
-        id: `r-${at}-${Math.random().toString(36).slice(2, 7)}`,
+        id,
         title: text,
         at,
         notificationId,
+        category,
         done: false,
       })
     );
@@ -486,6 +498,45 @@ function RemindersCard() {
           fontSize: 15,
         }}
       />
+
+      {/* P8: category → Android channel (importance + vibration) */}
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+        {[
+          ["reminder", "Reminder"],
+          ["medication", "Medication"],
+        ].map(([key, label]) => {
+          const selected = category === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setCategory(key)}
+              accessibilityRole="button"
+              accessibilityLabel={`Category: ${label}`}
+              accessibilityState={{ selected }}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 999,
+                backgroundColor: selected
+                  ? withAlpha(palette.accent, 0.14)
+                  : palette.surfaceHigh,
+                borderWidth: 1,
+                borderColor: selected ? withAlpha(palette.accent, 0.45) : "transparent",
+              }}
+            >
+              <Text
+                style={{
+                  color: selected ? palette.accent : palette.onSurfaceVariant,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 12,
+                }}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
         {QUICK_OFFSETS.map((q) => (
@@ -611,8 +662,26 @@ function RemindersCard() {
                   {new Date(item.at).toLocaleString()}
                 </Text>
               </View>
+              {Platform.OS !== "web" ? (
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      await addToDeviceCalendar({ title: item.title, startMs: item.at });
+                      Toast.show({ type: "success", text1: "Added to your calendar" });
+                    } catch (error) {
+                      Toast.show({ type: "error", text1: "Calendar", text2: error?.message });
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${item.title} to the device calendar`}
+                  style={{ padding: 6 }}
+                >
+                  <MaterialIcons name="event-available" size={18} color={palette.accent} />
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => addToGoogleCalendar(item)}
+                accessibilityRole="button"
                 accessibilityLabel={`Add ${item.title} to Google Calendar`}
                 style={{ padding: 6 }}
               >

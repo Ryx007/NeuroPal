@@ -31,6 +31,12 @@ const remindersSlice = createSlice({
       const item = state.items.find((r) => r.id === action.payload);
       if (item) item.notifiedAt = Date.now();
     },
+    // P8: re-arm on launch reschedules dropped one-shots — record the new id
+    setReminderNotificationId(state, action) {
+      const { id, notificationId } = action.payload;
+      const item = state.items.find((r) => r.id === id);
+      if (item) item.notificationId = notificationId;
+    },
     snoozeReminder(state, action) {
       const { id, minutes } = action.payload;
       const item = state.items.find((r) => r.id === id);
@@ -50,6 +56,7 @@ export const {
   removeReminder,
   toggleReminderDone,
   markReminderNotified,
+  setReminderNotificationId,
   snoozeReminder,
 } = remindersSlice.actions;
 

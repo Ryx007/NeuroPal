@@ -7,7 +7,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Toast from "../toast";
 
+import { getCurrentCoords } from "../../services/locationAnchors";
 import { usePalette } from "../../theme/ThemeProvider";
 import { withAlpha } from "../primitives";
 
@@ -30,6 +32,8 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
   const [hour, setHour] = useState(9);
   const [minute, setMinute] = useState(0);
   const [icon, setIcon] = useState("flag");
+  const [location, setLocation] = useState(null); // P8: {lat, lng, radius}
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -38,6 +42,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
     setHour(anchor?.time?.hour ?? new Date().getHours());
     setMinute(anchor?.time?.minute ?? 0);
     setIcon(anchor?.icon || "flag");
+    setLocation(anchor?.location || null);
   }, [visible, anchor]);
 
   function save() {
@@ -49,7 +54,27 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
       hour,
       minute,
       icon,
+      location,
     });
+  }
+
+  // P8 §12-approved location scope: pin the anchor to wherever the device
+  // is right now; it then ALSO fires when you arrive (app open — see
+  // services/locationAnchors.js for the honest scope note).
+  async function toggleLocation() {
+    if (location) {
+      setLocation(null);
+      return;
+    }
+    setLocating(true);
+    try {
+      const coords = await getCurrentCoords();
+      setLocation({ ...coords, radius: 150 });
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Location", text2: error?.message });
+    } finally {
+      setLocating(false);
+    }
   }
 
   const timeField = (value, setValue, max, label) => (
@@ -231,6 +256,51 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               );
             })}
           </View>
+
+          {/* P8: place-based anchor toggle */}
+          <Pressable
+            onPress={toggleLocation}
+            disabled={locating}
+            accessibilityRole="button"
+            accessibilityLabel={
+              location ? "Remove attached location" : "Attach current location"
+            }
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 14,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 12,
+              backgroundColor: location
+                ? withAlpha(palette.accent, 0.12)
+                : palette.surfaceHigh,
+              borderWidth: 1,
+              borderColor: location ? withAlpha(palette.accent, 0.4) : "transparent",
+              opacity: locating ? 0.5 : 1,
+            }}
+          >
+            <MaterialIcons
+              name={location ? "location-on" : "add-location-alt"}
+              size={16}
+              color={location ? palette.accent : palette.onSurfaceVariant}
+            />
+            <Text
+              style={{
+                flex: 1,
+                color: location ? palette.accent : palette.onSurfaceVariant,
+                fontFamily: "Inter_500Medium",
+                fontSize: 13,
+              }}
+            >
+              {locating
+                ? "Getting location…"
+                : location
+                  ? `Fires here too (±${location.radius}m) — tap to remove`
+                  : "Also fire at my current location"}
+            </Text>
+          </Pressable>
 
           <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
             {anchor && onDelete ? (

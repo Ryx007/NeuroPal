@@ -1,11 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import Toast from "../components/toast";
 
 import { formatTime12 } from "../data/mockData";
 import { AnchorEditor } from "../components/planner/AnchorEditor";
+import { anchorsInRange } from "../services/locationAnchors";
+import { categoryForAnchor, scheduleAt } from "../services/notify";
 import {
   selectNextAnchor,
   selectNervousState,
@@ -41,6 +44,29 @@ export function HomeScreen() {
   // Real name comes from the backend's LOCAL_MODE user via /auth/me;
   // single-user app, so the owner's name is the offline fallback too.
   const userName = useSelector((s) => s.auth.userName);
+  const anchors = useSelector((s) => s.home.anchors);
+
+  // P8 — place-based anchors, foreground pass: whenever Home gains focus,
+  // any anchor pinned to a location fires if the phone is inside its radius
+  // (cooldown-guarded inside anchorsInRange; never prompts for permission).
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      anchorsInRange(anchors).then((hits) => {
+        if (!active) return;
+        for (const a of hits) {
+          Toast.show({ type: "info", text1: a.title, text2: "You're at this anchor's spot." });
+          scheduleAt(new Date(Date.now() + 1000), a.title, a.subtitle || "You've arrived.", {
+            category: categoryForAnchor(a),
+            data: { refId: `${a.id}-geo` },
+          });
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, [anchors])
+  );
 
   return (
     <ScrollView
