@@ -1,12 +1,14 @@
 // Web variant of the equation renderer — sandboxed iframe, height reported
 // back via postMessage from the shared HTML.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 
 import { apiHost } from "../store/ApiLink";
 import { buildEquationHtml } from "./mathViewHtml";
 
-export function MathView({ latex, color, fontSize = 18 }) {
+// memo (P7): the reader body re-renders on every karaoke tick — equation
+// iframes with unchanged latex must not even enter reconciliation.
+export const MathView = memo(function MathView({ latex, color, fontSize = 18 }) {
   const [height, setHeight] = useState(64);
   const frameRef = useRef(null);
   const html = useMemo(
@@ -47,4 +49,4 @@ export function MathView({ latex, color, fontSize = 18 }) {
       />
     </View>
   );
-}
+});

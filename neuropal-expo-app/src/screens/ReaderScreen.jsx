@@ -76,6 +76,7 @@ import { usePalette, useTheme } from "../theme/ThemeProvider";
 //   · TOC sheet with chapters + bookmarks; go-to-page; original-pages view
 
 const EMPTY_SECTIONS = [];
+const EMPTY_CHAT = []; // stable identity — keeps memoized rows from churning
 
 export function ReaderScreen() {
   const route = useRoute();
@@ -1173,6 +1174,34 @@ function ReaderBody({
   const scrollRef = useRef(null);
   const maxWidth = layout === "focus" ? 520 : layout === "paginated" ? 680 : 720;
 
+  // P7: this component re-renders on EVERY karaoke boundary (the moving
+  // word), and the per-paragraph lookups below used to be linear scans —
+  // ranges.find over the whole document's ranges (thousands of entries on a
+  // big book) plus a display-math regex and a chat filter, once per visible
+  // paragraph per tick. Precompute on identity change; O(1) per paragraph
+  // at render time.
+  const rangeByPid = useMemo(
+    () => new Map(ranges.map((entry) => [entry.pid, entry])),
+    [ranges]
+  );
+  const latexBySection = useMemo(() => {
+    const map = new Map();
+    for (const s of visibleSections || []) {
+      map.set(s.id, s.paragraphs.map((p) => blockMathOf(p)));
+    }
+    return map;
+  }, [visibleSections]);
+  const chatByPid = useMemo(() => {
+    const map = new Map();
+    for (const m of chat || []) {
+      if (!m.paragraphId) continue;
+      const arr = map.get(m.paragraphId) || [];
+      arr.push(m);
+      map.set(m.paragraphId, arr);
+    }
+    return map;
+  }, [chat]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [sectionKey]);
@@ -1254,15 +1283,9 @@ function ReaderBody({
             </Text>
             {section.paragraphs.map((paragraph, index) => {
               const paragraphId = `${section.id}-${index}`;
-              const range =
-                ranges.find((entry) => entry.pid === paragraphId) || {
-                  start: 0,
-                  end: 0,
-                };
-              const latex = blockMathOf(paragraph);
-              const notesForParagraph = chat.filter(
-                (message) => message.paragraphId === paragraphId
-              );
+              const range = rangeByPid.get(paragraphId) || { start: 0, end: 0 };
+              const latex = latexBySection.get(section.id)?.[index] ?? null;
+              const notesForParagraph = chatByPid.get(paragraphId) || EMPTY_CHAT;
               const paraHighlights = highlightsByPid.get(paragraphId) || null;
               // clip the live selection to this paragraph (primitives → memo-safe)
               let selFrom = -1;
@@ -1419,7 +1442,9 @@ const ParagraphText = memo(function ParagraphText({
   const palette = usePalette();
   // MUST be the same tokenizer the words/karaoke memo uses — a divergence
   // would shift every highlight after the first inline equation.
-  const tokens = tokenizeMathParagraph(text);
+  // (P7: memoized — the ACTIVE paragraph re-renders on every karaoke tick
+  // and was re-tokenizing its full text each time.)
+  const tokens = useMemo(() => tokenizeMathParagraph(text), [text]);
 
   return (
     <View
