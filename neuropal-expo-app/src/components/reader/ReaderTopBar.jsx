@@ -14,6 +14,7 @@ export function ReaderTopBar({
   title,
   subtitle,
   onBack,
+  onMenu, // Issue 2: header hamburger — the Reader's drawer access
   onToc,
   onDisplay,
   overflowItems, // [{ icon, label, onPress }]
@@ -36,8 +37,20 @@ export function ReaderTopBar({
             paddingVertical: 8,
           }}
         >
+          {onMenu ? (
+            <Pressable
+              onPress={onMenu}
+              accessibilityRole="button"
+              accessibilityLabel="Open navigation menu"
+              hitSlop={6}
+              style={{ padding: 8 }}
+            >
+              <MaterialIcons name="menu" size={22} color={palette.accent} />
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onBack}
+            accessibilityRole="button"
             accessibilityLabel="Back to library"
             hitSlop={6}
             style={{ padding: 8 }}

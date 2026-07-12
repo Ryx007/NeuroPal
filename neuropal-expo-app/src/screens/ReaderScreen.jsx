@@ -873,11 +873,40 @@ export function ReaderScreen() {
                 ? currentHeading
                 : null
           }
+          onMenu={() => navigation.openDrawer()}
           onBack={() => navigation.navigate("Library")}
           onToc={() => setTocOpen(true)}
           onDisplay={() => setDisplayOpen(true)}
           overflowItems={overflowItems}
         />
+      ) : null}
+
+      {/* Issue 2 — web has no reliable edge-swipe, so the drawer must stay
+          reachable even with the chrome hidden: a minimal top-left hamburger
+          appears on web whenever the top bar is away. Native keeps the
+          drawer's edge-swipe gesture. */}
+      {Platform.OS === "web" && !chromeVisible ? (
+        <Pressable
+          onPress={() => navigation.openDrawer()}
+          accessibilityRole="button"
+          accessibilityLabel="Open navigation menu"
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            minWidth: 44,
+            minHeight: 44,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 999,
+            backgroundColor: withAlpha(palette.surfaceContainer, 0.75),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.outlineVariant, 0.5),
+            zIndex: 20,
+          }}
+        >
+          <MaterialIcons name="menu" size={20} color={palette.onSurfaceVariant} />
+        </Pressable>
       ) : null}
 
       {/* D10 — Ask as a translucent floating button, top-right */}

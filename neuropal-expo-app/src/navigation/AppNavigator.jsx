@@ -269,52 +269,22 @@ function DrawerChrome() {
   );
 }
 
-// P4 §5.3 — the always-reachable navigation affordance. A ≥44px labelled FAB
-// (bottom-left) opens the drawer from ANY screen, Reader included (whose
-// header is nulled for immersion). On Reader it sits above the docked
-// player's band and hides under the full-screen now-playing view. A
-// now-playing pill (bottom-right, non-Reader screens) jumps back to the live
-// session — playback survives navigation since P4, so it needs a handle.
-const READER_DOCKED_PLAYER_CLEARANCE = 232; // docked TidalPlayer ≈208px + gap
-
+// Issue 2: the floating nav FAB is REMOVED (owner-rejected). This overlay
+// now carries only the now-playing pill (bottom-right, non-Reader screens)
+// that jumps back to the live session — playback survives navigation since
+// P4, so it needs a handle. Drawer access: native = left-edge swipe + the
+// header hamburger; web = the persistent header hamburger on every screen
+// (the Reader's lives in its top bar + a chrome-hidden fallback).
 function NavOverlay({ route, navigation, children }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
   const playing = useSelector((s) => s.reader.playing);
-  const playerExpanded = useSelector((s) => s.reader.playerExpanded);
   const readerDocId = useSelector((s) => s.reader.docId);
   const isReader = route.name === "Reader";
-
-  const fabBottom = isReader
-    ? Math.max(insets.bottom, 12) + READER_DOCKED_PLAYER_CLEARANCE
-    : insets.bottom + 16;
 
   return (
     <View style={{ flex: 1 }}>
       {children}
-      {!(isReader && playerExpanded) ? (
-        <Pressable
-          onPress={() => navigation.openDrawer()}
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation menu"
-          style={{
-            position: "absolute",
-            left: 14,
-            bottom: fabBottom,
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: withAlpha(palette.surfaceContainer, 0.88),
-            borderWidth: 1,
-            borderColor: withAlpha(palette.accent, 0.4),
-            zIndex: 40,
-          }}
-        >
-          <MaterialIcons name="menu" size={22} color={palette.accent} />
-        </Pressable>
-      ) : null}
       {playing && !isReader && readerDocId ? (
         <Pressable
           onPress={() => navigation.navigate("Reader", { id: readerDocId })}
