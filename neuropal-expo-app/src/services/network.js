@@ -531,10 +531,13 @@ export async function renameDocument(documentId, title) {
 // POST /api/documents/:id/reingest — wipe/resume and re-run the pipeline
 // (Issue 1: failed docs RESUME from the last committed window; ready docs
 // rebuild with the current extractor).
-export async function reingestDocumentApi(documentId) {
+export async function reingestDocumentApi(documentId, forceMath = false) {
   assertConfigured();
   try {
-    const { data } = await apiClient.post(`documents/${documentId}/reingest`);
+    const { data } = await apiClient.post(
+      `documents/${documentId}/reingest`,
+      forceMath ? { forceMath: true } : {}
+    );
     return data;
   } catch (error) {
     throw new Error(describeNetworkError(error));

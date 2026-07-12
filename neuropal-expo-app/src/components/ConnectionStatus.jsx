@@ -191,6 +191,12 @@ export function ConnectionStatus() {
         </View>
       ) : null}
 
+      {/* Issue 3a — library-wide maintenance: re-run every doc through the
+          current extractor stack (sequential on the backend; the library
+          cards show live progress). Two-tap confirm — this churns for hours
+          on a big library. */}
+      <ReingestAllButton />
+
       <Pressable
         onPress={() => {
           recheckApi();
@@ -223,6 +229,62 @@ export function ConnectionStatus() {
         </Text>
       </Pressable>
     </View>
+  );
+}
+
+function ReingestAllButton() {
+  const palette = usePalette();
+  const [arming, setArming] = useState(false);
+
+  async function run() {
+    if (!arming) {
+      setArming(true);
+      setTimeout(() => setArming(false), 4000);
+      return;
+    }
+    setArming(false);
+    try {
+      const res = await fetch(`${apiHost}/api/documents/reingest-all`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      Toast.show({
+        type: "info",
+        text1: `Reingesting ${data.queued} documents`,
+        text2: "Sequential — the library shows live progress. This can take hours.",
+      });
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Reingest-all failed", text2: error?.message });
+    }
+  }
+
+  return (
+    <Pressable
+      onPress={run}
+      accessibilityRole="button"
+      accessibilityLabel={
+        arming ? "Tap again to reingest every document" : "Reingest all documents"
+      }
+      style={{
+        alignSelf: "flex-start",
+        marginTop: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: withAlpha(palette.tertiary, arming ? 0.3 : 0.12),
+        borderWidth: 1,
+        borderColor: withAlpha(palette.tertiary, 0.4),
+      }}
+    >
+      <Text
+        style={{
+          color: palette.tertiary,
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 13,
+        }}
+      >
+        {arming ? "Tap again — this takes hours" : "Reingest all documents"}
+      </Text>
+    </Pressable>
   );
 }
 

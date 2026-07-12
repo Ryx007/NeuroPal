@@ -619,6 +619,28 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
     }
   }
 
+  // Issue 3a — rerun this doc through the CURRENT extractor stack; forceMath
+  // additionally bypasses the math-density probe (for textbooks whose text
+  // layer drops the equations — slow: Nougat runs ~1–3s per page).
+  async function runReingest(forceMath) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await reingestDocumentApi(document.id, forceMath);
+      Toast.show({
+        type: "info",
+        text1: forceMath ? "Nougat reingest started" : "Reingest started",
+        text2: forceMath
+          ? "Math-aware but slow (~1–3s/page) — the card shows live progress."
+          : "The card shows live progress.",
+      });
+      onChanged();
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Reingest failed", text2: error?.message });
+      setBusy(false);
+    }
+  }
+
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <Pressable
@@ -680,6 +702,63 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
               fontSize: 15,
             }}
           />
+
+          {/* Issue 3a — maintenance reingest, per doc. The chip on the card
+              shows which extractor produced the current text. */}
+          {!USE_MOCK ? (
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <Pressable
+                onPress={() => runReingest(false)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Reingest with the current extractor"
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 8,
+                  backgroundColor: withAlpha(palette.accent, 0.12),
+                  borderWidth: 1,
+                  borderColor: withAlpha(palette.accent, 0.4),
+                  opacity: busy ? 0.4 : 1,
+                }}
+              >
+                <MaterialIcons name="refresh" size={16} color={palette.accent} />
+                <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                  Reingest
+                </Text>
+              </Pressable>
+              {document.type === "pdf" ? (
+                <Pressable
+                  onPress={() => runReingest(true)}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reingest with the Nougat math extractor"
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: withAlpha(palette.tertiary, 0.12),
+                    borderWidth: 1,
+                    borderColor: withAlpha(palette.tertiary, 0.4),
+                    opacity: busy ? 0.4 : 1,
+                  }}
+                >
+                  <MaterialIcons name="functions" size={16} color={palette.tertiary} />
+                  <Text style={{ color: palette.tertiary, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                    Reingest (math)
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           {(document.type === "md" || document.type === "txt") && !USE_MOCK ? (
             <Pressable
@@ -821,24 +900,53 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
           <MaterialIcons name={icon} size={22} color={typeTint} />
         </View>
         <View style={{ flex: 1 }} />
-        <View
-          style={{
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 6,
-            backgroundColor: palette.surfaceHighest,
-          }}
-        >
-          <Text
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {/* Issue 3a: which extraction pipeline produced this text —
+              'legacy' = pre-Nougat ingest, judge equations accordingly */}
+          <View
             style={{
-              color: palette.onSurfaceVariant,
-              fontFamily: "Inter_500Medium",
-              fontSize: 10,
-              letterSpacing: 1.4,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              backgroundColor:
+                document.extractor === "nougat" || document.extractor === "arxiv-latex"
+                  ? withAlpha(palette.accent, 0.14)
+                  : palette.surfaceHighest,
             }}
           >
-            {document.type.toUpperCase()}
-          </Text>
+            <Text
+              style={{
+                color:
+                  document.extractor === "nougat" || document.extractor === "arxiv-latex"
+                    ? palette.accent
+                    : palette.onSurfaceVariant,
+                fontFamily: "Inter_500Medium",
+                fontSize: 10,
+                letterSpacing: 1.4,
+              }}
+            >
+              {(document.extractor || "legacy").toUpperCase()}
+            </Text>
+          </View>
+          <View
+            style={{
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              backgroundColor: palette.surfaceHighest,
+            }}
+          >
+            <Text
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "Inter_500Medium",
+                fontSize: 10,
+                letterSpacing: 1.4,
+              }}
+            >
+              {document.type.toUpperCase()}
+            </Text>
+          </View>
         </View>
       </View>
       <View style={{ height: 14 }} />
