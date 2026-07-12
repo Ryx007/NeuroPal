@@ -96,12 +96,13 @@ async function ingestDocument(documentId, ingestOpts = {}) {
             doc.meta?.arxivId ||
             (doc.type === 'arxiv' ? arxivIdFromPath(doc.file.relativePath) : null);
 
+        // Two-pass ingest (Issue 3c, owner-approved): the FIRST pass never
+        // waits for Nougat — allowMath:false keeps parsing fast so the book
+        // is readable in minutes; math-dense PDFs get a background Nougat
+        // upgrade queued after `ready` (see upgradeMathText below).
         const { text, pageCount, wordCount, extractor, toc: tocDraft, pagesText } = await extractText(absPath, doc.type, {
             allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
-            allowMath: true, // born-digital math PDFs → nougat (ingest only)
-            // Issue 3: owner-forced Nougat for PDFs whose text layer hides
-            // its math from the density probe (see textExtractor comment)
-            forceMath: Boolean(ingestOpts.forceMath),
+            allowMath: false, // math handled by the background upgrade pass
             arxivId,
             onOcrProgress,
         });
@@ -289,12 +290,27 @@ async function ingestDocument(documentId, ingestOpts = {}) {
         doc.progress = 1;
         doc.ingestFinishedAt = new Date();
         doc.ingestStage = undefined;
+
+        // Two-pass: queue the background Nougat upgrade for math-dense PDFs
+        // (or when the owner forced it — some text layers DROP their math
+        // and score near zero on the density probe).
+        const { mathDensity } = require('./mathserve');
+        const threshold = parseFloat(process.env.MATH_DENSITY_MIN || '1.5');
+        const wantsUpgrade =
+            doc.type === 'pdf' &&
+            extractor === 'pdf-parse' &&
+            (ingestOpts.forceMath || mathDensity(text) >= threshold);
+        // a fresh ingest always resets upgrade state — the fast-path text
+        // just replaced whatever was there, upgraded or not
+        doc.mathUpgrade = wantsUpgrade ? 'queued' : null;
         await doc.save();
 
         // eslint-disable-next-line no-console
         console.log(
-            `[ingest] ready: ${doc._id} (${chunks.length} chunks, ${pageCount}pp)`,
+            `[ingest] ready: ${doc._id} (${chunks.length} chunks, ${pageCount}pp)` +
+                (wantsUpgrade ? ' — math upgrade queued' : ''),
         );
+        if (wantsUpgrade) queueMathUpgrade(doc._id);
     } catch (err) {
         const where =
             stage === 'embedding' || stage === 'upserting'
@@ -321,6 +337,158 @@ async function ingestDocument(documentId, ingestOpts = {}) {
             // eslint-disable-next-line no-console
             console.error('[ingest] failed to persist failure state:', e2);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Two-pass math upgrade (Issue 3c, owner-approved AUTO)
+// ---------------------------------------------------------------------------
+// The fast pass made the doc readable; this pass reruns extraction through
+// Nougat and swaps in math-aware text/chunks. Design constraints:
+//   - ONE upgrade at a time (a serial promise chain) — parallel Nougat runs
+//     would thrash the M4's GPU.
+//   - The document stays `ready` and readable THROUGHOUT: everything
+//     (text, chunks, toc, pageMap, vectors) is computed while the old
+//     chunks still serve; the swap itself is seconds.
+//   - A failed upgrade NEVER degrades the doc — it stays on fast-path text
+//     with mathUpgrade='failed' and the reason in the logs.
+let upgradeChain = Promise.resolve();
+function queueMathUpgrade(documentId) {
+    upgradeChain = upgradeChain
+        .then(() => upgradeMathText(documentId))
+        .catch(() => {}); // upgradeMathText handles its own errors
+}
+
+async function upgradeMathText(documentId) {
+    const doc = await Document.findById(documentId);
+    if (!doc || doc.deletedAt || doc.status !== 'ready') return;
+    if (doc.mathUpgrade !== 'queued') return;
+    doc.mathUpgrade = 'running';
+    await doc.save();
+
+    try {
+        const { extractWithNougat } = require('./mathserve');
+        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+
+        // eslint-disable-next-line no-console
+        console.log(`[math-upgrade] starting ${doc._id} (${doc.pageCount}pp)`);
+        const nougat = await extractWithNougat(absPath, {});
+        if (!nougat || !nougat.text?.trim()) {
+            throw new Error('nougat unavailable or returned empty text');
+        }
+
+        // sanity: never replace a healthy text with a truncated neural one
+        const agg = await DocumentChunk.aggregate([
+            { $match: { documentId: doc._id } },
+            { $group: { _id: null, len: { $sum: { $strLenCP: '$text' } } } },
+        ]);
+        const oldLen = agg[0]?.len || 0;
+        if (oldLen > 0 && nougat.text.length < oldLen * 0.3) {
+            throw new Error(
+                `nougat output suspiciously short (${nougat.text.length} vs ~${oldLen} chars) — keeping fast-path text`,
+            );
+        }
+
+        // ---- build everything while the old text still serves ----
+        const chunks = chunkText(nougat.text);
+        if (chunks.length === 0) throw new Error('chunker produced 0 chunks');
+
+        // TOC draft: the PDF's embedded outline beats nougat headings when
+        // it exists (same preference as the extractor's inline path)
+        let draft = (nougat.headings || []).map((title, i) => ({
+            title,
+            order: i,
+            startParagraph: null,
+            startPage: null,
+        }));
+        try {
+            const fsp = require('fs/promises');
+            const { extractPdfOutline, outlineToToc } = require('./pdfOutline');
+            const buf = await fsp.readFile(absPath);
+            const outline = outlineToToc(await extractPdfOutline(buf), null, doc.pageCount);
+            if (outline.length > 0) draft = outline;
+        } catch (e) {
+            // outline is optional — nougat headings remain the draft
+        }
+        const newToc = resolveTocAnchors(chunks, draft);
+        const { pageMap, chunkPages } = resolvePageAnchors(chunks, nougat.pagesText);
+
+        const modelName = getModelName();
+        const dim = getDim();
+        // all vectors up front — a 644-page book is ~25MB of floats, fine,
+        // and it keeps the swap window to seconds
+        let lastLog = 0;
+        const vectors = await embedBatch(chunks.map((c) => c.text), (done, total) => {
+            const now = Date.now();
+            if (now - lastLog > 15000 || done === total) {
+                lastLog = now;
+                // eslint-disable-next-line no-console
+                console.log(`[math-upgrade] ${doc._id} embedding ${done}/${total}`);
+            }
+        });
+        if (vectors.length !== chunks.length) {
+            throw new Error(`embedding count mismatch: ${vectors.length} vs ${chunks.length}`);
+        }
+
+        // ---- the swap (seconds) ----
+        await deleteDocumentChunks(doc._id);
+        const qdrant = getQdrant();
+        for (let w = 0; w < chunks.length; w += 200) {
+            const windowChunks = chunks.slice(w, w + 200);
+            const points = windowChunks.map((c, i) => ({
+                id: pointIdFor(doc._id, c.chunkIndex),
+                vector: vectors[w + i],
+                payload: {
+                    documentId: doc._id.toString(),
+                    userId: doc.userId.toString(),
+                    chunkIndex: c.chunkIndex,
+                    page: chunkPages[c.chunkIndex] ?? null,
+                },
+            }));
+            for (let s = 0; s < points.length; s += QDRANT_BATCH) {
+                await qdrant.upsert(modelName, { wait: true, points: points.slice(s, s + QDRANT_BATCH) });
+            }
+            await DocumentChunk.insertMany(
+                windowChunks.map((c) => ({
+                    documentId: doc._id,
+                    userId: doc.userId,
+                    chunkIndex: c.chunkIndex,
+                    text: c.text,
+                    tokenCount: c.tokenEstimate,
+                    overlapChars: c.overlapChars || 0,
+                    anchor: {
+                        page: chunkPages[c.chunkIndex] ?? null,
+                        paragraphIndex: c.paragraphIndex,
+                    },
+                    vectorId: pointIdFor(doc._id, c.chunkIndex),
+                    vectorCollection: modelName,
+                    embeddingModel: modelName,
+                    embeddingDim: dim,
+                })),
+                { ordered: false },
+            );
+        }
+
+        doc.toc = newToc;
+        doc.pageMap = pageMap;
+        doc.extractor = 'nougat';
+        doc.wordCount = nougat.text.split(/\s+/).filter(Boolean).length;
+        doc.mathUpgrade = 'done';
+        await doc.save();
+        // eslint-disable-next-line no-console
+        console.log(
+            `[math-upgrade] done ${doc._id}: ${chunks.length} chunks, toc ${newToc.length}, pageMap ${pageMap.length}`,
+        );
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[math-upgrade] failed ${documentId}:`, describeIngestError(err));
+        // eslint-disable-next-line no-console
+        console.error(err.stack || err);
+        await Document.updateOne(
+            { _id: documentId },
+            { $set: { mathUpgrade: 'failed' } },
+        ).catch(() => {});
+        // the doc remains ready on its fast-path text — by design
     }
 }
 
@@ -372,11 +540,28 @@ async function resumeStuckIngests() {
         console.warn(
             `[ingest] resuming "${doc.title}" (stuck in '${doc.status}' from a previous run)`,
         );
-        await deleteDocumentChunks(doc._id);
+        // do NOT wipe chunks here (Issue 1): the pipeline reuses windows a
+        // previous run already committed, and self-verifies they still
+        // match the fresh extraction before trusting them
         ingestDocument(doc._id).catch((err) => {
             // eslint-disable-next-line no-console
             console.error('[ingest] resume failed:', doc._id, err.message || err);
         });
+    }
+
+    // Two-pass: re-arm math upgrades interrupted by a restart. 'running'
+    // means the process died mid-upgrade — the doc is still ready on its
+    // fast-path text, so simply queue it again.
+    const pendingUpgrades = await Document.find({
+        mathUpgrade: { $in: ['queued', 'running'] },
+        deletedAt: null,
+    }).select('_id title');
+    for (const doc of pendingUpgrades) {
+        // eslint-disable-next-line no-console
+        console.warn(`[math-upgrade] re-arming "${doc.title}" after restart`);
+        // eslint-disable-next-line no-await-in-loop
+        await Document.updateOne({ _id: doc._id }, { $set: { mathUpgrade: 'queued' } });
+        queueMathUpgrade(doc._id);
     }
 }
 
@@ -569,4 +754,9 @@ function resolveTocAnchors(chunks, draft) {
     return clean.length >= 2 ? clean : [];
 }
 
-module.exports = { ingestDocument, deleteDocumentChunks, resumeStuckIngests };
+module.exports = {
+    ingestDocument,
+    deleteDocumentChunks,
+    resumeStuckIngests,
+    queueMathUpgrade,
+};

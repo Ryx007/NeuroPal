@@ -57,14 +57,18 @@ function normaliseDoc(d) {
     // Bar shows ingest % while processing, then real reading progress.
     // Mock docs (no status field) keep their sample reading progress.
     progress: status ? (processing ? rawProgress : readingProgress) : rawProgress,
+    // two-pass ingest: readable now, math still improving in the background
     progressLabel: status
       ? processing
         ? `Ingesting ${Math.round(rawProgress * 100)}%`
         : status === "failed"
           ? "Ingest failed"
-          : readingProgress > 0
-            ? `${Math.round(readingProgress * 100)}% read`
-            : "Ready"
+          : (readingProgress > 0
+              ? `${Math.round(readingProgress * 100)}% read`
+              : "Ready") +
+            (d.mathUpgrade === "queued" || d.mathUpgrade === "running"
+              ? " · math upgrade running…"
+              : "")
       : null,
     subtitle:
       d.subtitle ||

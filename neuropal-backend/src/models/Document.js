@@ -116,6 +116,13 @@ const DocumentSchema = new Schema(
         // Issue 1: WHERE the pipeline died — parsing | chunking | embedding |
         // upserting | finalizing. Cleared on success.
         ingestStage: { type: String },
+        // Two-pass ingest (Issue 3c, owner-approved AUTO): math PDFs reach
+        // `ready` on the fast pdf-parse path immediately, then a background
+        // Nougat pass swaps in math-aware text/chunks.
+        //   null | 'queued' | 'running' | 'done' | 'failed'
+        // A failed upgrade never degrades the document — it stays ready on
+        // the fast-path text.
+        mathUpgrade: { type: String, default: null },
 
         // Soft-delete (recoverable for 30 days, then purged)
         deletedAt: { type: Date, default: null },

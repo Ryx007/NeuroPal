@@ -54,7 +54,8 @@ call (Gemini free tier) for reasoning.
 | Repo path | `/Users/ryx/Documents/Gitkraken/NeuroPal` (older MacBook path `…/App Dev/NeuroPal` is DEAD) |
 | LAN IP | **WiFi = `en1`**, currently `192.168.3.169` (`ipconfig getifaddr en1`). en0 is unplugged Ethernet. The `.213` seen in older notes is stale DHCP. Since P3 clients prefer the MagicDNS name; the LAN IP is a baked fallback. A router DHCP reservation (MAC below) is still worth doing. |
 | Tailscale | **MagicDNS `ryx-mac-mini.tail73ed8.ts.net`** (100.80.166.68), account `onlyfortailscale7@`, brought up 2026-07-11 — THE client-facing hostname (P3). GUI app at `/Applications/Tailscale.app` (CLI: `…/Contents/MacOS/Tailscale status`). The S24 (`samsung-sm-s928b`) is already enrolled in the tailnet. **Confirm "Start on login" in the menu-bar app** so it survives reboots. |
-| Backend service | pm2 app `neuropal-api` (`pm2 logs neuropal-api`). `pm2 save` done (Issue 1); **`pm2 startup` still needs the owner's sudo once** — until then pm2 does NOT survive reboot. NOTE: a second app `neuropal2-api` exists from a foreign checkout at `~/Documents/Codex/NeuroPal-2` (not ours — owner to decide). |
+| Backend service | pm2 app `neuropal-api` (`pm2 logs neuropal-api`). `pm2 startup` RUN by owner 2026-07-12 (`com.PM2` launchd daemon enabled) + `pm2 save` — the API now survives reboots. |
+| neuropal2-api (DISABLED 2026-07-12) | A second API from a foreign checkout (`~/Documents/Codex/NeuroPal-2/neuropal-backend`, PORT=4100, same Mongo) — stopped + removed from pm2 on owner instruction (two code versions writing one DB caused confusion during the Jul-12 triage). **Re-enable if needed:** `cd ~/Documents/Codex/NeuroPal-2/neuropal-backend && pm2 start src/server.js --name neuropal2-api && pm2 save`. It reads its own `.env` (port 4100); make sure its schema expectations match the main checkout before letting it write. |
 | Boot persistence (Issue 1, 2026-07-12) | The Jul-11 reboot killed ingest silently (Ollama never came back → every upload failed at embedding with a bare AggregateError). Now: **Ollama runs as a LaunchAgent** (`~/Library/LaunchAgents/com.neuropal.ollama.plist`, RunAtLoad+KeepAlive — restarts on crash too), **Docker Desktop AutoStart=true + Login Item**, compose services `restart: unless-stopped`. Check everything at a glance: `curl 'localhost:4000/healthz?deps=1'` or Settings → Backend connection. |
 | Databases | `docker compose up -d` in `neuropal-backend/` (data in named volumes; only `down -v` wipes) |
 | Java | Oracle JDK 21 in `/Library/Java/…` **plus Temurin JDK 17 at `~/Library/Java/JavaVirtualMachines/jdk-17.0.19+10`** — RN's Gradle toolchain requires 17; it is registered via `~/.gradle/gradle.properties` (`org.gradle.java.installations.paths=…`). Do not delete either. |
@@ -301,10 +302,21 @@ errors) → upserts Qdrant (deterministic uuidv5 point ids = idempotent) →
 inserts Mongo rows, so a crash leaves durable progress and **a failed
 ingest RESUMES from the last committed window** (`/reingest` keeps chunks
 on failed docs; the pipeline text-head-verifies them and wipes if stale).
-`POST /:id/reingest {forceMath:true}` bypasses the math-density probe for
-PDFs whose text layer DROPS equations (Griffiths 3rd ed.: 0.37 glyphs/1000,
-13 '=' signs in 850k chars — invisible to any text heuristic).
+`POST /:id/reingest {forceMath:true}` queues a Nougat upgrade regardless of
+the math-density probe — some text layers DROP equations entirely
+(Griffiths 3rd ed.: 0.37 glyphs/1000, 13 '=' signs in 850k chars —
+invisible to any text heuristic).
 `POST /documents/reingest-all` re-runs the whole library sequentially.
+**Two-pass ingest (owner-approved AUTO, 2026-07-12):** the first pass NEVER
+waits for Nougat (`allowMath:false`) — a math PDF reaches `ready` on
+pdf-parse in seconds/minutes and is immediately readable; if its density ≥
+threshold (or forceMath), `Document.mathUpgrade='queued'` and a SERIAL
+background worker (`queueMathUpgrade`/`upgradeMathText`) reruns Nougat,
+builds text+chunks+toc+pageMap+VECTORS while the old chunks still serve,
+then swaps in seconds. Failure never degrades: `mathUpgrade='failed'`,
+fast-path text stays. Interrupted upgrades re-arm on boot
+(`resumeStuckIngests`). Library cards show "· math upgrade running…" and
+the extractor chip flips PDF-PARSE→NOUGAT when done.
 
 **Notifications (P8, `services/notify.js`):** Android CHANNEL PER CATEGORY
 (medication = MAX importance/heavy vibration, anchor, reminder, pomodoro =
