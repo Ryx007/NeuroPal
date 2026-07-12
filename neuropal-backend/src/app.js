@@ -27,9 +27,38 @@ function buildApp() {
 
     app.use(express.json({ limit: '5mb' }));
 
-    // Health probe — for nginx / uptime checks.
-    app.get('/healthz', (req, res) => {
-        res.json({ status: 'ok', uptime: process.uptime() });
+    // Health probe — for nginx / uptime checks. Fast by default; pass
+    // ?deps=1 for per-dependency up/down + latency (Issue 1: see what's
+    // dead BEFORE uploading a 644-page book — the Settings screen shows
+    // this). Never throws; a dead dependency is a report, not a 500.
+    app.get('/healthz', async (req, res) => {
+        const base = { status: 'ok', uptime: process.uptime() };
+        if (!req.query.deps) return res.json(base);
+
+        const axios = require('axios');
+        const mongoose = require('mongoose');
+        const probe = async (fn) => {
+            const t0 = Date.now();
+            try {
+                await fn();
+                return { up: true, ms: Date.now() - t0 };
+            } catch (e) {
+                return { up: false, ms: Date.now() - t0, error: String(e.code || e.message).slice(0, 120) };
+            }
+        };
+        const ollamaUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/+$/, '');
+        const qdrantUrl = (process.env.QDRANT_URL || 'http://localhost:6333').replace(/\/+$/, '');
+        const mathserveUrl = (process.env.MATHSERVE_URL || 'http://localhost:8077').replace(/\/+$/, '');
+        const [mongo, qdrant, ollama, extractor] = await Promise.all([
+            probe(async () => {
+                if (mongoose.connection.readyState !== 1) throw new Error('disconnected');
+                await mongoose.connection.db.admin().ping();
+            }),
+            probe(() => axios.get(`${qdrantUrl}/collections`, { timeout: 3000 })),
+            probe(() => axios.get(`${ollamaUrl}/api/tags`, { timeout: 3000 })),
+            probe(() => axios.get(`${mathserveUrl}/healthz`, { timeout: 3000 })),
+        ]);
+        res.json({ ...base, deps: { mongo, qdrant, ollama, extractor } });
     });
 
     // Routers. Each file uses Express Router with GET/POST only.

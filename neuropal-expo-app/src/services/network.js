@@ -528,6 +528,19 @@ export async function renameDocument(documentId, title) {
   }
 }
 
+// POST /api/documents/:id/reingest — wipe/resume and re-run the pipeline
+// (Issue 1: failed docs RESUME from the last committed window; ready docs
+// rebuild with the current extractor).
+export async function reingestDocumentApi(documentId) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.post(`documents/${documentId}/reingest`);
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
 // DELETE /api/documents/:id — soft-delete (backend keeps the file 30 days).
 export async function deleteDocument(documentId) {
   assertConfigured();

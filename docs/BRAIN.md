@@ -54,7 +54,8 @@ call (Gemini free tier) for reasoning.
 | Repo path | `/Users/ryx/Documents/Gitkraken/NeuroPal` (older MacBook path `…/App Dev/NeuroPal` is DEAD) |
 | LAN IP | **WiFi = `en1`**, currently `192.168.3.169` (`ipconfig getifaddr en1`). en0 is unplugged Ethernet. The `.213` seen in older notes is stale DHCP. Since P3 clients prefer the MagicDNS name; the LAN IP is a baked fallback. A router DHCP reservation (MAC below) is still worth doing. |
 | Tailscale | **MagicDNS `ryx-mac-mini.tail73ed8.ts.net`** (100.80.166.68), account `onlyfortailscale7@`, brought up 2026-07-11 — THE client-facing hostname (P3). GUI app at `/Applications/Tailscale.app` (CLI: `…/Contents/MacOS/Tailscale status`). The S24 (`samsung-sm-s928b`) is already enrolled in the tailnet. **Confirm "Start on login" in the menu-bar app** so it survives reboots. |
-| Backend service | pm2 app `neuropal-api` (`pm2 logs neuropal-api`). `pm2 startup` (reboot persistence) NOT yet run — needs owner's sudo once. |
+| Backend service | pm2 app `neuropal-api` (`pm2 logs neuropal-api`). `pm2 save` done (Issue 1); **`pm2 startup` still needs the owner's sudo once** — until then pm2 does NOT survive reboot. NOTE: a second app `neuropal2-api` exists from a foreign checkout at `~/Documents/Codex/NeuroPal-2` (not ours — owner to decide). |
+| Boot persistence (Issue 1, 2026-07-12) | The Jul-11 reboot killed ingest silently (Ollama never came back → every upload failed at embedding with a bare AggregateError). Now: **Ollama runs as a LaunchAgent** (`~/Library/LaunchAgents/com.neuropal.ollama.plist`, RunAtLoad+KeepAlive — restarts on crash too), **Docker Desktop AutoStart=true + Login Item**, compose services `restart: unless-stopped`. Check everything at a glance: `curl 'localhost:4000/healthz?deps=1'` or Settings → Backend connection. |
 | Databases | `docker compose up -d` in `neuropal-backend/` (data in named volumes; only `down -v` wipes) |
 | Java | Oracle JDK 21 in `/Library/Java/…` **plus Temurin JDK 17 at `~/Library/Java/JavaVirtualMachines/jdk-17.0.19+10`** — RN's Gradle toolchain requires 17; it is registered via `~/.gradle/gradle.properties` (`org.gradle.java.installations.paths=…`). Do not delete either. |
 | Android SDK | `~/Library/Android/sdk` (platform 36.1, build-tools 36.1/37, NDK 30, licenses accepted). Not on PATH — builds only need `ANDROID_HOME`. |
@@ -289,6 +290,21 @@ as one string would silently fail) chained by `onDone`. Highlight driver:
 sync where the engine emits boundaries: iOS/web/most Android); a WPM timer
 estimator paces platforms without boundaries and is permanently disabled on
 the first real boundary event; every chunk start resyncs the estimator.
+
+**Ingest failure semantics (Issue 1, 2026-07-12):** every failure names its
+stage — `Document.ingestStage` + `ingestError` like
+`failed at embedding (chunk 812/3400): ECONNREFUSED 127.0.0.1:11434`
+(`describeIngestError` flattens AggregateError.errors[] + the cause chain;
+full stack to pm2). Embedding runs in WINDOWS of 200 chunks — each window
+embeds (bounded concurrency 4, retries 1s/4s/10s on transient network
+errors) → upserts Qdrant (deterministic uuidv5 point ids = idempotent) →
+inserts Mongo rows, so a crash leaves durable progress and **a failed
+ingest RESUMES from the last committed window** (`/reingest` keeps chunks
+on failed docs; the pipeline text-head-verifies them and wipes if stale).
+`POST /:id/reingest {forceMath:true}` bypasses the math-density probe for
+PDFs whose text layer DROPS equations (Griffiths 3rd ed.: 0.37 glyphs/1000,
+13 '=' signs in 850k chars — invisible to any text heuristic).
+`POST /documents/reingest-all` re-runs the whole library sequentially.
 
 **Notifications (P8, `services/notify.js`):** Android CHANNEL PER CATEGORY
 (medication = MAX importance/heavy vibration, anchor, reminder, pomodoro =

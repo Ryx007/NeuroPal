@@ -504,21 +504,84 @@ router.post(
         });
         if (!doc) return res.status(404).json({ error: 'document not found' });
 
-        await deleteDocumentChunks(doc._id);
+        // Issue 1: a FAILED ingest keeps its partial chunks so the pipeline
+        // can RESUME from the last committed window (it self-verifies the
+        // rows still match the fresh extraction and wipes if not). A ready
+        // doc being deliberately reingested rebuilds from scratch.
+        if (doc.status !== 'failed') {
+            await deleteDocumentChunks(doc._id);
+        }
+
+        // Issue 3: forceMath routes the PDF through Nougat regardless of the
+        // math-density probe (textbooks whose text layer simply DROPS the
+        // equations look like prose to the probe). A forced run rebuilds
+        // from scratch — resuming pdf-parse chunks under nougat text would
+        // mix extractions.
+        const forceMath = req.body?.forceMath === true;
+        if (forceMath && doc.status === 'failed') {
+            await deleteDocumentChunks(doc._id);
+        }
 
         doc.status = 'pending';
         doc.progress = 0;
         doc.ingestError = undefined;
+        doc.ingestStage = undefined;
         doc.ingestStartedAt = undefined;
         doc.ingestFinishedAt = undefined;
         await doc.save();
 
-        ingestDocument(doc._id).catch((err) => {
+        ingestDocument(doc._id, { forceMath }).catch((err) => {
             // eslint-disable-next-line no-console
             console.error('[reingest] kickoff failed:', err);
         });
 
         res.json({ ok: true, status: doc.status });
+    }),
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/documents/reingest-all
+// Issue 3 maintenance: re-run every non-deleted document through the CURRENT
+// extractor stack, SEQUENTIALLY (parallel nougat runs would thrash the M4's
+// GPU). Returns immediately with the queue size; progress is visible per-doc
+// in the library like any other ingest.
+// ---------------------------------------------------------------------------
+let reingestAllRunning = false;
+router.post(
+    '/reingest-all',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        if (reingestAllRunning) {
+            return res.status(409).json({ error: 'a reingest-all run is already in progress' });
+        }
+        const docs = await Document.find({ userId: req.userId, deletedAt: null })
+            .select('_id status')
+            .sort({ createdAt: 1 })
+            .lean();
+        reingestAllRunning = true;
+        (async () => {
+            try {
+                for (const d of docs) {
+                    await deleteDocumentChunks(d._id);
+                    await Document.updateOne(
+                        { _id: d._id },
+                        {
+                            $set: { status: 'pending', progress: 0 },
+                            $unset: { ingestError: 1, ingestStage: 1, ingestStartedAt: 1, ingestFinishedAt: 1 },
+                        },
+                    );
+                    // sequential on purpose — one book at a time
+                    // eslint-disable-next-line no-await-in-loop
+                    await ingestDocument(d._id);
+                }
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('[reingest-all] stopped:', err);
+            } finally {
+                reingestAllRunning = false;
+            }
+        })();
+        res.json({ ok: true, queued: docs.length });
     }),
 );
 

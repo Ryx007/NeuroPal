@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { getApiStatus, recheckApi, subscribeApi } from "../store/ApiLink";
+import { apiHost, getApiStatus, recheckApi, subscribeApi } from "../store/ApiLink";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
@@ -21,11 +21,28 @@ export function ConnectionStatus() {
   const palette = usePalette();
   // ApiLink mutates its status object in place — copy what we render.
   const [snap, setSnap] = useState(() => copyStatus(getApiStatus()));
+  // Issue 1: per-dependency backend health (mongo/qdrant/ollama/extractor) —
+  // see what's dead BEFORE uploading a 644-page book.
+  const [deps, setDeps] = useState(null);
+
+  const fetchDeps = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiHost}/healthz?deps=1`);
+      const data = await res.json();
+      setDeps(data?.deps || null);
+    } catch (e) {
+      setDeps(null);
+    }
+  }, []);
 
   useEffect(() => {
-    const unsub = subscribeApi((s) => setSnap(copyStatus(s)));
+    const unsub = subscribeApi((s) => {
+      setSnap(copyStatus(s));
+      if (s.state === "ok") fetchDeps();
+    });
+    fetchDeps();
     return unsub;
-  }, []);
+  }, [fetchDeps]);
 
   // no `success` key in the palette — the dot is decorative reinforcement
   // (state is carried by text), so a fixed green is fine across themes
@@ -125,8 +142,60 @@ export function ConnectionStatus() {
         })}
       </View>
 
+      {deps ? (
+        <View style={{ marginTop: 12, gap: 6 }}>
+          {Object.entries(deps).map(([name, d]) => (
+            <View
+              key={name}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 12,
+                backgroundColor: palette.surfaceLowest,
+              }}
+              accessibilityRole="text"
+              accessibilityLabel={`${name}: ${d.up ? "up" : "down"}`}
+            >
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: d.up ? "#4CAF82" : palette.error,
+                  marginRight: 10,
+                }}
+              />
+              <Text
+                style={{
+                  flex: 1,
+                  color: palette.onSurfaceVariant,
+                  fontFamily: "JetBrainsMono_400Regular",
+                  fontSize: 11,
+                }}
+              >
+                {name}
+              </Text>
+              <Text
+                style={{
+                  color: d.up ? palette.onSurfaceVariant : palette.error,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 11,
+                }}
+              >
+                {d.up ? `${d.ms} ms` : `down${d.error ? ` — ${d.error}` : ""}`}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       <Pressable
-        onPress={() => recheckApi()}
+        onPress={() => {
+          recheckApi();
+          fetchDeps();
+        }}
         disabled={snap.state === "checking"}
         accessibilityRole="button"
         accessibilityLabel="Check backend connection now"

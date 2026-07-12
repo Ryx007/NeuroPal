@@ -170,6 +170,40 @@ function simpleHash(text) {
     return Math.abs(h) || 1;
 }
 
+// ---------- transient-failure retry (Issue 1 hardening) ----------
+//
+// A blipping Ollama (restart, momentary overload) must not kill a
+// 644-page ingest. Network-level failures and throttling retry with
+// backoff; real errors (bad model, validation) still throw immediately.
+
+const TRANSIENT_RE = /ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNABORTED|EPIPE|socket hang up/i;
+
+function isTransient(err) {
+    if (err?.response) return [429, 502, 503, 504].includes(err.response.status);
+    const flat = [err, err?.cause, ...(err?.errors || []), ...(err?.cause?.errors || [])]
+        .filter(Boolean)
+        .map((e) => `${e.code || ''} ${e.message || ''}`)
+        .join(' ');
+    // no HTTP response at all → the request never completed → network-level
+    return TRANSIENT_RE.test(flat) || !err?.response;
+}
+
+async function withRetry(fn, label) {
+    const delays = [1000, 4000, 10000];
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            if (attempt >= delays.length || !isTransient(err)) throw err;
+            // eslint-disable-next-line no-console
+            console.warn(
+                `[embedder] ${label}: transient failure (${err.code || err.message}) — retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
+            );
+            await new Promise((r) => setTimeout(r, delays[attempt]));
+        }
+    }
+}
+
 // ---------- Public ----------
 
 async function embedText(text) {
@@ -200,7 +234,10 @@ async function embedBatch(texts, onProgress) {
             while (true) {
                 const i = cursor++;
                 if (i >= texts.length) return;
-                results[i] = await embedOllama(texts[i]);
+                results[i] = await withRetry(
+                    () => embedOllama(texts[i]),
+                    `chunk ${i + 1}/${texts.length}`,
+                );
                 done += 1;
                 if (onProgress) onProgress(done, texts.length);
             }

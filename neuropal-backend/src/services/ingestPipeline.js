@@ -1,5 +1,37 @@
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const { v5: uuidv5 } = require('uuid');
+
+// Deterministic Qdrant point ids: uuidv5(docId:chunkIndex). Re-running an
+// ingest overwrites the same points instead of duplicating them — that's
+// what makes crash-resume (Issue 1) safe to retry blindly.
+const POINT_NS = uuidv5('neuropal.vectors', uuidv5.DNS);
+const pointIdFor = (docId, chunkIndex) => uuidv5(`${docId}:${chunkIndex}`, POINT_NS);
+
+// Issue 1: AggregateError's bare message is useless — the real causes live
+// in err.errors[] (undici/axios aggregate ::1 + 127.0.0.1 refusals) and the
+// err.cause chain. Flatten them into something a human can act on:
+//   "ECONNREFUSED 127.0.0.1:11434; ECONNREFUSED ::1:11434"
+function describeIngestError(err) {
+    const parts = [];
+    const push = (e) => {
+        if (!e) return;
+        const code = e.code ? `${e.code} ` : '';
+        const addr = e.address ? `${e.address}:${e.port ?? ''}` : '';
+        const msg =
+            e.message && !/^AggregateError/.test(e.message) ? e.message : '';
+        const s = `${code}${addr || msg}`.trim();
+        if (s && !parts.includes(s)) parts.push(s);
+    };
+    push(err);
+    if (Array.isArray(err?.errors)) err.errors.forEach(push);
+    let c = err?.cause;
+    for (let i = 0; c && i < 4; i++) {
+        push(c);
+        if (Array.isArray(c.errors)) c.errors.forEach(push);
+        c = c.cause;
+    }
+    return parts.join('; ') || String(err);
+}
 
 const { Document, DocumentChunk } = require('../models');
 const { getQdrant } = require('../db/qdrant');
@@ -17,7 +49,7 @@ const QDRANT_BATCH = 100;
 // Designed to be fire-and-forget from the upload route. Errors are caught
 // internally and written back to the Document row — the caller never sees
 // a rejection.
-async function ingestDocument(documentId) {
+async function ingestDocument(documentId, ingestOpts = {}) {
     let doc = await Document.findById(documentId);
     if (!doc) {
         // eslint-disable-next-line no-console
@@ -25,12 +57,19 @@ async function ingestDocument(documentId) {
         return;
     }
 
+    // Issue 1: track WHERE the pipeline is so a failure names its stage
+    // instead of surfacing a bare error class.
+    let stage = 'parsing';
+    let embedded = 0;
+    let totalChunks = 0;
+
     try {
         // ---- 1) parsing ----
         doc.status = 'parsing';
         doc.progress = 0;
         doc.ingestStartedAt = new Date();
         doc.ingestError = undefined;
+        doc.ingestStage = undefined;
         await doc.save();
 
         if (!doc.file?.relativePath) {
@@ -60,6 +99,9 @@ async function ingestDocument(documentId) {
         const { text, pageCount, wordCount, extractor, toc: tocDraft, pagesText } = await extractText(absPath, doc.type, {
             allowOcr: true, // scanned books get tesseract'd (services/ocr.js)
             allowMath: true, // born-digital math PDFs → nougat (ingest only)
+            // Issue 3: owner-forced Nougat for PDFs whose text layer hides
+            // its math from the density probe (see textExtractor comment)
+            forceMath: Boolean(ingestOpts.forceMath),
             arxivId,
             onOcrProgress,
         });
@@ -86,11 +128,13 @@ async function ingestDocument(documentId) {
         }
 
         // ---- 2) chunking ----
+        stage = 'chunking';
         doc.status = 'chunking';
         await doc.save();
 
         const chunks = chunkText(text);
         if (chunks.length === 0) throw new Error('chunker produced 0 chunks');
+        totalChunks = chunks.length;
 
         // P2: anchor the TOC to the paragraph indexes of the text THE CLIENT
         // WILL SEE (chunks reconstructed exactly as GET /:id/text serves
@@ -112,7 +156,17 @@ async function ingestDocument(documentId) {
             console.log(`[ingest] pageMap: ${pageMap.length}/${pagesText?.length ?? 0} pages anchored for ${doc._id}`);
         }
 
-        // ---- 3) embedding ----
+        // ---- 3+4) embed → upsert → persist, in WINDOWS (Issue 1) ----
+        // A 644-page book is thousands of chunks. Working in windows of 200:
+        //   - memory: only one window's vectors are alive at a time (the old
+        //     code held every vector for the whole book at once)
+        //   - checkpointing: each window commits to Qdrant THEN Mongo, so a
+        //     crash mid-book leaves durable progress. Rows are written only
+        //     after their vectors, so a Mongo row always implies a vector.
+        //   - resume: on retry, windows whose rows already exist are skipped
+        //     (guarded by a text-head comparison — stale chunks from an older
+        //     extraction wipe and restart instead of mixing).
+        stage = 'embedding';
         doc.status = 'embedding';
         doc.progress = 0.4; // parsing/OCR owned 0→0.4
         await doc.save();
@@ -133,21 +187,78 @@ async function ingestDocument(documentId) {
 
         const modelName = getModelName();
         const dim = getDim();
-        const vectors = await embedBatch(chunks.map((c) => c.text), onProgress);
-        if (vectors.length !== chunks.length) {
-            throw new Error(
-                `embedding count mismatch: ${vectors.length} vs ${chunks.length} chunks`,
-            );
+
+        // resume detection
+        const existingRows = await DocumentChunk.find({ documentId: doc._id })
+            .select('chunkIndex text')
+            .lean();
+        const existing = new Map(existingRows.map((r) => [r.chunkIndex, r.text]));
+        if (existing.size > 0) {
+            let compatible = true;
+            for (const [idx, rowText] of existing) {
+                const c = chunks[idx];
+                if (!c || c.text.slice(0, 60) !== String(rowText).slice(0, 60)) {
+                    compatible = false;
+                    break;
+                }
+            }
+            if (compatible) {
+                // eslint-disable-next-line no-console
+                console.log(
+                    `[ingest] resuming ${doc._id}: ${existing.size}/${chunks.length} chunks already embedded`,
+                );
+            } else {
+                // eslint-disable-next-line no-console
+                console.warn('[ingest] stale partial chunks — wiping before re-embed');
+                await deleteDocumentChunks(doc._id);
+                existing.clear();
+            }
         }
 
-        // Build DocumentChunk + Qdrant point pairs sharing the same vectorId.
-        const chunkDocs = [];
-        const points = [];
-        for (let i = 0; i < chunks.length; i++) {
-            const c = chunks[i];
-            const vectorId = uuidv4();
+        const qdrant = getQdrant();
+        const WINDOW = 200;
+        embedded = existing.size;
+        for (let w = 0; w < chunks.length; w += WINDOW) {
+            const windowChunks = chunks
+                .slice(w, w + WINDOW)
+                .filter((c) => !existing.has(c.chunkIndex));
+            if (windowChunks.length === 0) continue;
 
-            chunkDocs.push({
+            stage = 'embedding';
+            const base = embedded;
+            const vectors = await embedBatch(
+                windowChunks.map((c) => c.text),
+                (done) => onProgress(base + done, chunks.length),
+            );
+            if (vectors.length !== windowChunks.length) {
+                throw new Error(
+                    `embedding count mismatch: ${vectors.length} vs ${windowChunks.length} in window`,
+                );
+            }
+
+            stage = 'upserting';
+            const points = windowChunks.map((c, i) => ({
+                id: pointIdFor(doc._id, c.chunkIndex),
+                vector: vectors[i],
+                payload: {
+                    documentId: doc._id.toString(),
+                    userId: doc.userId.toString(),
+                    chunkIndex: c.chunkIndex,
+                    page: chunkPages[c.chunkIndex] ?? null,
+                },
+            }));
+            for (let s = 0; s < points.length; s += QDRANT_BATCH) {
+                const batch = points.slice(s, s + QDRANT_BATCH);
+                try {
+                    await qdrant.upsert(modelName, { wait: true, points: batch });
+                } catch (e) {
+                    // one retry per batch — Qdrant blips are transient
+                    await new Promise((r) => setTimeout(r, 1500));
+                    await qdrant.upsert(modelName, { wait: true, points: batch });
+                }
+            }
+
+            const rows = windowChunks.map((c) => ({
                 documentId: doc._id,
                 userId: doc.userId,
                 chunkIndex: c.chunkIndex,
@@ -158,42 +269,26 @@ async function ingestDocument(documentId) {
                     // real page when the tier knew pages; null otherwise —
                     // citation chips fall back to "source N" on null, which
                     // beats the fabricated chunkIndex/3 numbers of old
-                    page: chunkPages[i] ?? null,
+                    page: chunkPages[c.chunkIndex] ?? null,
                     paragraphIndex: c.paragraphIndex,
                 },
-                vectorId,
+                vectorId: pointIdFor(doc._id, c.chunkIndex),
                 vectorCollection: modelName,
                 embeddingModel: modelName,
                 embeddingDim: dim,
-            });
+            }));
+            await DocumentChunk.insertMany(rows, { ordered: false });
 
-            points.push({
-                id: vectorId,
-                vector: vectors[i],
-                payload: {
-                    documentId: doc._id.toString(),
-                    userId: doc.userId.toString(),
-                    chunkIndex: c.chunkIndex,
-                    page: chunkPages[i] ?? null,
-                },
-            });
-        }
-
-        // ---- 4) write Mongo first, then Qdrant ----
-        // If Qdrant write fails partway, the chunks are still in Mongo and
-        // a /reingest call rebuilds Qdrant from the existing rows.
-        await DocumentChunk.insertMany(chunkDocs, { ordered: false });
-
-        const qdrant = getQdrant();
-        for (let start = 0; start < points.length; start += QDRANT_BATCH) {
-            const batch = points.slice(start, start + QDRANT_BATCH);
-            await qdrant.upsert(modelName, { wait: true, points: batch });
+            embedded += windowChunks.length;
+            onProgress(embedded, chunks.length);
         }
 
         // ---- 5) ready ----
+        stage = 'finalizing';
         doc.status = 'ready';
         doc.progress = 1;
         doc.ingestFinishedAt = new Date();
+        doc.ingestStage = undefined;
         await doc.save();
 
         // eslint-disable-next-line no-console
@@ -201,11 +296,25 @@ async function ingestDocument(documentId) {
             `[ingest] ready: ${doc._id} (${chunks.length} chunks, ${pageCount}pp)`,
         );
     } catch (err) {
+        const where =
+            stage === 'embedding' || stage === 'upserting'
+                ? `${stage} (chunk ${embedded}/${totalChunks || '?'})`
+                : stage;
+        const detail = describeIngestError(err);
+        // full forensic trail to pm2 — the truncated Document field is for
+        // the UI, the logs are for us
         // eslint-disable-next-line no-console
-        console.error('[ingest] failed:', doc._id, err.message || err);
+        console.error(`[ingest] failed at ${where}:`, doc._id, detail);
+        // eslint-disable-next-line no-console
+        console.error(err.stack || err);
+        if (Array.isArray(err?.errors)) {
+            // eslint-disable-next-line no-console
+            err.errors.forEach((e) => console.error('  ↳', e.code || '', e.message || e));
+        }
         try {
             doc.status = 'failed';
-            doc.ingestError = String(err.message || err).slice(0, 1000);
+            doc.ingestStage = stage;
+            doc.ingestError = `failed at ${where}: ${detail}`.slice(0, 1000);
             doc.ingestFinishedAt = new Date();
             await doc.save();
         } catch (e2) {

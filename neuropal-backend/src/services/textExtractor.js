@@ -132,14 +132,22 @@ async function extractText(filePath, docType, opts = {}) {
             // Gated on opts.allowMath (ingest only — the query raw-file
             // fallback must stay fast) and on a glyph-density probe so prose
             // books never pay the neural-extraction cost.
+            // opts.forceMath (Issue 3) BYPASSES the probe: some textbook PDFs
+            // encode equations as unextractable objects — the text layer is
+            // clean prose with the math simply MISSING (Griffiths 3rd ed.
+            // measured 0.37 glyphs/1000 with 13 '=' signs in 850k chars), so
+            // no text-side heuristic can see them. The owner forces Nougat
+            // per document from the library card instead.
             if (opts.allowMath) {
                 const { extractWithNougat, mathDensity } = require('./mathserve');
                 const glyphs = mathDensity(text);
                 const threshold = parseFloat(process.env.MATH_DENSITY_MIN || '1.5');
-                if (glyphs >= threshold) {
+                if (glyphs >= threshold || opts.forceMath) {
                     // eslint-disable-next-line no-console
                     console.log(
-                        `[extractor] math density ${glyphs.toFixed(2)}/1000 ≥ ${threshold} — trying nougat`,
+                        opts.forceMath
+                            ? `[extractor] forceMath — nougat regardless of density (${glyphs.toFixed(2)}/1000)`
+                            : `[extractor] math density ${glyphs.toFixed(2)}/1000 ≥ ${threshold} — trying nougat`,
                     );
                     const nougat = await extractWithNougat(filePath, {
                         onProgress: opts.onOcrProgress,

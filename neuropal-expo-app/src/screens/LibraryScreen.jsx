@@ -17,6 +17,7 @@ import Toast from "../components/toast";
 import {
   deleteDocument,
   describeNetworkError,
+  reingestDocumentApi,
   renameDocument,
   uploadDocument,
   USE_MOCK,
@@ -446,6 +447,15 @@ export function LibraryScreen() {
                 document={document}
                 onPress={() => navigation.navigate("Reader", { id: document.id })}
                 onLongPress={() => setActionDoc(document)}
+                onRetry={async () => {
+                  try {
+                    await reingestDocumentApi(document.id);
+                    Toast.show({ type: "info", text1: "Reingest started", text2: document.title });
+                    refresh();
+                  } catch (error) {
+                    Toast.show({ type: "error", text1: "Reingest failed", text2: error?.message });
+                  }
+                }}
               />
             </View>
           ))}
@@ -762,8 +772,9 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
   );
 }
 
-function DocCard({ document, onPress, onLongPress }) {
+function DocCard({ document, onPress, onLongPress, onRetry }) {
   const palette = usePalette();
+  const failed = document.status === "failed";
   const typeTint =
     {
       pdf: palette.primary,
@@ -892,13 +903,21 @@ function DocCard({ document, onPress, onLongPress }) {
           }}
         />
       </View>
+      {/* Issue 1: a failed doc is not readable — the ONLY honest action is
+          retrying the ingest (the card subtitle carries the real error). */}
       <Pressable
-        onPress={onPress}
+        onPress={failed ? onRetry : onPress}
+        accessibilityRole="button"
+        accessibilityLabel={failed ? `Retry ingest of ${document.title}` : `Read ${document.title}`}
         style={{
           marginTop: 14,
           paddingVertical: 12,
           borderRadius: 14,
-          backgroundColor: palette.surfaceHighest,
+          backgroundColor: failed
+            ? withAlpha(palette.error, 0.12)
+            : palette.surfaceHighest,
+          borderWidth: failed ? 1 : 0,
+          borderColor: failed ? withAlpha(palette.error, 0.4) : "transparent",
           alignItems: "center",
           justifyContent: "center",
           flexDirection: "row",
@@ -906,15 +925,19 @@ function DocCard({ document, onPress, onLongPress }) {
       >
         <Text
           style={{
-            color: typeTint,
+            color: failed ? palette.error : typeTint,
             fontFamily: "Inter_600SemiBold",
             fontSize: 14,
           }}
         >
-          Continue Reading
+          {failed ? "Retry ingest" : "Continue Reading"}
         </Text>
         <View style={{ width: 6 }} />
-        <MaterialIcons name="arrow-forward" size={16} color={typeTint} />
+        <MaterialIcons
+          name={failed ? "refresh" : "arrow-forward"}
+          size={16}
+          color={failed ? palette.error : typeTint}
+        />
       </Pressable>
     </Pressable>
   );

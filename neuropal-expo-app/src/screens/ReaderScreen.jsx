@@ -30,6 +30,7 @@ import { StudySheet } from "../components/StudySheet";
 import {
   documentPageUrl,
   fetchReadingProgressApi,
+  reingestDocumentApi,
   saveReadingProgressApi,
   USE_MOCK,
 } from "../services/network";
@@ -153,6 +154,20 @@ export function ReaderScreen() {
   const retryTextFetch = useCallback(() => {
     if (targetId) dispatch(fetchReaderDocument({ documentId: targetId }));
   }, [targetId, dispatch]);
+
+  // Issue 1: a failed doc's reader state offers the fix directly instead of
+  // pointing at the backend. Failed ingests RESUME from the last committed
+  // window server-side.
+  const reingestHere = useCallback(async () => {
+    if (!targetId) return;
+    try {
+      await reingestDocumentApi(targetId);
+      Toast.show({ type: "info", text1: "Reingest started", text2: "The library shows live progress." });
+      navigation.navigate("Library");
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Reingest failed", text2: error?.message });
+    }
+  }, [targetId, navigation]);
 
   const fetchedSections =
     needsText && readerDoc.docId === targetId ? readerDoc.sections : null;
@@ -833,6 +848,7 @@ export function ReaderScreen() {
           askingId={askingId}
           emptyNotice={emptyNotice}
           onRetryText={textError ? retryTextFetch : null}
+          onReingest={status === "failed" ? reingestHere : null}
           layout={readerLayout}
           readerFontFamily={readerFontFamily}
           readerFontSize={readerFontSize}
@@ -1158,6 +1174,7 @@ function ReaderBody({
   askingId,
   emptyNotice,
   onRetryText,
+  onReingest,
   layout,
   readerFontFamily,
   readerFontSize,
@@ -1261,6 +1278,33 @@ function ReaderBody({
                   }}
                 >
                   Retry
+                </Text>
+              </Pressable>
+            ) : null}
+            {onReingest ? (
+              <Pressable
+                onPress={onReingest}
+                accessibilityRole="button"
+                accessibilityLabel="Reingest this document"
+                style={{
+                  marginTop: 14,
+                  alignSelf: "flex-start",
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  backgroundColor: withAlpha(palette.error, 0.12),
+                  borderWidth: 1,
+                  borderColor: withAlpha(palette.error, 0.4),
+                }}
+              >
+                <Text
+                  style={{
+                    color: palette.error,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 14,
+                  }}
+                >
+                  Reingest document
                 </Text>
               </Pressable>
             ) : null}

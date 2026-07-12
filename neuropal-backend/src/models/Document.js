@@ -113,6 +113,9 @@ const DocumentSchema = new Schema(
         ingestStartedAt: { type: Date },
         ingestFinishedAt: { type: Date },
         ingestError: { type: String },
+        // Issue 1: WHERE the pipeline died — parsing | chunking | embedding |
+        // upserting | finalizing. Cleared on success.
+        ingestStage: { type: String },
 
         // Soft-delete (recoverable for 30 days, then purged)
         deletedAt: { type: Date, default: null },
