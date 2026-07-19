@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
+import Toast from "./toast";
 
-import { apiHost, getApiStatus, recheckApi, subscribeApi } from "../store/ApiLink";
+import {
+  apiHost,
+  getApiOverride,
+  getApiStatus,
+  recheckApi,
+  setApiOverride,
+  subscribeApi,
+} from "../store/ApiLink";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
@@ -191,6 +199,11 @@ export function ConnectionStatus() {
         </View>
       ) : null}
 
+      {/* Issue 0 — the owner-editable backend address ends the
+          rebuild-the-APK-when-the-IP-moves cycle. Persisted, probed FIRST,
+          read at request time; baked env values remain only the seed. */}
+      <BackendAddressField onChanged={fetchDeps} />
+
       {/* Issue 3a — library-wide maintenance: re-run every doc through the
           current extractor stack (sequential on the backend; the library
           cards show live progress). Two-tap confirm — this churns for hours
@@ -228,6 +241,116 @@ export function ConnectionStatus() {
           {snap.state === "checking" ? "Checking…" : "Check now"}
         </Text>
       </Pressable>
+    </View>
+  );
+}
+
+function BackendAddressField({ onChanged }) {
+  const palette = usePalette();
+  const [value, setValue] = useState(() => getApiOverride() || "");
+  const [testing, setTesting] = useState(false);
+
+  async function apply(url) {
+    setTesting(true);
+    try {
+      const st = await setApiOverride(url);
+      onChanged?.();
+      if (st.state === "ok") {
+        Toast.show({ type: "success", text1: "Connected", text2: st.host });
+      } else {
+        Toast.show({
+          type: "error",
+          text1: "Unreachable",
+          text2: `No candidate answered (tried ${st.candidates.length}).`,
+        });
+      }
+    } catch (error) {
+      Toast.show({ type: "error", text1: "Test failed", text2: error?.message });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Text
+        style={{
+          color: palette.onSurfaceVariant,
+          fontFamily: "Inter_500Medium",
+          fontSize: 11,
+          letterSpacing: 2,
+          marginBottom: 8,
+        }}
+      >
+        BACKEND ADDRESS
+      </Text>
+      <TextInput
+        value={value}
+        onChangeText={setValue}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        placeholder="http://192.168.3.229:4000 (blank = defaults)"
+        placeholderTextColor={palette.onSurfaceVariant}
+        accessibilityLabel="Backend address override"
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 11,
+          borderRadius: 12,
+          backgroundColor: palette.surfaceLowest,
+          color: palette.onSurface,
+          fontFamily: "JetBrainsMono_400Regular",
+          fontSize: 12,
+        }}
+      />
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+        <Pressable
+          onPress={() => apply(value)}
+          disabled={testing}
+          accessibilityRole="button"
+          accessibilityLabel="Save address and test connection"
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 12,
+            backgroundColor: withAlpha(palette.accent, 0.14),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+            opacity: testing ? 0.5 : 1,
+          }}
+        >
+          <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+            {testing ? "Testing…" : "Save & test"}
+          </Text>
+        </Pressable>
+        {getApiOverride() ? (
+          <Pressable
+            onPress={() => {
+              setValue("");
+              apply("");
+            }}
+            disabled={testing}
+            accessibilityRole="button"
+            accessibilityLabel="Reset to default addresses"
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 12,
+              backgroundColor: palette.surfaceLowest,
+            }}
+          >
+            <Text
+              style={{
+                color: palette.onSurfaceVariant,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+              }}
+            >
+              Reset to defaults
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }

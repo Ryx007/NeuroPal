@@ -35,6 +35,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { OfflineBanner } from "./src/components/OfflineBanner";
 import { ReminderPopup } from "./src/components/ReminderPopup";
 import { ToastHost } from "./src/components/toast";
 import { AppNavigator } from "./src/navigation/AppNavigator";
@@ -63,6 +64,9 @@ function AppChrome() {
           capture-phase gesture stole ✕ taps on device and could wedge
           auto-hide permanently. */}
       <ToastHost />
+      {/* Issue 0 — reachability is never silent: floats above every screen
+          whenever no backend candidate answers, naming the host tried. */}
+      <OfflineBanner />
       {/* On-screen reminder pop-up — fires on every platform while the app
           is open, independent of OS notification permission. */}
       <ReminderPopup />

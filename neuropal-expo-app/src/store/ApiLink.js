@@ -19,8 +19,16 @@ import { Platform } from 'react-native';
 
 const clean = (u) => String(u || '').trim().replace(/\/+$/, '');
 
+// Issue 0 (2026-07-17): the OWNER-SET override ends the
+// rebuild-the-APK-when-the-IP-moves cycle. It lives in AsyncStorage, is
+// editable from Settings, and always probes FIRST. The baked
+// EXPO_PUBLIC_* values are only the default seed.
+const OVERRIDE_KEY = 'neuropal-api-override';
+let apiOverride = null;
+
 function buildCandidates() {
     const list = [];
+    if (apiOverride) list.push(clean(apiOverride));
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
         list.push(`${window.location.protocol}//${window.location.hostname}:4000`);
     }
@@ -31,17 +39,17 @@ function buildCandidates() {
     return [...new Set(list.filter(Boolean))];
 }
 
-const CANDIDATES = buildCandidates();
+let candidates = buildCandidates();
 
 // False when no candidate exists at all — callers surface this as a visible
 // configuration error instead of silently falling back to mock data.
-export const apiConfigured = CANDIDATES.length > 0;
+export const apiConfigured = candidates.length > 0;
 
 // Live bindings — reassigned when the probe picks a different host. Metro
 // compiles `import { baseUrl }` to a property read at use time, so string
 // interpolations pick the switch up on the next call; axios instances
 // capture baseURL at create() and re-point through subscribeApi instead.
-export let apiHost = CANDIDATES[0] || '';
+export let apiHost = candidates[0] || '';
 export let baseUrl = apiHost ? `${apiHost}/api/` : '';
 export let socketUrl = apiHost;
 
@@ -59,7 +67,8 @@ const status = {
     host: apiHost,
     state: apiConfigured ? 'checking' : 'unconfigured', // checking | ok | down | unconfigured
     checkedAt: null,
-    candidates: CANDIDATES.map((url) => ({ url, ok: null, ms: null })),
+    candidates: candidates.map((url) => ({ url, ok: null, ms: null })),
+    override: null,
 };
 
 export function getApiStatus() {
@@ -112,16 +121,18 @@ let inFlight = null;
 // whenever both answer, or devices would pin to an address that dies the
 // moment they leave the house). Never throws; concurrent calls coalesce.
 export function recheckApi() {
-    if (!apiConfigured) return Promise.resolve(status);
+    if (candidates.length === 0) return Promise.resolve(status);
     if (inFlight) return inFlight;
+    const roster = candidates; // snapshot — an override change mid-probe restarts
     status.state = 'checking';
     notify();
-    inFlight = Promise.all(CANDIDATES.map((u) => probe(u))).then((results) => {
-        results.forEach((r, i) => {
-            status.candidates[i].ok = r.ok;
-            status.candidates[i].ms = r.ok ? r.ms : null;
-        });
-        const winner = CANDIDATES.find((u, i) => results[i].ok);
+    inFlight = Promise.all(roster.map((u) => probe(u))).then((results) => {
+        status.candidates = roster.map((url, i) => ({
+            url,
+            ok: results[i].ok,
+            ms: results[i].ok ? results[i].ms : null,
+        }));
+        const winner = roster.find((u, i) => results[i].ok);
         if (winner && winner !== apiHost) setHost(winner);
         status.state = winner ? 'ok' : 'down';
         status.checkedAt = Date.now();
@@ -132,11 +143,50 @@ export function recheckApi() {
     return inFlight;
 }
 
-// One resolution at startup — fire and forget. Until it lands the app talks
-// to CANDIDATES[0], which is the preferred host anyway.
-if (apiConfigured) {
-    recheckApi();
+// ---- runtime override (Issue 0) --------------------------------------------
+
+export function getApiOverride() {
+    return apiOverride;
 }
+
+// Set (or clear with null/'') the owner's backend address. Persisted, applied
+// to the live bindings IMMEDIATELY so the next request uses it, then probed.
+export async function setApiOverride(url) {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const next = clean(url) || null;
+    apiOverride = next;
+    status.override = next;
+    try {
+        if (next) await AsyncStorage.setItem(OVERRIDE_KEY, next);
+        else await AsyncStorage.removeItem(OVERRIDE_KEY);
+    } catch (e) {
+        // storage failure → override still applies for this session
+    }
+    candidates = buildCandidates();
+    inFlight = null; // drop any stale probe so the new roster wins
+    if (next) setHost(next);
+    else if (candidates[0]) setHost(candidates[0]);
+    notify();
+    return recheckApi();
+}
+
+// Load the persisted override at startup, then run the first resolution.
+// Until both land the app talks to candidates[0] (the baked preference).
+(async () => {
+    try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const stored = await AsyncStorage.getItem(OVERRIDE_KEY);
+        if (stored) {
+            apiOverride = clean(stored);
+            status.override = apiOverride;
+            candidates = buildCandidates();
+            setHost(apiOverride);
+        }
+    } catch (e) {
+        // no storage (tests/SSR) — baked candidates only
+    }
+    if (candidates.length > 0) recheckApi();
+})();
 
 // ---- session ----------------------------------------------------------------
 
