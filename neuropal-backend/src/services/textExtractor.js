@@ -566,10 +566,30 @@ function htmlToText(html) {
     s = s.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ');
     const body = s.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
     if (body) s = body[1];
+    // Issue 1(B): equations embedded as images/MathML must survive as
+    // PLACEHOLDER TOKENS, not vanish — publisher math EPUBs put every
+    // formula in an <img alt="..."> (or <math>). Alt text when present,
+    // else a bare "equation" marker; the reader/RAG treat it as one unit.
+    s = s.replace(/<img\b[^>]*>/gi, (tag) => {
+        const alt = ((tag.match(/\balt=["']([^"']*)["']/i) || [])[1] || '').trim();
+        const cls = (tag.match(/\bclass=["']([^"']*)["']/i) || [])[1] || '';
+        // Publisher EPUBs (verified: Griffiths) ship alt="image" on EVERY
+        // img but tag equations with class="math_"/"math-display" — the
+        // class is the reliable signal, generic alts are noise.
+        const genericAlt = !alt || /^(image|img|figure|photo|picture)$/i.test(alt);
+        if (/math/i.test(cls)) return ` [${genericAlt ? 'equation' : alt}] `;
+        return ` [${genericAlt ? 'image' : alt}] `;
+    });
+    s = s.replace(/<math\b[\s\S]*?<\/math>/gi, ' [equation] ');
     // Closing block tags end a paragraph; line-level tags become newlines.
     s = s.replace(/<\/(p|div|h[1-6]|li|tr|blockquote|section|article|figcaption|dt|dd)>/gi, '\n\n');
     s = s.replace(/<(br|hr)\b[^>]*\/?>/gi, '\n');
-    s = s.replace(/<[^>]+>/g, ' ');
+    // table cells separate with a space (they'd glue once tags strip clean)
+    s = s.replace(/<\/(td|th)>/gi, ' ');
+    // Issue 1(B): INLINE tags (<em>, <i>, <b>, <span>, <sub>…) must not
+    // inject spaces — "un<em>likely</em>" was becoming "un likely". Only
+    // tags are removed; the text runs stay contiguous.
+    s = s.replace(/<[^>]+>/g, '');
     s = decodeEntities(s);
     s = s.replace(/[ \t]+/g, ' ');
     s = s.replace(/ *\n */g, '\n');

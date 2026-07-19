@@ -97,6 +97,8 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `POST /api/documents/:id/annotations` | `{kind:'highlight'\|'bookmark', wordStart, wordEnd[,color,excerpt,note,page]}` | 201 Annotation |
 | `PATCH /api/annotations/:id` | `{color?,note?}` | updated Annotation |
 | `DELETE /api/annotations/:id` | — | soft-delete |
+| `GET /api/documents/:id/epub-manifest` | — | Issue 1 (2026-07-19): `{id,title,spine:[{index,href}],toc,pageList}` — spine in reading order (linear=no skipped), `toc` = NESTED tree `[{title,href,anchor,children[]}]` from the EPUB3 nav doc (`epub:type="toc"`) with toc.ncx fallback, `pageList` = REAL print pages `[{page,href,anchor}]` from `epub:type="page-list"` (empty when the book ships none — never fabricated). EPUB docs only (400 otherwise); works the moment the file is on disk (reading never waits for ingest) |
+| `GET /api/documents/:id/epub/<path>` | — | any zip entry (chapter XHTML, publisher css, images, fonts) with correct content-type + 24h private cache. Path-traversal-safe: entries are looked up as ZIP KEYS (never filesystem), `..` rejected. The reader's `<base>` tag points here so publisher-relative hrefs resolve |
 | `GET /api/documents/:id/raw` | — | `{id,title,type,text}` — verbatim on-disk source; **md/txt only** (400 otherwise) |
 | `PUT /api/documents/:id/raw` | `{text}` | overwrites the file, wipes chunks, reingests ("edit on the fly") |
 | `GET /api/search/papers` | `?q=…&source=arxiv\|scholar\|all` | `{query, results:[{source,id,title,authors,year,venue,abstract,pdfUrl,url,citationCount}], warnings}` — arXiv Atom API + Semantic Scholar (OpenAlex auto-fallback when S2 rate-limits; optional `SEMANTIC_SCHOLAR_API_KEY` in .env) |
@@ -317,6 +319,34 @@ then swaps in seconds. Failure never degrades: `mathUpgrade='failed'`,
 fast-path text stays. Interrupted upgrades re-arm on boot
 (`resumeStuckIngests`). Library cards show "· math upgrade running…" and
 the extractor chip flips PDF-PARSE→NOUGAT when done.
+
+**EPUB dual-representation reader (Issue 1, 2026-07-19):** EPUBs never go
+through text extraction for DISPLAY — `ReaderScreen` branches
+`type==='epub'` → `components/reader/EpubReader.jsx`, which renders ONE
+spine chapter at a time as the publisher shipped it: raw XHTML from
+`/epub/<href>` in a WebView (native) / srcdoc-iframe (web, same-origin so
+the parent scripts it), `<base>` pointing at the epub mount so publisher
+css/images/fonts resolve, and app CSS layered ON TOP (4 themes, fonts —
+incl. "Publisher" = no override — size/spacing/margins live-injected, no
+reload). Equations render exactly (Griffiths ships them as
+`<img class="math_">` JPEGs with useless `alt="image"` — the class is the
+signal, not the alt). AUDIO shares ONE tokenization by construction: the
+injected runtime (`epubRuntime.js`) TreeWalks the live chapter DOM once,
+exports `{words,kinds,pids,pageAnchors}` to RN, TTS speaks that exact
+stream, and every `onBoundary` maps back through
+`epubHighlight(i)` → CSS Custom Highlight API (Chromium ≥105; span-wrap of
+the ACTIVE paragraph as fallback). Tap word = seek (caretRangeFromPoint →
+token index); equations are ONE token honoring Speak-equations. Progress =
+`(spineIndex, wordIndex)` in the existing ReadingSession
+(`lastPage` carries spineIndex). Annotations pack `(spine, token)` as
+`spine*1e6+token` into the existing word-index fields. Nested TOC + real
+page-list pages come from `/epub-manifest` (never fabricated — Griffiths
+has no page-list → chapter titles shown instead). Books are readable
+THE MOMENT the upload lands; ingest (fixed `htmlToText`: inline tags strip
+WITHOUT space injection — "un likely" bug dead; `<img>`/`<math>` become
+`[equation]`/`[alt]` placeholder tokens) only powers Ask/RAG, gated with
+"Ask available when processing completes". PDFs keep the old path
+entirely.
 
 **Notifications (P8, `services/notify.js`):** Android CHANNEL PER CATEGORY
 (medication = MAX importance/heavy vibration, anchor, reminder, pomodoro =

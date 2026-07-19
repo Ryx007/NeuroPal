@@ -7,6 +7,7 @@ const { Document, DocumentChunk, ReadingSession } = require('../models');
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { ingestDocument, deleteDocumentChunks } = require('../services/ingestPipeline');
+const { buildEpubManifest, readEpubEntry } = require('../services/epubServe');
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
 
@@ -234,6 +235,88 @@ router.get(
                 wordCount: doc.wordCount,
                 source: 'raw-file',
             });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return res.status(404).json({ error: 'file not on disk' });
+            }
+            throw err;
+        }
+    }),
+);
+
+// ---------------------------------------------------------------------------
+// Issue 1 — the EPUB dual-representation reader's DISPLAY half. The client
+// renders the publisher's own XHTML/CSS (equations as the publisher shipped
+// them), so the book's internals are served read-only straight from the zip:
+//
+//   GET /:id/epub-manifest  → { spine, toc (nested), pageList }
+//   GET /:id/epub/*         → any zip entry (chapter XHTML, css, images, fonts)
+//
+// Requests never touch the filesystem beyond the epub file itself — entries
+// are looked up as zip keys and '..' is rejected (see services/epubServe).
+// Available the moment the file is on disk: reading does NOT wait for ingest.
+// ---------------------------------------------------------------------------
+async function findEpubDoc(req, res) {
+    const doc = await Document.findOne({
+        _id: req.params.id,
+        userId: req.userId,
+        deletedAt: null,
+    })
+        .select('title type file')
+        .lean();
+    if (!doc) {
+        res.status(404).json({ error: 'document not found' });
+        return null;
+    }
+    if (doc.type !== 'epub') {
+        res.status(400).json({ error: `not an EPUB document (this is ${doc.type})` });
+        return null;
+    }
+    if (!doc.file?.relativePath) {
+        res.status(404).json({ error: 'file path missing on document' });
+        return null;
+    }
+    return doc;
+}
+
+router.get(
+    '/:id/epub-manifest',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await findEpubDoc(req, res);
+        if (!doc) return;
+        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+        try {
+            const manifest = await buildEpubManifest(String(doc._id), () => fs.readFile(absPath));
+            res.json({ id: doc._id, title: doc.title, ...manifest });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return res.status(404).json({ error: 'file not on disk' });
+            }
+            throw err;
+        }
+    }),
+);
+
+router.get(
+    '/:id/epub/*',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+        const doc = await findEpubDoc(req, res);
+        if (!doc) return;
+        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
+        try {
+            const found = await readEpubEntry(
+                String(doc._id),
+                () => fs.readFile(absPath),
+                req.params[0] || '',
+            );
+            if (!found) return res.status(404).json({ error: 'entry not found in EPUB' });
+            res.set('Content-Type', found.contentType);
+            // chapter assets are immutable for a given upload — let the
+            // WebView cache them instead of re-fetching per chapter turn
+            res.set('Cache-Control', 'private, max-age=86400');
+            res.send(found.data);
         } catch (err) {
             if (err.code === 'ENOENT') {
                 return res.status(404).json({ error: 'file not on disk' });

@@ -21,6 +21,7 @@ import Toast from "../components/toast";
 import { withAlpha } from "../components/primitives";
 import { MathView } from "../components/MathView";
 import { DisplayOptionsSheet } from "../components/reader/DisplayOptionsSheet";
+import { EpubReader } from "../components/reader/EpubReader";
 import { ReaderTopBar } from "../components/reader/ReaderTopBar";
 import { AskSheet } from "../components/reader/AskSheet";
 import { SelectionBar } from "../components/reader/SelectionBar";
@@ -79,7 +80,23 @@ import { usePalette, useTheme } from "../theme/ThemeProvider";
 const EMPTY_SECTIONS = [];
 const EMPTY_CHAT = []; // stable identity — keeps memoized rows from churning
 
+// Issue 1 — EPUBs get the dual-representation reader (publisher XHTML in a
+// WebView, karaoke over the exported token stream); every other type keeps
+// this text reader. The branch is a component swap, not an early return, so
+// each branch's hook order stays internally consistent when the open
+// document changes type.
 export function ReaderScreen() {
+  const route = useRoute();
+  const readerDocId = useSelector((s) => s.reader.docId);
+  const id = route.params?.id ?? readerDocId ?? undefined;
+  const document = useSelector((state) => selectDocumentById(state, id));
+  if (document?.type === "epub") {
+    return <EpubReader key={document.id} document={document} />;
+  }
+  return <TextReader />;
+}
+
+function TextReader() {
   const route = useRoute();
   const navigation = useNavigation();
   const palette = usePalette();

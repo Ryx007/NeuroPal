@@ -8,6 +8,9 @@ const initialState = {
   density: "calm",
   fontSize: 20,
   lineSpacing: 1.7,
+  // Issue 1 — EPUB page margin (px). Only the EPUB reader consumes it; the
+  // text reader keeps its fixed layout padding.
+  readerMargin: 24,
   wpm: 225,
   voice: "soft",
   // P1 — how TTS handles equations: 'off' (skip silently), 'placeholder'
@@ -50,6 +53,9 @@ const uiSlice = createSlice({
     setLineSpacing(state, action) {
       state.lineSpacing = action.payload;
     },
+    setReaderMargin(state, action) {
+      state.readerMargin = action.payload;
+    },
     setWpm(state, action) {
       state.wpm = action.payload;
     },
@@ -76,6 +82,7 @@ export const {
   setLineSpacing,
   setReaderFont,
   setReaderLayout,
+  setReaderMargin,
   setTheme,
   setTweaksOpen,
   setVoice,

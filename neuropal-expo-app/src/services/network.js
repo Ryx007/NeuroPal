@@ -560,6 +560,46 @@ export function documentPageUrl(documentId, page) {
   return `${baseUrl}documents/${documentId}/page/${page}`;
 }
 
+// ---- Issue 1: EPUB dual-representation reader -------------------------------
+
+// GET /api/documents/:id/epub-manifest → { spine, toc (nested), pageList }.
+// Available the moment the upload lands — reading never waits for ingest.
+export async function fetchEpubManifestApi(documentId) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get(`documents/${documentId}/epub-manifest`, {
+      timeout: 30000,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// GET /api/documents/:id/epub/<href> — one spine chapter's raw XHTML. The
+// text must arrive VERBATIM (the WebView parses it), so axios's JSON
+// auto-parse is disabled.
+export async function fetchEpubChapterApi(documentId, href) {
+  assertConfigured();
+  try {
+    const { data } = await apiClient.get(
+      `documents/${documentId}/epub/${href}`,
+      { timeout: 30000, responseType: "text", transformResponse: [(d) => d] }
+    );
+    return data;
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+}
+
+// Base URL of a chapter's DIRECTORY inside the epub mount — the <base> tag
+// the reader injects so the publisher's relative hrefs (css, images, fonts)
+// resolve against the backend.
+export function epubChapterBaseUrl(documentId, href) {
+  const dir = href.includes("/") ? href.slice(0, href.lastIndexOf("/") + 1) : "";
+  return `${baseUrl}documents/${documentId}/epub/${dir}`;
+}
+
 // GET /api/documents/:id/text — the reader's TTS source.
 // Returns { id, title, text, pageCount, wordCount, source }.
 export async function fetchDocumentText(documentId) {

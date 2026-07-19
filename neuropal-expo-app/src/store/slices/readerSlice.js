@@ -374,6 +374,19 @@ const readerSlice = createSlice({
     playReader(state) {
       state.playing = true;
     },
+    // Issue 1 — the EPUB reader never dispatches fetchReaderDocument (its
+    // text lives in the WebView), but the global now-playing pill and the
+    // drawer's param-less Reader re-summon both key off reader.docId, so it
+    // registers the open document here.
+    setReaderDocId(state, action) {
+      if (state.docId === action.payload) return;
+      state.docId = action.payload;
+      state.docSections = null;
+      state.docPageMap = [];
+      state.docLoading = false;
+      state.docError = null;
+      state.annotations = [];
+    },
     pauseReader(state) {
       state.playing = false;
     },
@@ -470,6 +483,7 @@ export const {
   playReader,
   resetReader,
   setPlayerExpanded,
+  setReaderDocId,
   setReaderTotalWords,
   setReaderWord,
 } = readerSlice.actions;

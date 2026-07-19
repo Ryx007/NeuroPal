@@ -7,6 +7,7 @@ import {
   setFontSize,
   setLineSpacing,
   setReaderFont,
+  setReaderMargin,
   setSpeakEquations,
   setTheme,
 } from "../../store/slices/uiSlice";
@@ -36,12 +37,16 @@ const EQ_MODES = [
   ["aloud", "Read aloud"],
 ];
 
-export function DisplayOptionsSheet({ visible, onClose }) {
+// `epub` adds the EPUB-only options: the Publisher font (keep the book's own
+// typography untouched) and the page-margin slider the WebView layout uses.
+export function DisplayOptionsSheet({ visible, onClose, epub = false }) {
   const palette = usePalette();
   const dispatch = useDispatch();
   const tweaks = useSelector(selectUiState);
 
   if (!visible) return null;
+
+  const fonts = epub ? [["publisher", "Publisher"], ...FONTS] : FONTS;
 
   return (
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
@@ -85,7 +90,7 @@ export function DisplayOptionsSheet({ visible, onClose }) {
             ))}
           </Row>
           <Row label="READER FONT">
-            {FONTS.map(([key, label]) => (
+            {fonts.map(([key, label]) => (
               <Chip
                 key={key}
                 label={label}
@@ -124,6 +129,17 @@ export function DisplayOptionsSheet({ visible, onClose }) {
             display={tweaks.lineSpacing.toFixed(2)}
             onChange={(v) => dispatch(setLineSpacing(v))}
           />
+          {epub ? (
+            <SliderRow
+              label="MARGINS"
+              value={tweaks.readerMargin ?? 24}
+              min={8}
+              max={56}
+              step={4}
+              display={`${Math.round(tweaks.readerMargin ?? 24)}px`}
+              onChange={(v) => dispatch(setReaderMargin(v))}
+            />
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>

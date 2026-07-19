@@ -1108,6 +1108,19 @@ function UploadCard({ onPress }) {
       >
         Tap the button below or drag a file here to expand your library.
       </Text>
+      <Text
+        style={{
+          color: palette.onSurfaceVariant,
+          fontFamily: "Inter_400Regular",
+          fontSize: 11,
+          textAlign: "center",
+          marginTop: 8,
+          maxWidth: 200,
+          opacity: 0.85,
+        }}
+      >
+        Tip: for books, EPUB gives the best math rendering.
+      </Text>
     </Pressable>
   );
 }
