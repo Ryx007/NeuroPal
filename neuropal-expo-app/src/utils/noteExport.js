@@ -28,17 +28,95 @@ export function strokeToPath(points) {
   return d;
 }
 
-export function buildNoteSvg({ strokes, width, height, background }) {
+function escapeXml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Greedy soft-wrap for the SVG flatten — the canvas wraps text at the block
+// width, the export approximates it with a monospace-ish char budget.
+function wrapLines(content, maxChars) {
+  const out = [];
+  for (const hard of String(content).split("\n")) {
+    let line = "";
+    for (const word of hard.split(/\s+/)) {
+      if (!word) continue;
+      if (line && (line + " " + word).length > maxChars) {
+        out.push(line);
+        line = word;
+      } else {
+        line = line ? `${line} ${word}` : word;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+// Issue 2: the flatten renders BOTH layers — strokes as vector paths and
+// text blocks as wrapped <text> lines (markdown/math kept verbatim; the
+// export is a faithful page, not a re-typeset).
+export function buildNoteSvg({ strokes, blocks = [], width, height, background, textColor = "#222" }) {
   const paths = strokes
     .map(
       (s) =>
         `<path d="${strokeToPath(s.points)}" stroke="${s.color}" stroke-width="${s.width}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
     )
     .join("\n  ");
+  const FONT = 14;
+  const LINE = 20;
+  const texts = blocks
+    .filter((b) => b.type === "text" && String(b.content || "").trim())
+    .map((b) => {
+      const w = b.w === -1 ? width - b.x - 16 : b.w;
+      const lines = wrapLines(b.content, Math.max(8, Math.floor(w / (FONT * 0.62))));
+      const spans = lines
+        .map(
+          (line, i) =>
+            `<tspan x="${b.x + 8}" y="${b.y + 8 + FONT + i * LINE}">${escapeXml(line)}</tspan>`
+        )
+        .join("");
+      return `<text font-family="Helvetica, Arial, sans-serif" font-size="${FONT}" fill="${textColor}">${spans}</text>`;
+    })
+    .join("\n  ");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="${background}"/>
   ${paths}
+  ${texts}
 </svg>`;
+}
+
+// Issue 2: canvas → Markdown. Text blocks in reading order (top-to-bottom),
+// with an "[ink drawing]" marker where each vertical CLUSTER of strokes
+// sits — honest about what a text format can't carry.
+export function canvasToMarkdown({ blocks = [], strokes = [] }) {
+  const items = blocks
+    .filter((b) => b.type === "text" && String(b.content || "").trim())
+    .map((b) => ({ y: b.y, md: b.content.trim() }));
+
+  const tops = strokes
+    .map((s) => Math.min(...s.points.map((p) => p[1])))
+    .sort((a, b) => a - b);
+  let clusterStart = null;
+  let prev = null;
+  for (const y of tops) {
+    if (clusterStart === null) {
+      clusterStart = y;
+    } else if (y - prev > 140) {
+      items.push({ y: clusterStart, md: "[ink drawing]" });
+      clusterStart = y;
+    }
+    prev = y;
+  }
+  if (clusterStart !== null) items.push({ y: clusterStart, md: "[ink drawing]" });
+
+  return items
+    .sort((a, b) => a.y - b.y)
+    .map((i) => i.md)
+    .join("\n\n");
 }
 
 function safeFilename(title) {

@@ -5,6 +5,10 @@ const { Schema, model } = require('mongoose');
 //           the client renders it with the reader's own math pipeline)
 //   ink   — the S-pen stroke arrays that previously lived only in
 //           AsyncStorage (local-only, never synced — the P6 gap)
+// Issue 2 (2026-07-19) — 'canvas' merges both onto ONE surface (Samsung
+// Notes style): positioned text `blocks` + `strokes` on the same page.
+// Legacy typed/ink notes upgrade to 'canvas' losslessly the first time the
+// unified editor saves them (the only kind change the API permits).
 // `documentId` + `anchor` optionally attach a note to a reading position
 // (the reader's word-index space, plus the P4 page when known).
 
@@ -30,7 +34,7 @@ const NoteSchema = new Schema(
 
         kind: {
             type: String,
-            enum: ['typed', 'ink'],
+            enum: ['typed', 'ink', 'canvas'],
             required: true,
         },
 
@@ -39,8 +43,12 @@ const NoteSchema = new Schema(
         // kind 'typed'
         contentMarkdown: { type: String, maxlength: 200000 },
 
-        // kind 'ink' — [{ points: [[x,y],…], color, width }]
+        // kinds 'ink' + 'canvas' — [{ points: [[x,y,pressure?],…], color, width }]
         strokes: { type: Schema.Types.Mixed },
+
+        // kind 'canvas' — positioned text boxes on the same surface:
+        // [{ id, type:'text', x, y, w, content:<Markdown> }]
+        blocks: { type: Schema.Types.Mixed },
 
         // soft delete — house pattern
         deletedAt: { type: Date, default: null },

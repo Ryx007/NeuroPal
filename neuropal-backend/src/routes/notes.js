@@ -23,7 +23,9 @@ function pickAnchor(anchor) {
 function validateBody(body, { partial = false } = {}) {
     const out = {};
     if (body.kind !== undefined || !partial) {
-        if (!['typed', 'ink'].includes(body.kind)) return { error: "kind must be 'typed' or 'ink'" };
+        if (!['typed', 'ink', 'canvas'].includes(body.kind)) {
+            return { error: "kind must be 'typed', 'ink' or 'canvas'" };
+        }
         out.kind = body.kind;
     }
     if (body.title !== undefined) {
@@ -38,6 +40,19 @@ function validateBody(body, { partial = false } = {}) {
     if (body.strokes !== undefined) {
         if (!Array.isArray(body.strokes)) return { error: 'strokes must be an array' };
         out.strokes = body.strokes;
+    }
+    if (body.blocks !== undefined) {
+        if (!Array.isArray(body.blocks)) return { error: 'blocks must be an array' };
+        const num = (v) => typeof v === 'number' && Number.isFinite(v);
+        for (const b of body.blocks) {
+            if (!b || b.type !== 'text' || !num(b.x) || !num(b.y) || !num(b.w)) {
+                return { error: "each block needs type:'text' and numeric x, y, w" };
+            }
+            if (typeof b.content !== 'string' || b.content.length > 20000) {
+                return { error: 'block content must be a string (20k chars max)' };
+            }
+        }
+        out.blocks = body.blocks;
     }
     if (body.documentId !== undefined) out.documentId = body.documentId || null;
     if (body.anchor !== undefined) out.anchor = pickAnchor(body.anchor);
@@ -89,7 +104,11 @@ router.put(
         if (!note) return res.status(404).json({ error: 'note not found' });
         const { out, error } = validateBody(req.body || {}, { partial: true });
         if (error) return res.status(400).json({ error });
-        delete out.kind; // a note never changes kind
+        // Issue 2: the ONLY permitted kind change is the one-way lossless
+        // upgrade typed/ink → canvas (the unified editor's first save).
+        if (out.kind !== undefined && out.kind !== note.kind && out.kind !== 'canvas') {
+            delete out.kind;
+        }
         Object.assign(note, out);
         await note.save();
         res.json(note);

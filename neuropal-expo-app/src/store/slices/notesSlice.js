@@ -20,6 +20,7 @@ const normalise = (n) => ({
   ...n,
   id: n._id || n.id,
   strokes: n.strokes || [],
+  blocks: n.blocks || [], // Issue 2 — unified canvas text boxes
   contentMarkdown: n.contentMarkdown || "",
 });
 
@@ -98,12 +99,15 @@ const notesSlice = createSlice({
     // synchronous local edits keep the ink canvas responsive while drawing;
     // the editor pushes the final strokes to the server on back/blur
     saveNote(state, action) {
-      const { id, strokes, title, contentMarkdown } = action.payload;
+      const { id, strokes, blocks, title, contentMarkdown, kind } = action.payload;
       const note = state.items.find((n) => n.id === id);
       if (!note) return;
       if (strokes) note.strokes = strokes;
+      if (blocks) note.blocks = blocks;
       if (title !== undefined) note.title = title;
       if (contentMarkdown !== undefined) note.contentMarkdown = contentMarkdown;
+      // Issue 2: the unified editor's save upgrades legacy notes to 'canvas'
+      if (kind === "canvas") note.kind = "canvas";
       note.updatedAt = new Date().toISOString();
     },
   },
