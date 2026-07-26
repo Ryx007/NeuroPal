@@ -225,19 +225,36 @@ uses the picker's real `File` in a real FormData. Do not resurrect an
 axios-based upload path.
 
 **Frontend data flow:** `store/ApiLink.js` resolves the backend from a
-CANDIDATE LIST (P3): on web the page's own hostname `:4000` first (the
-backend serves the web build, so the origin that delivered the bundle IS the
-API), then `EXPO_PUBLIC_API_BASE_URL` (Tailscale MagicDNS
+CANDIDATE LIST (P3, revised 2026-07-26): on a PRODUCTION web build (`!__DEV__`)
+the first candidate is `''` — a bare RELATIVE path, no domain/port/protocol
+at all. This works at any deploy origin because app.js serves the web build
+and `/api` from the SAME Express process on one origin (§"Publish the web
+app"): a relative fetch always lands on the right backend, so moving the
+whole app to a new domain needs ZERO env changes on web. `''` is a
+legitimate host value here, not "unconfigured" — every check in ApiLink.js
+is gated on `candidates.length`/array position, never on a host string's
+truthiness (an empty-string same-origin candidate is still real and must
+never be mistaken for "no backend known", which is what `apiConfigured`
+signals instead). `labelForCandidate()` renders it as "this server" in the
+Settings UI and the offline banner. On `expo start --web` (`__DEV__` true)
+this candidate is instead the page's own hostname on `:4000` — Metro serves
+the dev bundle on its own port (8081) while the API listens on 4000, so a
+relative path would 404 against Metro; this branch is a same-machine dev
+convenience only, irrelevant once you export + deploy for real. Both web
+branches fall through to `EXPO_PUBLIC_API_BASE_URL` (Tailscale MagicDNS
 `http://ryx-mac-mini.tail73ed8.ts.net:4000` — on-LAN + off-LAN, survives
-DHCP drift), then `EXPO_PUBLIC_API_FALLBACK_URLS` (comma-sep; the LAN IP =
-"home WiFi, Tailscale off"). A `/healthz` probe (startup, manual "Check
-now", and after any no-response error) switches to the first REACHABLE
-candidate in preference order — never fastest-wins, or devices would pin to
-an address that dies off-LAN. Exports are live bindings; the two axios
-instances re-point via `subscribeApi`. Settings → "Backend connection"
-shows active host + per-candidate reachability. All EXPO_PUBLIC_* are
-bundle-time inlined: restart the bundler / rebuild the APK to CHANGE the
-list — the probe only picks among baked candidates.
+DHCP drift) then `EXPO_PUBLIC_API_FALLBACK_URLS` (comma-sep; the LAN IP =
+"home WiFi, Tailscale off") as before — NATIVE (the APK) has no page origin
+to be relative to, so it always needs one of these baked absolute addresses
+(or the Issue-0 runtime override) and is untouched by this change. A
+`/healthz` probe (startup, manual "Check now", and after any no-response
+error) switches to the first REACHABLE candidate in preference order — never
+fastest-wins, or devices would pin to an address that dies off-LAN. Exports
+are live bindings; the two axios instances re-point via `subscribeApi`.
+Settings → "Backend connection" shows active host + per-candidate
+reachability. All EXPO_PUBLIC_* are bundle-time inlined: restart the bundler
+/ rebuild the APK to CHANGE the list — the probe only picks among baked
+candidates.
 `services/network.js` is the reader/study client (opt-in mock via
 `EXPO_PUBLIC_USE_MOCK=true`, NEVER silent fallback — unreachable backend must
 be a visible error: Library banner + Retry, reader error notes, boot toast).

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getApiStatus, recheckApi, subscribeApi } from "../store/ApiLink";
+import { getApiStatus, labelForCandidate, recheckApi, subscribeApi } from "../store/ApiLink";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "./primitives";
 
@@ -32,7 +32,7 @@ export function OfflineBanner() {
       onPress={() => recheckApi()}
       accessibilityRole="button"
       accessibilityLiveRegion="assertive"
-      accessibilityLabel={`Backend unreachable at ${snap.host}. Tap to retry.`}
+      accessibilityLabel={`Backend unreachable at ${labelForCandidate(snap.host)}. Tap to retry.`}
       style={{
         position: "absolute",
         top: insets.top,
@@ -53,7 +53,7 @@ export function OfflineBanner() {
           textAlign: "center",
         }}
       >
-        Backend unreachable — tried {String(snap.host).replace(/^https?:\/\//, "")} · tap to retry
+        Backend unreachable — tried {labelForCandidate(snap.host)} · tap to retry
       </Text>
     </Pressable>
   );

@@ -6,6 +6,7 @@ import {
   apiHost,
   getApiOverride,
   getApiStatus,
+  labelForCandidate,
   recheckApi,
   setApiOverride,
   subscribeApi,
@@ -68,7 +69,7 @@ export function ConnectionStatus() {
         accessibilityRole="text"
         accessibilityLiveRegion="polite"
         accessibilityLabel={`Backend ${STATE_TEXT[snap.state] || snap.state}${
-          snap.host ? `, ${hostOnly(snap.host)}` : ""
+          snap.state !== "unconfigured" ? `, ${labelForCandidate(snap.host)}` : ""
         }`}
       >
         <View
@@ -90,7 +91,7 @@ export function ConnectionStatus() {
         </Text>
       </View>
 
-      {snap.host ? (
+      {snap.state !== "unconfigured" ? (
         <Text
           style={{
             color: palette.onSurfaceVariant,
@@ -99,7 +100,7 @@ export function ConnectionStatus() {
             marginTop: 6,
           }}
         >
-          {hostOnly(snap.host)}
+          {labelForCandidate(snap.host)}
         </Text>
       ) : null}
 
@@ -122,7 +123,7 @@ export function ConnectionStatus() {
                   : palette.surfaceLowest,
               }}
               accessibilityRole="text"
-              accessibilityLabel={`${hostOnly(c.url)}: ${result}${active ? ", active" : ""}`}
+              accessibilityLabel={`${labelForCandidate(c.url)}: ${result}${active ? ", active" : ""}`}
             >
               <Text
                 numberOfLines={1}
@@ -133,7 +134,7 @@ export function ConnectionStatus() {
                   fontSize: 11,
                 }}
               >
-                {hostOnly(c.url)}
+                {labelForCandidate(c.url)}
               </Text>
               <Text
                 style={{
@@ -418,9 +419,4 @@ function copyStatus(s) {
     checkedAt: s.checkedAt,
     candidates: s.candidates.map((c) => ({ ...c })),
   };
-}
-
-// http://ryx-mac-mini.tail73ed8.ts.net:4000 → ryx-mac-mini.tail73ed8.ts.net:4000
-function hostOnly(url) {
-  return String(url).replace(/^https?:\/\//, "");
 }

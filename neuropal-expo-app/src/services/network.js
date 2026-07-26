@@ -48,6 +48,14 @@ function assertConfigured() {
   }
 }
 
+// apiHost is '' both when genuinely unconfigured AND when the active
+// candidate is same-origin (relative, web-production) — those need
+// different words in an error message the owner reads.
+function describeHost() {
+  if (apiHost) return apiHost;
+  return apiConfigured ? "this server" : "(unset)";
+}
+
 // Turns an axios failure into a message the owner can act on. Three cases:
 // the server answered with an error, the server never answered, or the
 // request never left the device.
@@ -59,14 +67,14 @@ export function describeNetworkError(error) {
       : `Backend error ${error.response.status}`;
   }
   if (error?.code === "ECONNABORTED") {
-    return `The backend at ${apiHost || "(unset)"} did not answer in time — it may still be working; try again.`;
+    return `The backend at ${describeHost()} did not answer in time — it may still be working; try again.`;
   }
   if (error?.request) {
     // the request never got an answer — the active host may be the wrong one
     // for where this device is right now; re-probe so the NEXT attempt can
     // ride a fallback (coalesced + fire-and-forget inside ApiLink)
     recheckApi();
-    return `Cannot reach the backend at ${apiHost || "(unset)"} — is the Mac Mini running, and is Tailscale on (or this device on home WiFi)?`;
+    return `Cannot reach the backend at ${describeHost()} — is the Mac Mini running, and is Tailscale on (or this device on home WiFi)?`;
   }
   return error?.message || "Unknown network error";
 }

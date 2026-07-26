@@ -6,14 +6,28 @@
 //     off-LAN, survives DHCP drift, but needs Tailscale ON on the device
 //   - the LAN IP — works at home even with Tailscale off, dies on cellular
 // Candidates, in preference order:
-//   1. web only: the page's own hostname on :4000 — the backend serves the
-//      web build itself, so whatever host delivered the bundle IS the API
-//   2. EXPO_PUBLIC_API_BASE_URL (MagicDNS — see .env)
+//   1. web PRODUCTION build only: '' — a bare RELATIVE path. app.js serves
+//      the web build and /api from the SAME Express process on ONE origin
+//      (see docs/BRAIN.md §"Publish the web app"), so a relative fetch
+//      always reaches the right backend no matter what domain, port, or
+//      protocol this build is deployed behind — zero config, ever.
+//   1b. web DEV only (`expo start --web`): the page's own hostname on
+//      :4000 — Metro serves the dev bundle on its OWN port (8081) while the
+//      API listens on 4000, so a relative path would 404 against Metro.
+//      Not needed once you export + deploy for real; a same-machine dev
+//      convenience only.
+//   2. EXPO_PUBLIC_API_BASE_URL (MagicDNS — see .env) — native only in
+//      practice (web never needs a baked address at all in production)
 //   3. EXPO_PUBLIC_API_FALLBACK_URLS (comma-separated, e.g. the LAN IP)
 // Exports start on the first candidate; a background /healthz probe switches
 // to the first reachable one and re-points the axios instances via
 // subscribeApi. Expo inlines EXPO_PUBLIC_* at bundle time — an APK must be
 // rebuilt to CHANGE the candidate list; the probe only picks among them.
+//
+// '' is a LEGITIMATE candidate/host value (same-origin), not "unconfigured"
+// — every check below uses `candidates.length` / array position, never
+// plain truthiness on a host string, so a same-origin '' is never mistaken
+// for "no backend known" (which is instead signalled by `apiConfigured`).
 
 import { Platform } from 'react-native';
 
@@ -29,14 +43,29 @@ let apiOverride = null;
 function buildCandidates() {
     const list = [];
     if (apiOverride) list.push(clean(apiOverride));
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
-        list.push(`${window.location.protocol}//${window.location.hostname}:4000`);
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        if (!__DEV__) {
+            // Production web: same origin as the page itself — see the
+            // module header. '' is pushed directly (not through the
+            // filter(Boolean) below) because empty string is the correct
+            // value here, not a missing one.
+            list.push('');
+        } else if (window.location?.hostname) {
+            list.push(`${window.location.protocol}//${window.location.hostname}:4000`);
+        }
     }
-    list.push(clean(process.env.EXPO_PUBLIC_API_BASE_URL));
+
+    const envCandidates = [clean(process.env.EXPO_PUBLIC_API_BASE_URL)];
     for (const u of String(process.env.EXPO_PUBLIC_API_FALLBACK_URLS || '').split(',')) {
-        list.push(clean(u));
+        envCandidates.push(clean(u));
     }
-    return [...new Set(list.filter(Boolean))];
+    list.push(...envCandidates.filter(Boolean));
+
+    // De-dupe while preserving order. Set (not filter(Boolean)) so a
+    // legitimate '' entry survives — Boolean-filtering it out would silently
+    // drop the same-origin candidate.
+    return [...new Set(list)];
 }
 
 let candidates = buildCandidates();
@@ -49,14 +78,18 @@ export const apiConfigured = candidates.length > 0;
 // compiles `import { baseUrl }` to a property read at use time, so string
 // interpolations pick the switch up on the next call; axios instances
 // capture baseURL at create() and re-point through subscribeApi instead.
-export let apiHost = candidates[0] || '';
-export let baseUrl = apiHost ? `${apiHost}/api/` : '';
+//
+// Gated on `candidates.length`, NOT on apiHost's truthiness — apiHost can
+// legitimately BE '' (same-origin web) while still fully configured; only
+// an EMPTY candidate list means "no backend known at all".
+export let apiHost = candidates.length > 0 ? candidates[0] : '';
+export let baseUrl = candidates.length > 0 ? `${apiHost}/api/` : '';
 export let socketUrl = apiHost;
 
 // Image / file serving — both ride on the same `/api/documents/:id/raw`
 // stream, but if you ever expose a raw `/uploads/` static host, point this
 // at it.
-export let documentImageUrl = `${apiHost}/api/documents/`;
+export let documentImageUrl = candidates.length > 0 ? `${apiHost}/api/documents/` : '';
 
 // ---- connection status (Settings indicator + axios re-pointing) -----------
 
@@ -73,6 +106,15 @@ const status = {
 
 export function getApiStatus() {
     return status;
+}
+
+// A candidate/host string for DISPLAY (Settings' candidate list, the
+// offline banner). Every value this is called with is a real, attempted
+// candidate — '' unambiguously means same-origin here (the true
+// "nothing configured at all" state has zero candidates and never reaches
+// UI that iterates a candidate list).
+export function labelForCandidate(url) {
+    return url ? String(url).replace(/^https?:\/\//, '') : 'this server';
 }
 
 // fn(status) fires after every probe round and after a host switch.
@@ -132,9 +174,12 @@ export function recheckApi() {
             ok: results[i].ok,
             ms: results[i].ok ? results[i].ms : null,
         }));
-        const winner = roster.find((u, i) => results[i].ok);
-        if (winner && winner !== apiHost) setHost(winner);
-        status.state = winner ? 'ok' : 'down';
+        // Index-based, not `roster.find(...)` — a winning same-origin ('')
+        // candidate is falsy and `find`'s result can't be distinguished from
+        // "nothing matched" by truthiness alone.
+        const winnerIdx = results.findIndex((r) => r.ok);
+        if (winnerIdx >= 0 && roster[winnerIdx] !== apiHost) setHost(roster[winnerIdx]);
+        status.state = winnerIdx >= 0 ? 'ok' : 'down';
         status.checkedAt = Date.now();
         inFlight = null;
         notify();
@@ -165,7 +210,7 @@ export async function setApiOverride(url) {
     candidates = buildCandidates();
     inFlight = null; // drop any stale probe so the new roster wins
     if (next) setHost(next);
-    else if (candidates[0]) setHost(candidates[0]);
+    else if (candidates.length > 0) setHost(candidates[0]);
     notify();
     return recheckApi();
 }
