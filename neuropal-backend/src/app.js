@@ -100,13 +100,18 @@ function buildApp() {
         });
     }
 
-    // ---- Web app (static production build) ------------------------------
-    // WEB_DIST env → `npx expo export -p web` output. Served at / so ANY
-    // browser on the LAN (MacBooks, iPhones, other phones) gets the full
-    // app from http://<mini-ip>:4000/ — same always-on process as the API.
-    // Unknown non-API GETs fall back to index.html (client-side routing).
+    // ---- Web app (static production build) — OPT-IN, OFF BY DEFAULT -----
+    // The front-end now has its own process and port: src/webServer.js on
+    // :8081 serves WEB_DIST and proxies /api, /healthz, /katex and /apk
+    // back here. This API is therefore API-ONLY, and `GET /` returns the
+    // 404 envelope below rather than the app shell.
+    //
+    // SERVE_WEB_FROM_API=true restores the old single-port behaviour (the
+    // API serving the bundle at / as well) — kept for the case where you
+    // want one process again, e.g. a minimal deploy or while debugging the
+    // web server itself. Both may run at once; they read the same WEB_DIST.
     const webDist = process.env.WEB_DIST;
-    if (webDist && fs.existsSync(path.resolve(webDist))) {
+    if (process.env.SERVE_WEB_FROM_API === 'true' && webDist && fs.existsSync(path.resolve(webDist))) {
         const dist = path.resolve(webDist);
         app.use(express.static(dist));
         app.get(/^\/(?!api\/|healthz|apk).*/, (req, res) => {

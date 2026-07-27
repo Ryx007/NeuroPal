@@ -6,8 +6,13 @@
             "runtimeExecutable": "bash",
             "runtimeArgs": [
                 "-c",
-                "cd /Users/ryx/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start --web --port 8081"
+                "cd /Users/ryx/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start --web --port 8082"
             ],
+            "port": 8082
+        },
+        {
+            "name": "neuropal-web",
+            "url": "http://localhost:8081",
             "port": 8081
         },
         {

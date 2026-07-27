@@ -6,16 +6,19 @@
 //     off-LAN, survives DHCP drift, but needs Tailscale ON on the device
 //   - the LAN IP — works at home even with Tailscale off, dies on cellular
 // Candidates, in preference order:
-//   1. web PRODUCTION build only: '' — a bare RELATIVE path. app.js serves
-//      the web build and /api from the SAME Express process on ONE origin
-//      (see docs/BRAIN.md §"Publish the web app"), so a relative fetch
-//      always reaches the right backend no matter what domain, port, or
-//      protocol this build is deployed behind — zero config, ever.
+//   1. web PRODUCTION build only: '' — a bare RELATIVE path. The front-end
+//      is served by neuropal-backend/src/webServer.js (:8081), which
+//      PROXIES /api, /healthz, /katex and /apk to the API (:4000) — so
+//      everything the page needs is on the page's own origin and a
+//      relative fetch always reaches the right backend, no matter what
+//      domain, port, or protocol this build is deployed behind. Zero
+//      config, ever: to move the API, repoint API_PROXY_TARGET on the web
+//      server; the bundle contains no URLs to rebuild.
 //   1b. web DEV only (`expo start --web`): the page's own hostname on
-//      :4000 — Metro serves the dev bundle on its OWN port (8081) while the
-//      API listens on 4000, so a relative path would 404 against Metro.
-//      Not needed once you export + deploy for real; a same-machine dev
-//      convenience only.
+//      :4000 — Metro serves the dev bundle on its OWN port (8082, see
+//      .claude/launch.json; 8081 belongs to the production web server) and
+//      does NOT proxy, so a relative path would 404 against Metro. A
+//      same-machine dev convenience only.
 //   2. EXPO_PUBLIC_API_BASE_URL (MagicDNS — see .env) — native only in
 //      practice (web never needs a baked address at all in production)
 //   3. EXPO_PUBLIC_API_FALLBACK_URLS (comma-separated, e.g. the LAN IP)

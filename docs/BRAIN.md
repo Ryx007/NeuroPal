@@ -34,7 +34,8 @@ call (Gemini free tier) for reasoning.
 ```
  S24 Ultra (standalone APK — PRIMARY) ─┐
  iPhone 12 (Expo Go)                   ├─ HTTP ─► Mac Mini M4 (always-on host)
- MacBooks (Expo web in browser)        ┘           ├─ Node/Express  :4000   (pm2: neuropal-api)
+ MacBooks (web browser)                ┘           ├─ Node/Express  :8081   (pm2: neuropal-web — web build + proxy)
+                                                   ├─ Node/Express  :4000   (pm2: neuropal-api — API only)
                                                    ├─ Docker  MongoDB :27017 (neuropal-mongo)
                                                    ├─ Docker  Qdrant  :6333  (neuropal-qdrant)
                                                    ├─ Ollama          :11434 (nomic-embed-text, qwen2.5:7b)
@@ -63,7 +64,7 @@ call (Gemini free tier) for reasoning.
 | GitHub | `gh` CLI authenticated as Ryx007; **git pushes over HTTPS via `gh auth setup-git`** (the SSH key exists but is passphrase-locked, useless non-interactively). |
 | Inbox folder | `/Users/ryx/NeuroPal-Inbox` (env `INBOX_DIR`) |
 | Router / MAC | Gateway `192.168.3.1`; Mini WiFi MAC `1c:f6:4c:3d:e9:3b` (for the DHCP reservation) |
-| Serving | `http://<mini>:4000/` = web app (WEB_DIST), `/apk` = Android installer (APK_PATH), `/api/*` = API — one pm2 process |
+| Serving | TWO pm2 processes since 2026-07-27. `http://<mini>:8081/` = the web app (`neuropal-web`, src/webServer.js, serves WEB_DIST) which PROXIES `/api`, `/healthz`, `/katex`, `/apk` → `http://<mini>:4000` (`neuropal-api`, API only — `GET /` there is now a 404 envelope). The proxy is what lets the web bundle hold ZERO URLs (see §5 Frontend data flow). `SERVE_WEB_FROM_API=true` restores the old one-process setup. |
 
 ## 4. Backend API contract (all under `/api`, port 4000)
 
@@ -227,10 +228,12 @@ axios-based upload path.
 **Frontend data flow:** `store/ApiLink.js` resolves the backend from a
 CANDIDATE LIST (P3, revised 2026-07-26): on a PRODUCTION web build (`!__DEV__`)
 the first candidate is `''` — a bare RELATIVE path, no domain/port/protocol
-at all. This works at any deploy origin because app.js serves the web build
-and `/api` from the SAME Express process on one origin (§"Publish the web
+at all. This works at any deploy origin because the web server (:8081)
+PROXIES `/api`, `/healthz`, `/katex` and `/apk` to the API (:4000), so
+everything the page asks for is on the page's own origin (§"Publish the web
 app"): a relative fetch always lands on the right backend, so moving the
-whole app to a new domain needs ZERO env changes on web. `''` is a
+whole app to a new domain needs ZERO env changes on web, and moving the API
+means editing `API_PROXY_TARGET` on the web server — never the bundle. `''` is a
 legitimate host value here, not "unconfigured" — every check in ApiLink.js
 is gated on `candidates.length`/array position, never on a host string's
 truthiness (an empty-string same-origin candidate is still real and must
@@ -413,13 +416,39 @@ cp app/build/outputs/apk/release/app-release.apk ~/NeuroPal-APK/neuropal.apk
 ### Publish the web app (any browser on the LAN)
 ```bash
 cd neuropal-expo-app && npx expo export -p web        # → dist/
-pm2 restart neuropal-api                               # backend serves it
-# App URL from ANY device (Tailscale on): http://ryx-mac-mini.tail73ed8.ts.net:4000/
-# or on home WiFi:                        http://192.168.3.169:4000/
+pm2 restart neuropal-web                               # picks up the new dist
+# App URL from ANY device (Tailscale on): http://ryx-mac-mini.tail73ed8.ts.net:8081/
+# or on home WiFi:                        http://192.168.3.169:8081/
 ```
-The backend serves `WEB_DIST` (env → the dist/ folder) at `/` with an SPA
-fallback, and `APK_PATH` at `/apk`. Re-export + restart after frontend
-changes you want in browsers; rebuild the APK for the phone separately.
+`neuropal-web` (src/webServer.js) serves `WEB_DIST` on `WEB_PORT` (8081) with
+an SPA fallback, and proxies `/api`, `/healthz`, `/katex` and `/apk` to
+`API_PROXY_TARGET` (default `http://127.0.0.1:4000`). Re-export + restart
+`neuropal-web` for frontend changes; the API only needs restarting for
+backend changes. Rebuild the APK for the phone separately.
+
+First-time / after a machine rebuild, register the process with pm2:
+```bash
+pm2 start neuropal-backend/src/webServer.js --name neuropal-web && pm2 save
+```
+
+**Why it proxies instead of the browser calling :4000 cross-origin.** The
+web bundle contains NO backend URL — production web resolves the API with a
+bare relative path (§5 Frontend data flow), so it works at any domain with
+zero rebuilds. That only holds if everything the page requests is on the
+page's own origin. Three things REQUIRE the proxy rather than plain CORS,
+because they resolve relative URLs against the page origin and never see an
+axios baseURL: **KaTeX** (`mathViewHtml.js` injects `${apiHost}/katex/…`
+into a sandboxed srcdoc iframe → `/katex/…` → :8081), the **EPUB reader**
+(`EpubReader.jsx` injects `<base href="/api/documents/:id/epub/<dir>/">`, and
+every publisher-relative css/img/font resolves against it), and **/healthz**
+(`ConnectionStatus.jsx` fetches it directly, and ApiLink probes it).
+Registering the proxy BEFORE the static/SPA fallback also matters: an SPA
+server that answered `/healthz` with `index.html` would make the probe
+report a *falsely* healthy backend — with the proxy, a dead API returns a
+real 502 in ~6ms and the offline banner fires correctly.
+
+To point the same bundle at an API elsewhere, set `API_PROXY_TARGET` on the
+web server — nothing in the bundle changes.
 Hard-won build facts:
 - RN Gradle wants a **JDK 17 toolchain**; JDK 21 alone makes Gradle try to download one via a broken foojay resolver (`IBM_SEMERU` crash). Fixed by the user-level Temurin 17 + `~/.gradle/gradle.properties` (see §3).
 - `usesCleartextTraffic` MUST come from the `expo-build-properties` plugin in `app.json` (a bare `android.usesCleartextTraffic` key is silently ignored) — without it the release APK cannot talk to `http://…` at all and every screen shows network errors.
@@ -429,9 +458,14 @@ Hard-won build facts:
 
 ### Web / development
 ```bash
-cd neuropal-expo-app && npx expo start --web      # web app on :8081
-npx expo start                                     # + QR for Expo Go phones
+cd neuropal-expo-app && npx expo start --web --port 8082   # dev server on :8082
+npx expo start                                              # + QR for Expo Go phones
 ```
+Metro's default port IS 8081, which now belongs to the production
+`neuropal-web` process — so the dev server runs on **8082**
+(`.claude/launch.json` does this). In dev the page is on :8082 and Metro
+does not proxy, so ApiLink deliberately falls back to guessing
+`<hostname>:4000` instead of a relative path (see ApiLink.js candidate 1b).
 
 ### Acceptance loops (re-run after risky changes)
 - Backend: MAC-MINI-SETUP §6–§7 (curl: infra checks; upload→ready→text→query on both providers).
