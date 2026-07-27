@@ -41,13 +41,17 @@ const API_TARGET =
 const PROXY_PREFIXES = ['/api', '/healthz', '/katex', '/apk'];
 
 // Hop-by-hop headers belong to a single transport leg and MUST NOT be
-// forwarded to the next one (RFC 7230 §6.1) — re-emitting a client's
-// `connection`/`te`/`transfer-encoding`/`trailer` onto our own outbound
-// request lets the client meddle with a connection that isn't theirs, and
-// Node manages those itself. (A review flagged a client-supplied `Trailer`
-// as an outright process-killer via ERR_HTTP_TRAILER_INVALID; that did NOT
-// reproduce on Node 20.20 with either a content-length or a piped/chunked
-// body, so treat this as correctness hygiene, not a fixed crash.)
+// forwarded to the next one (RFC 7230 §6.1) — Node manages these itself.
+//
+// This is load-bearing, not hygiene: forwarding a client's `Trailer` header
+// onto a BODYLESS outbound request makes Node throw ERR_HTTP_TRAILER_INVALID
+// from an internal write, which no handler here can catch — it kills the
+// whole web-server process. One unauthenticated line does it:
+//   printf 'GET /api/documents HTTP/1.1\r\nHost: h\r\nTrailer: X\r\n\r\n' \
+//     | nc <host> 8081
+// (Verified on Node 20.20 against a replica of the pre-strip code. It does
+// NOT reproduce when the request carries a body — content-length or chunked
+// — which is why a curl-based test can miss it entirely.)
 const HOP_BY_HOP = new Set([
     'connection',
     'keep-alive',
