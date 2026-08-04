@@ -5,7 +5,7 @@ import { memo, useMemo, useState } from "react";
 import { WebView } from "react-native-webview";
 
 import { apiHost } from "../store/ApiLink";
-import { buildEquationHtml } from "./mathViewHtml";
+import { buildEquationHtml, clampEqHeight } from "./mathViewHtml";
 
 // memo (P7): the reader body re-renders on every karaoke tick — equation
 // WebViews with unchanged latex must not even enter reconciliation.
@@ -25,8 +25,8 @@ export const MathView = memo(function MathView({ latex, color, fontSize = 18 }) 
       containerStyle={{ backgroundColor: "transparent" }}
       javaScriptEnabled
       onMessage={(event) => {
-        const h = parseInt(event.nativeEvent.data, 10);
-        if (Number.isFinite(h) && h > 20 && h < 800) setHeight(h + 8);
+        const h = clampEqHeight(parseInt(event.nativeEvent.data, 10));
+        if (h) setHeight(h);
       }}
     />
   );
