@@ -103,33 +103,29 @@ Ollama), all other devices are LAN clients. See
 > Full mid-flight context, established root causes (don't re-derive), and
 > rejected alternatives live in **`docs/HANDOFF.md`** — read it first.
 
-0. **Merge the equation-height fix (IN FLIGHT, uncommitted).** Owner-started
-   task `task_a3165175` drafted the fix for tall web equations clipping (the
-   iframe reports `document.body.scrollHeight` = 0, so `MathView.web.js` keeps
-   its 64px default). It sits UNCOMMITTED in the worktree
-   `.claude/worktrees/fervent-sammet-be592e` (branch
-   `claude/fervent-sammet-be592e`): `MathView.js`, `MathView.web.js`,
-   `mathViewHtml.js` add a shared `clampEqHeight()`. **Verify the measurement
-   source actually changed** (clamping 0 alone doesn't fix it), browser-test
-   against the Griffiths EPUB / a nougat doc, commit, merge to `main`, dismiss
-   the chip. See HANDOFF §2.
-1. **S24 on-device acceptance of Issues 0/1/2** — all browser-verified; the
-   phone-only paths remain: EPUB reader (instant open, exact equations,
-   karaoke, tap-to-seek), the unified notes canvas **S-Pen `pointerType`
-   routing** (pen inks in Type mode, finger scrolls in Pen mode, pressure →
-   width — the one path never verified off-device), share-sheet exports.
-   Install the current APK from `http://<mini>:4000/apk`.
-2. **Router DHCP reservation for the Mini** (owner action) — it's on `.229`
+0. **S24 on-device acceptance (the only real work left).** Everything is
+   browser-verified; these paths exist only on the phone. **The APK on
+   `/apk` is from before the EPUB reader, notes canvas, port split and
+   equation fix — rebuild it first** (BRAIN §6 runbook), then check:
+   EPUB reader (instant open, exact equations, karaoke, tap-to-seek); the
+   unified notes canvas **S-Pen `pointerType` routing** (pen inks in Type
+   mode, finger scrolls in Pen mode, pressure → width — never verified
+   off-device); **equation sizing on the native WebView** (the web half is
+   fixed and verified in `d1d3088`, but `MathView.js`'s `postMessage` host
+   was only read, not run); share-sheet exports.
+   Note the APK reaches the API directly on `:4000` — the :8081 web server is
+   irrelevant to it — so if it can't connect, use Settings → Backend address.
+1. **Router DHCP reservation for the Mini** (owner action) — it's on `.229`
    again, so this still isn't done: `192.168.3.1` → Address Reservation → MAC
    `1c:f6:4c:3d:e9:3b` → `192.168.3.169`. Until then baked APK LAN fallbacks
    keep dying on drift; the Settings backend-address override is the
    workaround.
-3. **Collaborator write access** (owner action) — repo is public (clone/fork
+2. **Collaborator write access** (owner action) — repo is public (clone/fork
    works already); add a friend at
    `github.com/Ryx007/NeuroPal/settings/access` to let them push.
 
 **Machine facts (Mini):** WiFi is `en1`, **currently `192.168.3.229`** (DHCP
-drifted off `.169` — see action 2). Repo: `~/Documents/Gitkraken/NeuroPal`.
+drifted off `.169` — see action 1). Repo: `~/Documents/Gitkraken/NeuroPal`.
 Serving is now TWO processes: `neuropal-web` :8081 (web app + proxy) and
 `neuropal-api` :4000 (API only) — the baked `EXPO_PUBLIC_*` addresses only
 matter for the APK now, since web resolves the API relative to :8081.

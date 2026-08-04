@@ -35,38 +35,26 @@ served both.
 
 ## 2. THE EXACT NEXT STEP
 
-**Apply, verify, and merge the equation-height fix.**
+**DONE — the queue is clear. Pick from PROJECT-STATUS "Next actions".**
 
-The owner started background task `task_a3165175` in a separate session; it
-produced a real fix but **has not been committed or merged**. It was drafted
-in the local worktree `.claude/worktrees/fervent-sammet-be592e` (branch
-`claude/fervent-sammet-be592e`) — but that worktree and branch are **local to
-the Mini and NOT pushed** (`.claude/` is gitignored), so a fresh clone won't
-see them. So the diff is also captured as a **tracked patch that travels with
-the repo**:
+The equation-height fix that was pending here is **landed and verified**
+(`d1d3088`). My earlier doubt — whether it changed the *measurement source*
+or only the clamp — is resolved: it does both. `measure()` now reads
+`el.getBoundingClientRect().height` on `#eq`, and `ResizeObserver` +
+`fonts.ready` catch layout that arrives after the old fixed 60ms/300ms
+timeouts. Evidence: all 19 equation frames in the nougat slice report real
+heights (110,112,103,…,**188**,…) with **zero** left at the 64px default; the
+188px one was previously squeezed into 64. Stable across three samples 5s
+apart, so no ratcheting. The local worktree
+`.claude/worktrees/fervent-sammet-be592e` still holds the same edits
+uncommitted and can now be deleted.
 
-```
-docs/pending-patches/equation-height-fix.patch     (applies cleanly onto main)
-git apply docs/pending-patches/equation-height-fix.patch
-```
+**Remaining work is owner-gated** (see §6): S24 on-device acceptance, the
+DHCP reservation, collaborator access. Nothing is blocked on code.
 
-It touches three files — `MathView.js`, `MathView.web.js`, `mathViewHtml.js`
-— adding a shared `clampEqHeight()` helper (in `mathViewHtml.js`) and routing
-both hosts through it. **It looks correct on read but I have NOT verified it
-in the browser, and I have a specific doubt:** the root cause (§3f) is that
-`report()` in `mathViewHtml.js` measures `document.body.scrollHeight`, which
-returns **0** in the sandboxed iframe. A `clampEqHeight` that merely rejects 0
-would keep the 64px default and NOT fix the clipping — the fix only works if
-the **measurement source** in `report()` also changed (e.g. to
-`getElementById('eq').getBoundingClientRect().height`). The patch preview I
-saw did not clearly show that line changing.
-
-Next session: (a) `git apply` the patch (or `git diff main` in the worktree
-if on the Mini), (b) confirm `report()`'s measurement source changed, not
-just the clamp, (c) verify in the browser against a nougat doc — tall/
-multi-line equations must no longer clip (see §4), (d) commit and push, (e)
-delete `docs/pending-patches/equation-height-fix.patch`, dismiss chip
-`task_a3165175`.
+⚠️ **The native half is unverified.** `mathViewHtml.js` is shared, but
+`MathView.js`'s WebView `postMessage` host was only verified by reading. If
+equations look wrong on the S24, check that path first.
 
 ## 3. ROOT CAUSES ALREADY ESTABLISHED — do not re-derive
 
@@ -147,9 +135,19 @@ relative-path work — it predates all of it. This is what task `task_a3165175`
   fixture: §1.1 has 20 equation JPEGs. Filter Library → EPUB.
 - The math iframes are `sandbox="allow-scripts"` (opaque origin) so you CANNOT
   read their `contentDocument` from the parent. To check KaTeX rendered,
-  either screenshot, or measure the frame's parent height (default is 64px;
-  anything else means KaTeX loaded and reported back). This is exactly the
-  bug in §2.
+  either screenshot, or measure the frame's parent height (64px = the default,
+  i.e. nothing was reported; anything else means it measured).
+- ⚠️ **THE BIG MEASUREMENT TRAP — this cost me three wrong conclusions.**
+  The Browser pane **skips iframe layout while the pane is hidden**:
+  `window.innerWidth/innerHeight` inside the iframe come back `0x0` and every
+  `getBoundingClientRect()` is 0. That is **indistinguishable from the bug**
+  — I twice concluded "the fix doesn't work" from all-64px readings that were
+  purely an artifact, and once got a *non-deterministic* result where the
+  same byte-identical test iframe reported `300x64` in one run and `0x0` in
+  the next. A screenshot **forces a paint**; take one, then measure
+  immediately, and the real heights appear. Same caveat for a screenshot that
+  shows equations as blank gaps — that is paint timing, not a regression;
+  take a second one.
 - Browser quirks that cost time: RN-web `Pressable` press events lack
   `locationX` (fall back to `offsetX`); a page reload can drop the preview
   server (re-`preview_start`); `expo export` / prebuild running alongside
@@ -229,13 +227,13 @@ relative-path work — it predates all of it. This is what task `task_a3165175`
 
 ## 8. KNOWN-BROKEN / OPEN
 
-- **Equation height (§2)** — tall math clips in the web reader because the
-  iframe reports `scrollHeight` 0. Fix drafted in the worktree, unmerged,
-  unverified. This is the next step.
+- ~~Equation height~~ — **FIXED and verified** in `d1d3088` (see §2). Native
+  (S24 WebView) half still unverified.
 - **Full-reboot persistence of Docker AutoStart (§3e)** — set and
   restart-verified, but not reboot-verified.
 - Nothing else is known-broken. The port split, EPUB reader, notes canvas,
-  and relative-path resolution are all browser-verified end-to-end.
+  relative-path resolution, and equation sizing are all browser-verified
+  end-to-end.
 
 ## 9. HOUSE RULES (so you match the codebase)
 
