@@ -7,13 +7,11 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-07-08 (Mac Mini session, continued — reader overhaul
-(original-pages view, clean extraction, chapters, tap-to-seek), library
-rename/delete, OCR for scanned books, Drive library preload, frosted-glass
-panels, theme-wide accents, pomodoro + reminders (expo-notifications),
-flashcards (schema-structured), S-pen handwritten notes tab, physics
-visualizer tab (5 offline canvas templates incl. Bloch sphere). App is now
-7 tabs. See `docs/BRAIN.md`.)_
+_Last updated: 2026-08-04 (port split — web app on :8081, API on :4000, with
+a proxy that preserves the zero-baked-URL / any-domain property; adversarial
+proxy hardening; README/BRAIN de-staled for collaborators; `docs/HANDOFF.md`
+added. Prior line: 2026-07-08 reader/notes/visualizer overhaul. Full history
+in the phase table below and in `docs/BRAIN.md`.)_
 
 ---
 
@@ -102,32 +100,49 @@ Ollama), all other devices are LAN clients. See
 
 ## Next actions (in order)
 
-0. **Redesign acceptance on the S24 Ultra** — rebuild the APK (BRAIN §6),
-   then on-device: drawer swipe, reader long-press selection → highlight,
-   TOC/bookmarks, go-to-page, 950 wpm playback, paper search → import,
-   markdown edit, note color wheel + export share sheet, Bloch drag +
-   AI-generated viz. (All of this is browser-verified; native gestures and
-   share sheets are what need the phone.)
-1. **Phase 2 acceptance on the S24 Ultra** — on the Mini:
-   `cd ~/Documents/Gitkraken/NeuroPal/neuropal-expo-app && npx expo start`,
-   scan the QR with Expo Go on the S24 (same WiFi). Then: pick a PDF →
-   watch it walk to `ready` in the Library (auto-polls) → open in Reader →
-   TTS + karaoke → ask a question → grounded cited answer.
-   Watch specifically: DocumentPicker→FormData upload on Android and
-   expo-speech behavior (sim-timer estimator drives the highlight).
-2. **Phase 3** — web TTS via `speechSynthesis` + `onboundary`; browser
-   upload. (`expo start --web` already bundles; Module 0 Q&A loop already
-   works in the browser.)
-3. **Phase 4** — summarize/quiz/cheatsheet/explain endpoints on `aiProvider`.
+> Full mid-flight context, established root causes (don't re-derive), and
+> rejected alternatives live in **`docs/HANDOFF.md`** — read it first.
 
-**Machine facts (Mini, recorded 2026-07-07):** WiFi is `en1`, currently
-`192.168.3.169` — the older `.213` is stale. Give the Mini a DHCP
-reservation so `EXPO_PUBLIC_API_BASE_URL` stops drifting. Repo path on the
-Mini: `~/Documents/Gitkraken/NeuroPal`.
+0. **Merge the equation-height fix (IN FLIGHT, uncommitted).** Owner-started
+   task `task_a3165175` drafted the fix for tall web equations clipping (the
+   iframe reports `document.body.scrollHeight` = 0, so `MathView.web.js` keeps
+   its 64px default). It sits UNCOMMITTED in the worktree
+   `.claude/worktrees/fervent-sammet-be592e` (branch
+   `claude/fervent-sammet-be592e`): `MathView.js`, `MathView.web.js`,
+   `mathViewHtml.js` add a shared `clampEqHeight()`. **Verify the measurement
+   source actually changed** (clamping 0 alone doesn't fix it), browser-test
+   against the Griffiths EPUB / a nougat doc, commit, merge to `main`, dismiss
+   the chip. See HANDOFF §2.
+1. **S24 on-device acceptance of Issues 0/1/2** — all browser-verified; the
+   phone-only paths remain: EPUB reader (instant open, exact equations,
+   karaoke, tap-to-seek), the unified notes canvas **S-Pen `pointerType`
+   routing** (pen inks in Type mode, finger scrolls in Pen mode, pressure →
+   width — the one path never verified off-device), share-sheet exports.
+   Install the current APK from `http://<mini>:4000/apk`.
+2. **Router DHCP reservation for the Mini** (owner action) — it's on `.229`
+   again, so this still isn't done: `192.168.3.1` → Address Reservation → MAC
+   `1c:f6:4c:3d:e9:3b` → `192.168.3.169`. Until then baked APK LAN fallbacks
+   keep dying on drift; the Settings backend-address override is the
+   workaround.
+3. **Collaborator write access** (owner action) — repo is public (clone/fork
+   works already); add a friend at
+   `github.com/Ryx007/NeuroPal/settings/access` to let them push.
+
+**Machine facts (Mini):** WiFi is `en1`, **currently `192.168.3.229`** (DHCP
+drifted off `.169` — see action 2). Repo: `~/Documents/Gitkraken/NeuroPal`.
+Serving is now TWO processes: `neuropal-web` :8081 (web app + proxy) and
+`neuropal-api` :4000 (API only) — the baked `EXPO_PUBLIC_*` addresses only
+matter for the APK now, since web resolves the API relative to :8081.
 
 ## How to continue with Claude Code on another machine
 
 ```bash
 git clone https://github.com/Ryx007/NeuroPal.git && cd NeuroPal
-claude   # then: "Read docs/BUILD-BRIEF.md and docs/PROJECT-STATUS.md, then continue from 'Next actions'."
+claude   # then: "Read docs/HANDOFF.md, then docs/BRAIN.md, then continue from PROJECT-STATUS 'Next actions'."
 ```
+
+To also bring the backend + data up on that machine (Mongo dump, Qdrant
+snapshots, uploaded files), use the owner's travel scripts:
+`scripts/pack-for-travel.sh` on the Mini → USB → `scripts/unpack-on-laptop.sh`
+on the laptop (starts all three services under pm2). Code comes from git;
+models re-download.
