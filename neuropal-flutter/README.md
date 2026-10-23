@@ -134,6 +134,11 @@ chapters), TTS chunking and the player (range sync, stale events, the
 estimator), backend address selection and errors, appearance persistence,
 and end-to-end widget tests in demo, offline and real (mocked) modes.
 
+**Screenshots without a phone.** `flutter test tool/screenshots_test.dart`
+renders the Library, Reader, Ask, Settings and drawer in Classic and Signal
+(also at 200 % text size) with the real fonts, to `build/screenshots/*.png`.
+It lives in `tool/`, so the normal `flutter test` run never executes it.
+
 ## M1 and M2
 
 | | M1 (this) | M2 (next) |

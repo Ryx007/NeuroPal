@@ -9,10 +9,9 @@ android {
     // by side on the same phone.
     namespace = "io.neuropal.flutter"
     compileSdk = flutter.compileSdkVersion
-    // The NDK only strips debug symbols from the engine's .so files. Pinned
-    // to the version already installed on the build box (Flutter's default
-    // would download another ~1 GB); Gradle fetches it elsewhere if missing.
-    ndkVersion = "27.1.12297006"
+    // Flutter's default (28.2): the plugins (flutter_tts, shared_preferences)
+    // require it too. Gradle downloads it on first build if it is missing.
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
