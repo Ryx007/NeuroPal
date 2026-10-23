@@ -1,0 +1,27 @@
+{
+  "id": "demo-cpi-basics",
+  "title": "Correlation plenoptic imaging: the basics",
+  "subtitle": "Demo sample · offline",
+  "type": "md",
+  "status": "ready",
+  "pageCount": 2,
+  "wordCount": 349,
+  "toc": [
+    {
+      "title": "Why plenoptic imaging?",
+      "order": 1,
+      "startParagraph": 0
+    },
+    {
+      "title": "Correlations instead of microlenses",
+      "order": 2,
+      "startParagraph": 2
+    },
+    {
+      "title": "Light sources",
+      "order": 3,
+      "startParagraph": 7
+    }
+  ],
+  "text": "Why plenoptic imaging?\n\nA conventional camera records how much light reaches each pixel, but not the direction it came from. A plenoptic (light-field) camera records both, which lets you refocus a picture after it was taken and reconstruct the scene in three dimensions. The classic design places a microlens array in front of the sensor and pays for the directional information with spatial resolution: the finer the directions, the coarser the image.\n\nCorrelations instead of microlenses\n\nCorrelation plenoptic imaging (CPI) avoids that trade-off. The light is split towards two spatially resolving detectors that image two different planes, for example the object and the focusing lens. One detector provides the spatial information, the other the directional information. Neither detector alone sees a plenoptic image; the information sits in the correlations between them.\n\nThe quantity that carries it is the correlation of intensity fluctuations, $\\Gamma(\\rho_a, \\rho_b) = \\langle \\Delta I_a(\\rho_a)\\, \\Delta I_b(\\rho_b) \\rangle$, measured for every pair of pixels on the two detectors. Each fluctuation is taken with respect to the mean intensity on that detector:\n\n$$\\Delta I_j(\\rho_j) = I_j(\\rho_j) - \\langle I_j(\\rho_j) \\rangle, \\qquad j = a, b$$\n\nBecause every pixel of one detector is correlated with every pixel of the other, the correlation function is four-dimensional: two coordinates locate a point in the scene and two encode the direction of the ray. Refocusing becomes a change of coordinates followed by an integration over the directional ones, done in software after the measurement.\n\nLight sources\n\nCPI works with chaotic light, such as a pseudo-thermal source made by scattering a laser off a rotating ground glass, and with entangled photon pairs from spontaneous parametric down-conversion. In down-conversion a pump photon splits into a signal and an idler photon whose energies add up, $\\omega_s + \\omega_i = \\omega_p$, and whose momenta are correlated by phase matching.\n\nThe price of using correlations is noise: the correlation function has to be estimated from many frames, and its signal-to-noise ratio grows only with the square root of the number of frames. Fast, time-resolving detectors such as single-photon avalanche diode arrays make that acquisition much quicker."
+}

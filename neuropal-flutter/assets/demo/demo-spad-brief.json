@@ -1,0 +1,32 @@
+{
+  "id": "demo-spad-brief",
+  "title": "Single-photon avalanche diodes in brief",
+  "subtitle": "Demo sample · offline",
+  "type": "md",
+  "status": "ready",
+  "pageCount": 2,
+  "wordCount": 262,
+  "toc": [
+    {
+      "title": "Geiger mode",
+      "order": 1,
+      "startParagraph": 0
+    },
+    {
+      "title": "Dead time and saturation",
+      "order": 2,
+      "startParagraph": 3
+    },
+    {
+      "title": "Figures of merit",
+      "order": 3,
+      "startParagraph": 7
+    },
+    {
+      "title": "SPAD arrays",
+      "order": 4,
+      "startParagraph": 9
+    }
+  ],
+  "text": "Geiger mode\n\nA single-photon avalanche diode (SPAD) is a p–n junction reverse-biased above its breakdown voltage. In this Geiger mode a single photo-generated carrier can trigger a self-sustaining avalanche, so one photon produces a large current pulse that is easy to detect and to time.\n\nAfter each avalanche a quenching circuit lowers the bias to stop the current and then restores it. During this dead time, typically tens of nanoseconds, the pixel cannot detect another photon.\n\nDead time and saturation\n\nDead time limits the count rate. For a detector that simply ignores photons arriving while it is dead (the non-paralysable model), the measured rate $R_{\\mathrm{meas}}$ is related to the true photon rate $R$ by\n\n$$R_{\\mathrm{meas}} = \\frac{R}{1 + R\\,\\tau_d}$$\n\nso the measured rate can never exceed $1/\\tau_d$, however bright the light.\n\nFigures of merit\n\nPhoton detection efficiency is the fraction of incident photons that produce a count. Dark counts are avalanches triggered by thermally generated carriers, with no photon at all. Timing jitter, often a few tens of picoseconds, sets how precisely each arrival time is known. Afterpulsing happens when carriers trapped during one avalanche are released later and trigger a false count.\n\nSPAD arrays\n\nIntegrating many SPADs with per-pixel timing electronics gives an array that time-stamps photons across a whole image. That is what makes correlation measurements such as coincidence counting, ghost imaging and correlation plenoptic imaging fast: correlations can be computed from photon arrival times instead of from many slow camera frames. The trade-offs are fill factor, crosstalk between neighbouring pixels, and the data rate the readout has to handle."
+}

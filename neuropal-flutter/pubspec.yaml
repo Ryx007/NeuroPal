@@ -1,0 +1,110 @@
+name: neuropal
+description: "NeuroPal for Flutter: reader-first, two skins (Classic + Signal)."
+# Private app: never published to pub.dev.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State: ChangeNotifier + provider only (see README "Code style").
+  provider: ^6.1.5+1
+  # Backend calls (plain HTTP over Tailscale/LAN).
+  http: ^1.6.0
+  # Settings + the appearance object, persisted on the device.
+  shared_preferences: ^2.5.6
+  # On-device text-to-speech (Android TextToSpeech / iOS AVSpeechSynthesizer).
+  flutter_tts: ^4.2.5
+  # Renders the Markdown answers from the Ask sheet.
+  flutter_markdown_plus: ^1.0.12
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Demo library (Settings → "Demo library (offline)"): bundled samples.
+    - assets/demo/
+    # Font licences, shown under Settings → Open-source licences.
+    - assets/fonts/LICENSES/
+
+  # Every font is bundled (SIL OFL, licences in assets/fonts/LICENSES).
+  # No runtime font fetching. Family names match TYPE_ROLES in
+  # packages/tokens so lib/theme/type_roles.dart can map roles 1:1.
+  fonts:
+    # ---- Classic -----------------------------------------------------------
+    - family: Space Grotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-600.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk-700.ttf
+          weight: 700
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-400.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-500.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-600.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-700.ttf
+          weight: 700
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-400.ttf
+          weight: 400
+    # ---- Signal ------------------------------------------------------------
+    # Archivo is variable-width on the web; here we ship static cuts:
+    # weight 900 = the SemiExpanded Black cut (the "Wide" display, wdth 112),
+    # weight 700 = the regular-width Bold cut (displaySemi).
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Archivo-SemiExpanded-Black.ttf
+          weight: 900
+    # The "Condensed" display type.
+    - family: Archivo Condensed
+      fonts:
+        - asset: assets/fonts/Archivo-Condensed-ExtraBold.ttf
+          weight: 800
+    - family: Atkinson Hyperlegible Next
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-400.ttf
+          weight: 400
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-500.ttf
+          weight: 500
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-600.ttf
+          weight: 600
+        - asset: assets/fonts/AtkinsonHyperlegibleNext-700.ttf
+          weight: 700
+    - family: Atkinson Hyperlegible Mono
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleMono-400.ttf
+          weight: 400
+        - asset: assets/fonts/AtkinsonHyperlegibleMono-700.ttf
+          weight: 700
+    # ---- Reader fonts ------------------------------------------------------
+    - family: Atkinson Hyperlegible
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegible-400.ttf
+          weight: 400
+        - asset: assets/fonts/AtkinsonHyperlegible-700.ttf
+          weight: 700
+    - family: Lora
+      fonts:
+        - asset: assets/fonts/Lora-400.ttf
+          weight: 400
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces-400.ttf
+          weight: 400
