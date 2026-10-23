@@ -1,0 +1,16 @@
+{
+  "name": "@neuropal/tokens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NeuroPal design tokens and appearance logic shared by the Expo app, the Flutter app, iOS widgets and the web platform.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "sync": "node scripts/sync.js",
+    "check": "node scripts/sync.js --check"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

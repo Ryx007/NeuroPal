@@ -1,0 +1,5252 @@
+{
+  "generatedFrom": "packages/tokens",
+  "tokensVersion": 1,
+  "classic": [
+    {
+      "input": {
+        "theme": "dark",
+        "accent": "ruby"
+      },
+      "output": {
+        "surface": "#131313",
+        "surfaceLowest": "#0E0E0E",
+        "surfaceLow": "#1B1C1C",
+        "surfaceContainer": "#1F2020",
+        "surfaceHigh": "#2A2A2A",
+        "surfaceHighest": "#353535",
+        "onSurface": "#E4E2E1",
+        "onSurfaceVariant": "#D0C6C8",
+        "outline": "#9F8D91",
+        "outlineVariant": "#534347",
+        "primary": "#FF7F8E",
+        "primaryContainer": "#8E1030",
+        "onPrimary": "#4A0316",
+        "secondary": "#FFAFC1",
+        "tertiary": "#F3C77B",
+        "error": "#FFB4AB",
+        "warn": "#FFD27A",
+        "accent": "#FF7F8E",
+        "accentGlow": "rgba(255,127,142,0.25)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#FF7F8E",
+        "accentInk": "#4A0316",
+        "accentDeep": "#8E1030",
+        "accentText": "#FF7F8E",
+        "line": "#534347",
+        "control": "#9F8D91",
+        "shadowColor": "#000000",
+        "panelColor": "#1F2020",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 6.6
+      }
+    },
+    {
+      "input": {
+        "theme": "dark",
+        "accent": "cyan"
+      },
+      "output": {
+        "surface": "#131313",
+        "surfaceLowest": "#0E0E0E",
+        "surfaceLow": "#1B1C1C",
+        "surfaceContainer": "#1F2020",
+        "surfaceHigh": "#2A2A2A",
+        "surfaceHighest": "#353535",
+        "onSurface": "#E4E2E1",
+        "onSurfaceVariant": "#D0C6C8",
+        "outline": "#9F8D91",
+        "outlineVariant": "#534347",
+        "primary": "#A6E6FF",
+        "primaryContainer": "#00566B",
+        "onPrimary": "#003543",
+        "secondary": "#FFAFC1",
+        "tertiary": "#F3C77B",
+        "error": "#FFB4AB",
+        "warn": "#FFD27A",
+        "accent": "#A6E6FF",
+        "accentGlow": "rgba(166,230,255,0.25)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#A6E6FF",
+        "accentInk": "#003543",
+        "accentDeep": "#00566B",
+        "accentText": "#A6E6FF",
+        "line": "#534347",
+        "control": "#9F8D91",
+        "shadowColor": "#000000",
+        "panelColor": "#1F2020",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 9.7
+      }
+    },
+    {
+      "input": {
+        "theme": "dark",
+        "accent": "purple"
+      },
+      "output": {
+        "surface": "#131313",
+        "surfaceLowest": "#0E0E0E",
+        "surfaceLow": "#1B1C1C",
+        "surfaceContainer": "#1F2020",
+        "surfaceHigh": "#2A2A2A",
+        "surfaceHighest": "#353535",
+        "onSurface": "#E4E2E1",
+        "onSurfaceVariant": "#D0C6C8",
+        "outline": "#9F8D91",
+        "outlineVariant": "#534347",
+        "primary": "#D6BAFF",
+        "primaryContainer": "#5F07BC",
+        "onPrimary": "#280057",
+        "secondary": "#FFAFC1",
+        "tertiary": "#F3C77B",
+        "error": "#FFB4AB",
+        "warn": "#FFD27A",
+        "accent": "#D6BAFF",
+        "accentGlow": "rgba(214,186,255,0.25)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#D6BAFF",
+        "accentInk": "#280057",
+        "accentDeep": "#5F07BC",
+        "accentText": "#D6BAFF",
+        "line": "#534347",
+        "control": "#9F8D91",
+        "shadowColor": "#000000",
+        "panelColor": "#1F2020",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 9.6
+      }
+    },
+    {
+      "input": {
+        "theme": "dark",
+        "accent": "green"
+      },
+      "output": {
+        "surface": "#131313",
+        "surfaceLowest": "#0E0E0E",
+        "surfaceLow": "#1B1C1C",
+        "surfaceContainer": "#1F2020",
+        "surfaceHigh": "#2A2A2A",
+        "surfaceHighest": "#353535",
+        "onSurface": "#E4E2E1",
+        "onSurfaceVariant": "#D0C6C8",
+        "outline": "#9F8D91",
+        "outlineVariant": "#534347",
+        "primary": "#B9E6A8",
+        "primaryContainer": "#1F5A12",
+        "onPrimary": "#0F2D08",
+        "secondary": "#FFAFC1",
+        "tertiary": "#F3C77B",
+        "error": "#FFB4AB",
+        "warn": "#FFD27A",
+        "accent": "#B9E6A8",
+        "accentGlow": "rgba(185,230,168,0.22)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#B9E6A8",
+        "accentInk": "#0F2D08",
+        "accentDeep": "#1F5A12",
+        "accentText": "#B9E6A8",
+        "line": "#534347",
+        "control": "#9F8D91",
+        "shadowColor": "#000000",
+        "panelColor": "#1F2020",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 10.7
+      }
+    },
+    {
+      "input": {
+        "theme": "sepia",
+        "accent": "ruby"
+      },
+      "output": {
+        "surface": "#F3EBDD",
+        "surfaceLowest": "#F8F1E3",
+        "surfaceLow": "#EDE4D2",
+        "surfaceContainer": "#E8DEC9",
+        "surfaceHigh": "#DDD1B8",
+        "surfaceHighest": "#D1C3A5",
+        "onSurface": "#2A2418",
+        "onSurfaceVariant": "#5A4E35",
+        "outline": "#8A7B5C",
+        "outlineVariant": "#BBA985",
+        "primary": "#8E1030",
+        "primaryContainer": "#E8B9C2",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#7A3B4C",
+        "tertiary": "#7A5A1F",
+        "error": "#B3261E",
+        "warn": "#B07C2A",
+        "accent": "#8E1030",
+        "accentGlow": "rgba(142,16,48,0.14)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#8E1030",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#E8B9C2",
+        "accentText": "#8E1030",
+        "line": "#BBA985",
+        "control": "#8A7B5C",
+        "shadowColor": "#000000",
+        "panelColor": "#E8DEC9",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 6.9
+      }
+    },
+    {
+      "input": {
+        "theme": "sepia",
+        "accent": "cyan"
+      },
+      "output": {
+        "surface": "#F3EBDD",
+        "surfaceLowest": "#F8F1E3",
+        "surfaceLow": "#EDE4D2",
+        "surfaceContainer": "#E8DEC9",
+        "surfaceHigh": "#DDD1B8",
+        "surfaceHighest": "#D1C3A5",
+        "onSurface": "#2A2418",
+        "onSurfaceVariant": "#5A4E35",
+        "outline": "#8A7B5C",
+        "outlineVariant": "#BBA985",
+        "primary": "#0F5E6B",
+        "primaryContainer": "#BFDDE2",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#5E7A3F",
+        "tertiary": "#8A4A6A",
+        "error": "#B3261E",
+        "warn": "#B07C2A",
+        "accent": "#0F5E6B",
+        "accentGlow": "rgba(15,94,107,0.14)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#0F5E6B",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#BFDDE2",
+        "accentText": "#0F5E6B",
+        "line": "#BBA985",
+        "control": "#8A7B5C",
+        "shadowColor": "#000000",
+        "panelColor": "#E8DEC9",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 5.5
+      }
+    },
+    {
+      "input": {
+        "theme": "sepia",
+        "accent": "purple"
+      },
+      "output": {
+        "surface": "#F3EBDD",
+        "surfaceLowest": "#F8F1E3",
+        "surfaceLow": "#EDE4D2",
+        "surfaceContainer": "#E8DEC9",
+        "surfaceHigh": "#DDD1B8",
+        "surfaceHighest": "#D1C3A5",
+        "onSurface": "#2A2418",
+        "onSurfaceVariant": "#5A4E35",
+        "outline": "#8A7B5C",
+        "outlineVariant": "#BBA985",
+        "primary": "#5E3A8E",
+        "primaryContainer": "#D9CCE8",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#5E7A3F",
+        "tertiary": "#8A4A6A",
+        "error": "#B3261E",
+        "warn": "#B07C2A",
+        "accent": "#5E3A8E",
+        "accentGlow": "rgba(94,58,142,0.14)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#5E3A8E",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#D9CCE8",
+        "accentText": "#5E3A8E",
+        "line": "#BBA985",
+        "control": "#8A7B5C",
+        "shadowColor": "#000000",
+        "panelColor": "#E8DEC9",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 6.4
+      }
+    },
+    {
+      "input": {
+        "theme": "sepia",
+        "accent": "green"
+      },
+      "output": {
+        "surface": "#F3EBDD",
+        "surfaceLowest": "#F8F1E3",
+        "surfaceLow": "#EDE4D2",
+        "surfaceContainer": "#E8DEC9",
+        "surfaceHigh": "#DDD1B8",
+        "surfaceHighest": "#D1C3A5",
+        "onSurface": "#2A2418",
+        "onSurfaceVariant": "#5A4E35",
+        "outline": "#8A7B5C",
+        "outlineVariant": "#BBA985",
+        "primary": "#4A6B2A",
+        "primaryContainer": "#D2E2BE",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#5E7A3F",
+        "tertiary": "#8A4A6A",
+        "error": "#B3261E",
+        "warn": "#B07C2A",
+        "accent": "#4A6B2A",
+        "accentGlow": "rgba(74,107,42,0.14)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#4A6B2A",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#D2E2BE",
+        "accentText": "#436026",
+        "line": "#BBA985",
+        "control": "#8A7B5C",
+        "shadowColor": "#000000",
+        "panelColor": "#E8DEC9",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 5.3
+      }
+    },
+    {
+      "input": {
+        "theme": "light",
+        "accent": "ruby"
+      },
+      "output": {
+        "surface": "#FAFAF7",
+        "surfaceLowest": "#FFFFFF",
+        "surfaceLow": "#F1F1ED",
+        "surfaceContainer": "#EAEAE5",
+        "surfaceHigh": "#DEDCD4",
+        "surfaceHighest": "#CECBC2",
+        "onSurface": "#1A1A1A",
+        "onSurfaceVariant": "#505058",
+        "outline": "#767680",
+        "outlineVariant": "#C5C5CD",
+        "primary": "#B00030",
+        "primaryContainer": "#FFD9DD",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#8E3A50",
+        "tertiary": "#8A6D1F",
+        "error": "#BA1A1A",
+        "warn": "#B07C2A",
+        "accent": "#B00030",
+        "accentGlow": "rgba(176,0,48,0.12)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#B00030",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#FFD9DD",
+        "accentText": "#B00030",
+        "line": "#C5C5CD",
+        "control": "#767680",
+        "shadowColor": "#000000",
+        "panelColor": "#EAEAE5",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 6
+      }
+    },
+    {
+      "input": {
+        "theme": "light",
+        "accent": "cyan"
+      },
+      "output": {
+        "surface": "#FAFAF7",
+        "surfaceLowest": "#FFFFFF",
+        "surfaceLow": "#F1F1ED",
+        "surfaceContainer": "#EAEAE5",
+        "surfaceHigh": "#DEDCD4",
+        "surfaceHighest": "#CECBC2",
+        "onSurface": "#1A1A1A",
+        "onSurfaceVariant": "#505058",
+        "outline": "#767680",
+        "outlineVariant": "#C5C5CD",
+        "primary": "#006A7A",
+        "primaryContainer": "#B8EAF5",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#007A8C",
+        "tertiary": "#5F07BC",
+        "error": "#BA1A1A",
+        "warn": "#B07C2A",
+        "accent": "#006A7A",
+        "accentGlow": "rgba(0,106,122,0.12)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#006A7A",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#B8EAF5",
+        "accentText": "#006A7A",
+        "line": "#C5C5CD",
+        "control": "#767680",
+        "shadowColor": "#000000",
+        "panelColor": "#EAEAE5",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 5.2
+      }
+    },
+    {
+      "input": {
+        "theme": "light",
+        "accent": "purple"
+      },
+      "output": {
+        "surface": "#FAFAF7",
+        "surfaceLowest": "#FFFFFF",
+        "surfaceLow": "#F1F1ED",
+        "surfaceContainer": "#EAEAE5",
+        "surfaceHigh": "#DEDCD4",
+        "surfaceHighest": "#CECBC2",
+        "onSurface": "#1A1A1A",
+        "onSurfaceVariant": "#505058",
+        "outline": "#767680",
+        "outlineVariant": "#C5C5CD",
+        "primary": "#6B2FBF",
+        "primaryContainer": "#E9DDFF",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#007A8C",
+        "tertiary": "#5F07BC",
+        "error": "#BA1A1A",
+        "warn": "#B07C2A",
+        "accent": "#6B2FBF",
+        "accentGlow": "rgba(107,47,191,0.12)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#6B2FBF",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#E9DDFF",
+        "accentText": "#6B2FBF",
+        "line": "#C5C5CD",
+        "control": "#767680",
+        "shadowColor": "#000000",
+        "panelColor": "#EAEAE5",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 6.2
+      }
+    },
+    {
+      "input": {
+        "theme": "light",
+        "accent": "green"
+      },
+      "output": {
+        "surface": "#FAFAF7",
+        "surfaceLowest": "#FFFFFF",
+        "surfaceLow": "#F1F1ED",
+        "surfaceContainer": "#EAEAE5",
+        "surfaceHigh": "#DEDCD4",
+        "surfaceHighest": "#CECBC2",
+        "onSurface": "#1A1A1A",
+        "onSurfaceVariant": "#505058",
+        "outline": "#767680",
+        "outlineVariant": "#C5C5CD",
+        "primary": "#2E6B1F",
+        "primaryContainer": "#CDEEC0",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#007A8C",
+        "tertiary": "#5F07BC",
+        "error": "#BA1A1A",
+        "warn": "#B07C2A",
+        "accent": "#2E6B1F",
+        "accentGlow": "rgba(46,107,31,0.12)",
+        "skin": "classic",
+        "dark": false,
+        "accentFill": "#2E6B1F",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#CDEEC0",
+        "accentText": "#2E6B1F",
+        "line": "#C5C5CD",
+        "control": "#767680",
+        "shadowColor": "#000000",
+        "panelColor": "#EAEAE5",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 5.4
+      }
+    },
+    {
+      "input": {
+        "theme": "contrast",
+        "accent": "ruby"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0A0A0A",
+        "surfaceContainer": "#141414",
+        "surfaceHigh": "#1F1F1F",
+        "surfaceHighest": "#2A2A2A",
+        "onSurface": "#FFFFFF",
+        "onSurfaceVariant": "#E0E0E0",
+        "outline": "#FFFFFF",
+        "outlineVariant": "#808080",
+        "primary": "#FFFF00",
+        "primaryContainer": "#FFD700",
+        "onPrimary": "#000000",
+        "secondary": "#00FFFF",
+        "tertiary": "#FF80FF",
+        "error": "#FF5555",
+        "warn": "#FFD700",
+        "accent": "#FFFF00",
+        "accentGlow": "rgba(255,255,0,0.3)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#FFFF00",
+        "accentInk": "#000000",
+        "accentDeep": "#FFD700",
+        "accentText": "#FFFF00",
+        "line": "#808080",
+        "control": "#FFFFFF",
+        "shadowColor": "#000000",
+        "panelColor": "#141414",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 17.2
+      }
+    },
+    {
+      "input": {
+        "theme": "contrast",
+        "accent": "cyan"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0A0A0A",
+        "surfaceContainer": "#141414",
+        "surfaceHigh": "#1F1F1F",
+        "surfaceHighest": "#2A2A2A",
+        "onSurface": "#FFFFFF",
+        "onSurfaceVariant": "#E0E0E0",
+        "outline": "#FFFFFF",
+        "outlineVariant": "#808080",
+        "primary": "#FFFF00",
+        "primaryContainer": "#FFD700",
+        "onPrimary": "#000000",
+        "secondary": "#00FFFF",
+        "tertiary": "#FF80FF",
+        "error": "#FF5555",
+        "warn": "#FFD700",
+        "accent": "#FFFF00",
+        "accentGlow": "rgba(255,255,0,0.3)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#FFFF00",
+        "accentInk": "#000000",
+        "accentDeep": "#FFD700",
+        "accentText": "#FFFF00",
+        "line": "#808080",
+        "control": "#FFFFFF",
+        "shadowColor": "#000000",
+        "panelColor": "#141414",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 17.2
+      }
+    },
+    {
+      "input": {
+        "theme": "contrast",
+        "accent": "purple"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0A0A0A",
+        "surfaceContainer": "#141414",
+        "surfaceHigh": "#1F1F1F",
+        "surfaceHighest": "#2A2A2A",
+        "onSurface": "#FFFFFF",
+        "onSurfaceVariant": "#E0E0E0",
+        "outline": "#FFFFFF",
+        "outlineVariant": "#808080",
+        "primary": "#FFFF00",
+        "primaryContainer": "#FFD700",
+        "onPrimary": "#000000",
+        "secondary": "#00FFFF",
+        "tertiary": "#FF80FF",
+        "error": "#FF5555",
+        "warn": "#FFD700",
+        "accent": "#FFFF00",
+        "accentGlow": "rgba(255,255,0,0.3)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#FFFF00",
+        "accentInk": "#000000",
+        "accentDeep": "#FFD700",
+        "accentText": "#FFFF00",
+        "line": "#808080",
+        "control": "#FFFFFF",
+        "shadowColor": "#000000",
+        "panelColor": "#141414",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 17.2
+      }
+    },
+    {
+      "input": {
+        "theme": "contrast",
+        "accent": "green"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0A0A0A",
+        "surfaceContainer": "#141414",
+        "surfaceHigh": "#1F1F1F",
+        "surfaceHighest": "#2A2A2A",
+        "onSurface": "#FFFFFF",
+        "onSurfaceVariant": "#E0E0E0",
+        "outline": "#FFFFFF",
+        "outlineVariant": "#808080",
+        "primary": "#FFFF00",
+        "primaryContainer": "#FFD700",
+        "onPrimary": "#000000",
+        "secondary": "#00FFFF",
+        "tertiary": "#FF80FF",
+        "error": "#FF5555",
+        "warn": "#FFD700",
+        "accent": "#FFFF00",
+        "accentGlow": "rgba(255,255,0,0.3)",
+        "skin": "classic",
+        "dark": true,
+        "accentFill": "#FFFF00",
+        "accentInk": "#000000",
+        "accentDeep": "#FFD700",
+        "accentText": "#FFFF00",
+        "line": "#808080",
+        "control": "#FFFFFF",
+        "shadowColor": "#000000",
+        "panelColor": "#141414",
+        "panelAlpha": 0.82,
+        "grid": "#000000",
+        "gridAlpha": 0,
+        "palBody": "#E4E2E1",
+        "shape": {
+          "radius": 24,
+          "radiusMedium": 18,
+          "radiusControl": 999,
+          "border": 1,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Classic",
+        "ratio": 17.2
+      }
+    }
+  ],
+  "signal": [
+    {
+      "input": {
+        "acc": "#FF3D2E",
+        "base": "Graphite",
+        "motion": "Lively",
+        "field": "Chladni",
+        "brutality": 2,
+        "corners": "Soft",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#FF3D2E",
+        "primaryContainer": "#801F17",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF3D2E",
+        "accentGlow": "rgba(255,61,46,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF3D2E",
+        "accentInk": "#141416",
+        "accentDeep": "#801F17",
+        "accentText": "#FF3D2E",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Chladni",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.7
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF6A1A",
+        "base": "Warm",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 2,
+        "corners": "Round",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#FF6A1A",
+        "primaryContainer": "#80350D",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF6A1A",
+        "accentGlow": "rgba(255,106,26,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF6A1A",
+        "accentInk": "#141416",
+        "accentDeep": "#80350D",
+        "accentText": "#FF6A1A",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 5.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#E5261F",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Grid",
+        "brutality": 3,
+        "corners": "Sharp",
+        "texture": "None",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#E5261F",
+        "primaryContainer": "#731310",
+        "onPrimary": "#000000",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#A71C17",
+        "accentGlow": "rgba(229,38,31,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#E5261F",
+        "accentInk": "#000000",
+        "accentDeep": "#731310",
+        "accentText": "#A71C17",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Grid",
+        "texture": "None",
+        "type": "Condensed",
+        "ratio": 4.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF3D2E",
+        "base": "Black",
+        "motion": "Still",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#FF3D2E",
+        "primaryContainer": "#801F17",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF3D2E",
+        "accentGlow": "rgba(255,61,46,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF3D2E",
+        "accentInk": "#141416",
+        "accentDeep": "#801F17",
+        "accentText": "#FF3D2E",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Interference",
+        "texture": "Scanlines",
+        "type": "Grotesk",
+        "ratio": 5.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#8B5CFF",
+        "base": "Graphite",
+        "motion": "Wild",
+        "field": "Interference",
+        "brutality": 3,
+        "corners": "Sharp",
+        "texture": "Scanlines",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#8B5CFF",
+        "primaryContainer": "#462E80",
+        "onPrimary": "#000000",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#976CFF",
+        "accentGlow": "rgba(139,92,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#8B5CFF",
+        "accentInk": "#000000",
+        "accentDeep": "#462E80",
+        "accentText": "#976CFF",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "Interference",
+        "texture": "Scanlines",
+        "type": "Wide",
+        "ratio": 4.7
+      }
+    },
+    {
+      "input": {
+        "acc": "#CC0000",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#CC0000",
+        "primaryContainer": "#660000",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#E16A6A",
+        "accentGlow": "rgba(204,0,0,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#CC0000",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#660000",
+        "accentText": "#E16A6A",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 5.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF1F1F",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#FF1F1F",
+        "primaryContainer": "#801010",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#BA1717",
+        "accentGlow": "rgba(255,31,31,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#FF1F1F",
+        "accentInk": "#141416",
+        "accentDeep": "#801010",
+        "accentText": "#BA1717",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 4.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF7070",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#FF7070",
+        "primaryContainer": "#803838",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF7070",
+        "accentGlow": "rgba(255,112,112,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF7070",
+        "accentInk": "#141416",
+        "accentDeep": "#803838",
+        "accentText": "#FF7070",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 6.8
+      }
+    },
+    {
+      "input": {
+        "acc": "#CC6600",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#CC6600",
+        "primaryContainer": "#663300",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#D1751A",
+        "accentGlow": "rgba(204,102,0,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#CC6600",
+        "accentInk": "#141416",
+        "accentDeep": "#663300",
+        "accentText": "#D1751A",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.8
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF8F1F",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#FF8F1F",
+        "primaryContainer": "#804810",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF8F1F",
+        "accentGlow": "rgba(255,143,31,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF8F1F",
+        "accentInk": "#141416",
+        "accentDeep": "#804810",
+        "accentText": "#FF8F1F",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 7.3
+      }
+    },
+    {
+      "input": {
+        "acc": "#FFB870",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#FFB870",
+        "primaryContainer": "#805C38",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#6E4F31",
+        "accentGlow": "rgba(255,184,112,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#FFB870",
+        "accentInk": "#141416",
+        "accentDeep": "#805C38",
+        "accentText": "#6E4F31",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 5.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#CCCC00",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#CCCC00",
+        "primaryContainer": "#666600",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#CCCC00",
+        "accentGlow": "rgba(204,204,0,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#CCCC00",
+        "accentInk": "#141416",
+        "accentDeep": "#666600",
+        "accentText": "#CCCC00",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 10.7
+      }
+    },
+    {
+      "input": {
+        "acc": "#FFFF1F",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#FFFF1F",
+        "primaryContainer": "#808010",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FFFF1F",
+        "accentGlow": "rgba(255,255,31,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FFFF1F",
+        "accentInk": "#141416",
+        "accentDeep": "#808010",
+        "accentText": "#FFFF1F",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 15
+      }
+    },
+    {
+      "input": {
+        "acc": "#FFFF70",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#FFFF70",
+        "primaryContainer": "#808038",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FFFF70",
+        "accentGlow": "rgba(255,255,112,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FFFF70",
+        "accentInk": "#141416",
+        "accentDeep": "#808038",
+        "accentText": "#FFFF70",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 15.7
+      }
+    },
+    {
+      "input": {
+        "acc": "#66CC00",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#66CC00",
+        "primaryContainer": "#336600",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#326200",
+        "accentGlow": "rgba(102,204,0,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#66CC00",
+        "accentInk": "#141416",
+        "accentDeep": "#336600",
+        "accentText": "#326200",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 5.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#8FFF1F",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#8FFF1F",
+        "primaryContainer": "#488010",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#8FFF1F",
+        "accentGlow": "rgba(143,255,31,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#8FFF1F",
+        "accentInk": "#141416",
+        "accentDeep": "#488010",
+        "accentText": "#8FFF1F",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 14.4
+      }
+    },
+    {
+      "input": {
+        "acc": "#B8FF70",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#B8FF70",
+        "primaryContainer": "#5C8038",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#B8FF70",
+        "accentGlow": "rgba(184,255,112,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#B8FF70",
+        "accentInk": "#141416",
+        "accentDeep": "#5C8038",
+        "accentText": "#B8FF70",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 13.5
+      }
+    },
+    {
+      "input": {
+        "acc": "#00CC00",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#00CC00",
+        "primaryContainer": "#006600",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#00CC00",
+        "accentGlow": "rgba(0,204,0,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#00CC00",
+        "accentInk": "#141416",
+        "accentDeep": "#006600",
+        "accentText": "#00CC00",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 7.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#1FFF1F",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#1FFF1F",
+        "primaryContainer": "#108010",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#0D630D",
+        "accentGlow": "rgba(31,255,31,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#1FFF1F",
+        "accentInk": "#141416",
+        "accentDeep": "#108010",
+        "accentText": "#0D630D",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.3
+      }
+    },
+    {
+      "input": {
+        "acc": "#70FF70",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#70FF70",
+        "primaryContainer": "#388038",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#70FF70",
+        "accentGlow": "rgba(112,255,112,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#70FF70",
+        "accentInk": "#141416",
+        "accentDeep": "#388038",
+        "accentText": "#70FF70",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 14.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#00CC66",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#00CC66",
+        "primaryContainer": "#006633",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#00CC66",
+        "accentGlow": "rgba(0,204,102,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#00CC66",
+        "accentInk": "#141416",
+        "accentDeep": "#006633",
+        "accentText": "#00CC66",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 7.5
+      }
+    },
+    {
+      "input": {
+        "acc": "#1FFF8F",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#1FFF8F",
+        "primaryContainer": "#108048",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#1FFF8F",
+        "accentGlow": "rgba(31,255,143,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#1FFF8F",
+        "accentInk": "#141416",
+        "accentDeep": "#108048",
+        "accentText": "#1FFF8F",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 12.5
+      }
+    },
+    {
+      "input": {
+        "acc": "#70FFB8",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#70FFB8",
+        "primaryContainer": "#38805C",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#2C6347",
+        "accentGlow": "rgba(112,255,184,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#70FFB8",
+        "accentInk": "#141416",
+        "accentDeep": "#38805C",
+        "accentText": "#2C6347",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 5
+      }
+    },
+    {
+      "input": {
+        "acc": "#00CCCC",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#00CCCC",
+        "primaryContainer": "#006666",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#00CCCC",
+        "accentGlow": "rgba(0,204,204,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#00CCCC",
+        "accentInk": "#141416",
+        "accentDeep": "#006666",
+        "accentText": "#00CCCC",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 9.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#1FFFFF",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#1FFFFF",
+        "primaryContainer": "#108080",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#1FFFFF",
+        "accentGlow": "rgba(31,255,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#1FFFFF",
+        "accentInk": "#141416",
+        "accentDeep": "#108080",
+        "accentText": "#1FFFFF",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 12.9
+      }
+    },
+    {
+      "input": {
+        "acc": "#70FFFF",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#70FFFF",
+        "primaryContainer": "#388080",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#70FFFF",
+        "accentGlow": "rgba(112,255,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#70FFFF",
+        "accentInk": "#141416",
+        "accentDeep": "#388080",
+        "accentText": "#70FFFF",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 13.8
+      }
+    },
+    {
+      "input": {
+        "acc": "#0066CC",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#0066CC",
+        "primaryContainer": "#003366",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#005CB8",
+        "accentGlow": "rgba(0,102,204,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#0066CC",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#003366",
+        "accentText": "#005CB8",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#1F8FFF",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#1F8FFF",
+        "primaryContainer": "#104880",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#1F8FFF",
+        "accentGlow": "rgba(31,143,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#1F8FFF",
+        "accentInk": "#141416",
+        "accentDeep": "#104880",
+        "accentText": "#1F8FFF",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#70B8FF",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#70B8FF",
+        "primaryContainer": "#385C80",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#70B8FF",
+        "accentGlow": "rgba(112,184,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#70B8FF",
+        "accentInk": "#141416",
+        "accentDeep": "#385C80",
+        "accentText": "#70B8FF",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 7.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#0000CC",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#0000CC",
+        "primaryContainer": "#000066",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#8686E7",
+        "accentGlow": "rgba(0,0,204,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#0000CC",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#000066",
+        "accentText": "#8686E7",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 5.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#1F1FFF",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#1F1FFF",
+        "primaryContainer": "#101080",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#1F1FFF",
+        "accentGlow": "rgba(31,31,255,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#1F1FFF",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#101080",
+        "accentText": "#1F1FFF",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.5
+      }
+    },
+    {
+      "input": {
+        "acc": "#7070FF",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#7070FF",
+        "primaryContainer": "#383880",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#7070FF",
+        "accentGlow": "rgba(112,112,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#7070FF",
+        "accentInk": "#141416",
+        "accentDeep": "#383880",
+        "accentText": "#7070FF",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 4.8
+      }
+    },
+    {
+      "input": {
+        "acc": "#6600CC",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#6600CC",
+        "primaryContainer": "#330066",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#AD79E4",
+        "accentGlow": "rgba(102,0,204,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#6600CC",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#330066",
+        "accentText": "#AD79E4",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 5.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#8F1FFF",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#8F1FFF",
+        "primaryContainer": "#481080",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#B56BFF",
+        "accentGlow": "rgba(143,31,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#8F1FFF",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#481080",
+        "accentText": "#B56BFF",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.2
+      }
+    },
+    {
+      "input": {
+        "acc": "#B870FF",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#B870FF",
+        "primaryContainer": "#5C3880",
+        "onPrimary": "#141416",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#6D4396",
+        "accentGlow": "rgba(184,112,255,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#B870FF",
+        "accentInk": "#141416",
+        "accentDeep": "#5C3880",
+        "accentText": "#6D4396",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 5.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#CC00CC",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#CC00CC",
+        "primaryContainer": "#660066",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#D631D6",
+        "accentGlow": "rgba(204,0,204,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#CC00CC",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#660066",
+        "accentText": "#D631D6",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.7
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF1FFF",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#FF1FFF",
+        "primaryContainer": "#801080",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF1FFF",
+        "accentGlow": "rgba(255,31,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF1FFF",
+        "accentInk": "#141416",
+        "accentDeep": "#801080",
+        "accentText": "#FF1FFF",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.3
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF70FF",
+        "base": "Graphite",
+        "motion": "Still",
+        "field": "Chladni",
+        "brutality": 0,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#FF70FF",
+        "primaryContainer": "#803880",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF70FF",
+        "accentGlow": "rgba(255,112,255,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF70FF",
+        "accentInk": "#141416",
+        "accentDeep": "#803880",
+        "accentText": "#FF70FF",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 0,
+          "shadow": 0
+        },
+        "motion": {
+          "level": "Still",
+          "speed": 0
+        },
+        "field": "Chladni",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 7.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#CC0066",
+        "base": "Concrete",
+        "motion": "Calm",
+        "field": "Interference",
+        "brutality": 1,
+        "corners": "Sharp",
+        "texture": "Grain",
+        "type": "Wide"
+      },
+      "output": {
+        "surface": "#D9D9D4",
+        "surfaceLowest": "#F7F7F4",
+        "surfaceLow": "#E6E6E2",
+        "surfaceContainer": "#F2F2EE",
+        "surfaceHigh": "#CFCFCA",
+        "surfaceHighest": "#C2C2BC",
+        "onSurface": "#141416",
+        "onSurfaceVariant": "#3A3A40",
+        "outline": "#4E4E56",
+        "outlineVariant": "#141416",
+        "primary": "#CC0066",
+        "primaryContainer": "#660033",
+        "onPrimary": "#FFFFFF",
+        "secondary": "#1A5E3F",
+        "tertiary": "#5E4D00",
+        "error": "#8A4B00",
+        "warn": "#704800",
+        "accent": "#B8005C",
+        "accentGlow": "rgba(204,0,102,0.3)",
+        "skin": "signal",
+        "dark": false,
+        "accentFill": "#CC0066",
+        "accentInk": "#FFFFFF",
+        "accentDeep": "#660033",
+        "accentText": "#B8005C",
+        "line": "#141416",
+        "control": "#141416",
+        "shadowColor": "#141416",
+        "panelColor": "#F2F2EE",
+        "panelAlpha": 0.74,
+        "grid": "#000000",
+        "gridAlpha": 0.07,
+        "palBody": "#FFFFFF",
+        "shape": {
+          "radius": 3,
+          "radiusMedium": 2,
+          "radiusControl": 2,
+          "border": 1,
+          "shadow": 2
+        },
+        "motion": {
+          "level": "Calm",
+          "speed": 0.35
+        },
+        "field": "Interference",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.6
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF1F8F",
+        "base": "Black",
+        "motion": "Lively",
+        "field": "Grid",
+        "brutality": 2,
+        "corners": "Soft",
+        "texture": "Scanlines",
+        "type": "Condensed"
+      },
+      "output": {
+        "surface": "#000000",
+        "surfaceLowest": "#000000",
+        "surfaceLow": "#0B0B0C",
+        "surfaceContainer": "#121214",
+        "surfaceHigh": "#1E1E22",
+        "surfaceHighest": "#2A2A2F",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#46464E",
+        "primary": "#FF1F8F",
+        "primaryContainer": "#801048",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF1F8F",
+        "accentGlow": "rgba(255,31,143,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF1F8F",
+        "accentInk": "#141416",
+        "accentDeep": "#801048",
+        "accentText": "#FF1F8F",
+        "line": "#46464E",
+        "control": "#C4C4CB",
+        "shadowColor": "#26262C",
+        "panelColor": "#121214",
+        "panelAlpha": 0.78,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.045,
+        "palBody": "#D9D9DE",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Grid",
+        "texture": "Scanlines",
+        "type": "Condensed",
+        "ratio": 5.1
+      }
+    },
+    {
+      "input": {
+        "acc": "#FF70B8",
+        "base": "Warm",
+        "motion": "Wild",
+        "field": "None",
+        "brutality": 3,
+        "corners": "Round",
+        "texture": "None",
+        "type": "Grotesk"
+      },
+      "output": {
+        "surface": "#1A1614",
+        "surfaceLowest": "#120F0E",
+        "surfaceLow": "#201B19",
+        "surfaceContainer": "#26201D",
+        "surfaceHigh": "#332B27",
+        "surfaceHighest": "#3F3631",
+        "onSurface": "#F4EEE9",
+        "onSurfaceVariant": "#CFC5BD",
+        "outline": "#B3A79E",
+        "outlineVariant": "#5E534D",
+        "primary": "#FF70B8",
+        "primaryContainer": "#80385C",
+        "onPrimary": "#141416",
+        "secondary": "#9FDDBA",
+        "tertiary": "#EDD98F",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF70B8",
+        "accentGlow": "rgba(255,112,184,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF70B8",
+        "accentInk": "#141416",
+        "accentDeep": "#80385C",
+        "accentText": "#FF70B8",
+        "line": "#5E534D",
+        "control": "#CFC5BD",
+        "shadowColor": "#000000",
+        "panelColor": "#26201D",
+        "panelAlpha": 0.68,
+        "grid": "#FFF0E6",
+        "gridAlpha": 0.05,
+        "palBody": "#F1E6DC",
+        "shape": {
+          "radius": 26,
+          "radiusMedium": 19,
+          "radiusControl": 19,
+          "border": 3,
+          "shadow": 8
+        },
+        "motion": {
+          "level": "Wild",
+          "speed": 1.9
+        },
+        "field": "None",
+        "texture": "None",
+        "type": "Grotesk",
+        "ratio": 6.3
+      }
+    },
+    {
+      "input": {
+        "acc": "garbage",
+        "base": "Lava",
+        "brutality": 7
+      },
+      "output": {
+        "surface": "#141416",
+        "surfaceLowest": "#0C0C0E",
+        "surfaceLow": "#19191C",
+        "surfaceContainer": "#1E1E22",
+        "surfaceHigh": "#2A2A30",
+        "surfaceHighest": "#36363D",
+        "onSurface": "#F2F2F0",
+        "onSurfaceVariant": "#C4C4CB",
+        "outline": "#ADADB6",
+        "outlineVariant": "#55555E",
+        "primary": "#FF3D2E",
+        "primaryContainer": "#801F17",
+        "onPrimary": "#141416",
+        "secondary": "#8FD9B6",
+        "tertiary": "#E9D98B",
+        "error": "#FFB547",
+        "warn": "#FFC54D",
+        "accent": "#FF3D2E",
+        "accentGlow": "rgba(255,61,46,0.3)",
+        "skin": "signal",
+        "dark": true,
+        "accentFill": "#FF3D2E",
+        "accentInk": "#141416",
+        "accentDeep": "#801F17",
+        "accentText": "#FF3D2E",
+        "line": "#55555E",
+        "control": "#C4C4CB",
+        "shadowColor": "#000000",
+        "panelColor": "#1E1E22",
+        "panelAlpha": 0.66,
+        "grid": "#FFFFFF",
+        "gridAlpha": 0.05,
+        "palBody": "#E4E4E8",
+        "shape": {
+          "radius": 14,
+          "radiusMedium": 10,
+          "radiusControl": 10,
+          "border": 2,
+          "shadow": 5
+        },
+        "motion": {
+          "level": "Lively",
+          "speed": 1
+        },
+        "field": "Chladni",
+        "texture": "Grain",
+        "type": "Wide",
+        "ratio": 4.7
+      }
+    }
+  ],
+  "interpretAppearance": [
+    {
+      "skin": "signal",
+      "text": "Calm it down",
+      "rows": [
+        {
+          "k": "Motion",
+          "from": "Lively",
+          "to": "Calm"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Calm",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "More contrast",
+      "rows": [
+        {
+          "k": "Base",
+          "from": "Graphite",
+          "to": "Black"
+        },
+        {
+          "k": "Brutality",
+          "from": "2",
+          "to": "3"
+        },
+        {
+          "k": "Texture",
+          "from": "Grain",
+          "to": "None"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Black",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 3,
+          "corners": "Soft",
+          "texture": "None",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "Try orange",
+      "rows": [
+        {
+          "k": "Accent",
+          "from": "Signal red",
+          "to": "Ember"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF6A1A",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "less busy, warmer, round corners",
+      "rows": [
+        {
+          "k": "Base",
+          "from": "Graphite",
+          "to": "Warm"
+        },
+        {
+          "k": "Motion",
+          "from": "Lively",
+          "to": "Calm"
+        },
+        {
+          "k": "Background",
+          "from": "Chladni",
+          "to": "None"
+        },
+        {
+          "k": "Corners",
+          "from": "Soft",
+          "to": "Round"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Warm",
+          "motion": "Calm",
+          "field": "None",
+          "brutality": 2,
+          "corners": "Round",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "evening please",
+      "rows": [
+        {
+          "k": "Base",
+          "from": "Graphite",
+          "to": "Black"
+        },
+        {
+          "k": "Motion",
+          "from": "Lively",
+          "to": "Calm"
+        },
+        {
+          "k": "Texture",
+          "from": "Grain",
+          "to": "None"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Black",
+          "motion": "Calm",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "None",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "make it wild with scanlines and #00FF88",
+      "rows": [
+        {
+          "k": "Accent",
+          "from": "Signal red",
+          "to": "#00FF88"
+        },
+        {
+          "k": "Motion",
+          "from": "Lively",
+          "to": "Wild"
+        },
+        {
+          "k": "Texture",
+          "from": "Grain",
+          "to": "Scanlines"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#00FF88",
+          "base": "Graphite",
+          "motion": "Wild",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Scanlines",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "switch to classic",
+      "rows": [
+        {
+          "k": "Skin",
+          "from": "Signal",
+          "to": "Classic"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "classic",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "bake me a cake",
+      "rows": null,
+      "error": "I can’t map that yet. I can change colour, motion, background, texture, corners, contrast or skin.",
+      "next": null
+    },
+    {
+      "skin": "signal",
+      "text": "daylight grid condensed",
+      "rows": [
+        {
+          "k": "Base",
+          "from": "Graphite",
+          "to": "Concrete"
+        },
+        {
+          "k": "Background",
+          "from": "Chladni",
+          "to": "Grid"
+        },
+        {
+          "k": "Type",
+          "from": "Wide",
+          "to": "Condensed"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Concrete",
+          "motion": "Lively",
+          "field": "Grid",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Condensed"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "red and grey, sharper, bolder",
+      "rows": [
+        {
+          "k": "Brutality",
+          "from": "2",
+          "to": "3"
+        },
+        {
+          "k": "Corners",
+          "from": "Soft",
+          "to": "Sharp"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 3,
+          "corners": "Sharp",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "Warmer",
+      "rows": [
+        {
+          "k": "Theme",
+          "from": "Dark",
+          "to": "Sepia"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "classic",
+        "classic": {
+          "theme": "sepia",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "More contrast",
+      "rows": [
+        {
+          "k": "Theme",
+          "from": "Dark",
+          "to": "Contrast"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "classic",
+        "classic": {
+          "theme": "contrast",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "Make it funky",
+      "rows": [
+        {
+          "k": "Skin",
+          "from": "Classic",
+          "to": "Signal"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "blue please",
+      "rows": [
+        {
+          "k": "Accent",
+          "from": "Ruby",
+          "to": "Cyan"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "classic",
+        "classic": {
+          "theme": "dark",
+          "accent": "cyan"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "bright",
+      "rows": [
+        {
+          "k": "Theme",
+          "from": "Dark",
+          "to": "Light"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "classic",
+        "classic": {
+          "theme": "light",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    }
+  ],
+  "interpretHome": [
+    {
+      "text": "Reading first on weekdays",
+      "rows": [
+        {
+          "k": "Weekdays",
+          "from": "5th",
+          "to": "first"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekdays",
+            "tile": "reading",
+            "act": "first"
+          }
+        ]
+      },
+      "title": "Resume reading first on weekdays?"
+    },
+    {
+      "text": "Hide Pal’s note",
+      "rows": [
+        {
+          "k": "Visible",
+          "from": "yes",
+          "to": "no"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": true
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Pal’s note?"
+    },
+    {
+      "text": "Bigger focus",
+      "rows": [
+        {
+          "k": "Size",
+          "from": "M",
+          "to": "L"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Focus?"
+    },
+    {
+      "text": "show the check-in",
+      "rows": null,
+      "error": "State check-in is already like that.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "tasks last",
+      "rows": [
+        {
+          "k": "Position",
+          "from": "4th",
+          "to": "6th"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Minimum day?"
+    },
+    {
+      "text": "anchor first on weekends",
+      "rows": [
+        {
+          "k": "Weekends",
+          "from": "2nd",
+          "to": "first"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekends",
+            "tile": "anchor",
+            "act": "first"
+          }
+        ]
+      },
+      "title": "Next anchor first on weekends?"
+    },
+    {
+      "text": "make it nicer",
+      "rows": null,
+      "error": "I couldn’t tell which tile you mean. Try reading, focus, anchor, check-in, tasks or Pal.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "reading smaller",
+      "rows": [
+        {
+          "k": "Size",
+          "from": "M",
+          "to": "S"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "S",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Resume reading?"
+    },
+    {
+      "text": "hide anchor on weekends",
+      "rows": [
+        {
+          "k": "Weekends",
+          "from": "2nd",
+          "to": "hidden"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekends",
+            "tile": "anchor",
+            "act": "hide"
+          }
+        ]
+      },
+      "title": "Next anchor hidden on weekends?"
+    }
+  ],
+  "effectiveTiles": [
+    {
+      "home": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekdays",
+            "tile": "reading",
+            "act": "first"
+          },
+          {
+            "scope": "Weekends",
+            "tile": "mvd",
+            "act": "hide"
+          }
+        ]
+      },
+      "date": "2026-10-22T09:00:00",
+      "ids": [
+        "reading",
+        "state",
+        "anchor",
+        "focus",
+        "mvd",
+        "pal"
+      ]
+    },
+    {
+      "home": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekdays",
+            "tile": "reading",
+            "act": "first"
+          },
+          {
+            "scope": "Weekends",
+            "tile": "mvd",
+            "act": "hide"
+          }
+        ]
+      },
+      "date": "2026-10-24T09:00:00",
+      "ids": [
+        "state",
+        "anchor",
+        "focus",
+        "reading",
+        "pal"
+      ]
+    }
+  ],
+  "pal": [
+    {
+      "body": "#E4E4E8",
+      "acc": "#FF3D2E",
+      "faceInk": "#141416",
+      "visor": "#FF3D2E"
+    },
+    {
+      "body": "#E4E4E8",
+      "acc": "#2EC7F0",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#E4E4E8",
+      "acc": "#E4E4E8",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#F1E6DC",
+      "acc": "#FF3D2E",
+      "faceInk": "#141416",
+      "visor": "#FF3D2E"
+    },
+    {
+      "body": "#F1E6DC",
+      "acc": "#2EC7F0",
+      "faceInk": "#141416",
+      "visor": "#2EC7F0"
+    },
+    {
+      "body": "#F1E6DC",
+      "acc": "#E4E4E8",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#3A3A40",
+      "acc": "#FF3D2E",
+      "faceInk": "#FFFFFF",
+      "visor": "#FF3D2E"
+    },
+    {
+      "body": "#3A3A40",
+      "acc": "#2EC7F0",
+      "faceInk": "#FFFFFF",
+      "visor": "#2EC7F0"
+    },
+    {
+      "body": "#3A3A40",
+      "acc": "#E4E4E8",
+      "faceInk": "#FFFFFF",
+      "visor": "#E4E4E8"
+    },
+    {
+      "body": "#FF3D2E",
+      "acc": "#FF3D2E",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#FF3D2E",
+      "acc": "#2EC7F0",
+      "faceInk": "#141416",
+      "visor": "#2EC7F0"
+    },
+    {
+      "body": "#FF3D2E",
+      "acc": "#E4E4E8",
+      "faceInk": "#141416",
+      "visor": "#E4E4E8"
+    },
+    {
+      "body": "#8FE3C0",
+      "acc": "#FF3D2E",
+      "faceInk": "#141416",
+      "visor": "#FF3D2E"
+    },
+    {
+      "body": "#8FE3C0",
+      "acc": "#2EC7F0",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#8FE3C0",
+      "acc": "#E4E4E8",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#C9B8FF",
+      "acc": "#FF3D2E",
+      "faceInk": "#141416",
+      "visor": "#FF3D2E"
+    },
+    {
+      "body": "#C9B8FF",
+      "acc": "#2EC7F0",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    },
+    {
+      "body": "#C9B8FF",
+      "acc": "#E4E4E8",
+      "faceInk": "#141416",
+      "visor": "#141416"
+    }
+  ]
+}
