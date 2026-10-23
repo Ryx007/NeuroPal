@@ -76,3 +76,9 @@ jobs:
       - run: flutter pub get
       - name: Build for the iOS simulator
         run: flutter build ios --simulator --debug
+      # flutter hides xcodebuild's target list, so prove the Swift extension
+      # was really compiled and embedded rather than silently skipped.
+      - name: The widget extension is embedded
+        run: |
+          ls -la build/ios/iphonesimulator/Runner.app/PlugIns/
+          test -x build/ios/iphonesimulator/Runner.app/PlugIns/NeuroPalWidget.appex/NeuroPalWidget
