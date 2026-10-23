@@ -329,14 +329,14 @@ function ConditionsPage({ selected, onToggle }) {
                 height: 22,
                 borderRadius: 6,
                 borderWidth: 2,
-                borderColor: checked ? palette.accent : palette.outlineVariant,
-                backgroundColor: checked ? palette.accent : "transparent",
+                borderColor: checked ? palette.accentFill : palette.outlineVariant,
+                backgroundColor: checked ? palette.accentFill : "transparent",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
               {checked ? (
-                <MaterialIcons name="check" size={14} color={palette.onPrimary} />
+                <MaterialIcons name="check" size={14} color={palette.accentInk} />
               ) : null}
             </View>
             <View style={{ width: 12 }} />

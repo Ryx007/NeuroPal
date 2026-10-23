@@ -6,8 +6,10 @@
 // Rules
 //   • On start: pull the server copy. Newer than ours → adopt it. Ours newer
 //     (or the server has none) → push ours.
-//   • Any local change → debounced push (1.5 s).
-//   • The server answers 409 with its copy when ours is older → adopt it.
+//   • Any local change → debounced push (1.5 s); a change made while a PUT
+//     is in flight is sent right after it, never dropped.
+//   • The server answers 409 with its copy when ours is older → adopt it,
+//     unless we edited again after the server's copy (then push again).
 //   • Classic theme/accent edits made by older screens (Tweaks sheet,
 //     Settings) change content without a new timestamp → stamp them first.
 import { apiConfigured, subscribeApi } from "../store/ApiLink";
@@ -29,6 +31,8 @@ export function startAppearanceSync(store) {
   let lastAt = prev.updatedAt;
   let timer = null;
   let inFlight = false;
+  let pending = false; // a change arrived while a PUT was on the wire
+  let conflicts = 0; // consecutive 409s answered by re-pushing
   let adopting = false;
 
   // Adopting dispatches three actions (theme, accent, look); the half-applied
@@ -47,18 +51,46 @@ export function startAppearanceSync(store) {
   };
 
   async function push() {
-    if (!apiConfigured || inFlight) return;
+    if (!apiConfigured) return;
+    if (inFlight) {
+      // Never drop an edit: send it as soon as the current PUT settles.
+      pending = true;
+      return;
+    }
     inFlight = true;
-    const appearance = selectAppearance(store.getState());
+    const sent = selectAppearance(store.getState());
     try {
-      await apiClient.put("me/appearance", { appearance }, { timeout: 15000 });
+      const { data } = await apiClient.put("me/appearance", { appearance: sent }, { timeout: 15000 });
+      conflicts = 0;
+      // The server clamps a fast clock's stamp. If nothing changed locally
+      // since, take its stamp so the next pull doesn't push the same look.
+      const saved = data?.appearance;
+      const local = selectAppearance(store.getState());
+      if (saved && saved.updatedAt !== local.updatedAt && contentKey(saved) === contentKey(local)) adopt(saved);
     } catch (error) {
       const server = error?.response?.status === 409 ? error.response.data?.appearance : null;
-      if (server) adopt(server);
+      if (server) {
+        // Last write wins by edit time in both directions: a local edit made
+        // after the server's copy goes up again (at most twice in a row);
+        // otherwise the server's copy is adopted.
+        const local = selectAppearance(store.getState());
+        const localWins = local.updatedAt && newer(local.updatedAt, server.updatedAt) && contentKey(local) !== contentKey(server);
+        if (localWins && conflicts < 2) {
+          conflicts += 1;
+          pending = true;
+        } else {
+          conflicts = 0;
+          adopt(server);
+        }
+      }
       // Anything else (offline, old backend without the route) — keep the
       // local copy; the next change or reconnect tries again.
     } finally {
       inFlight = false;
+      if (pending) {
+        pending = false;
+        push();
+      }
     }
   }
 

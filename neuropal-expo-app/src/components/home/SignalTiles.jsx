@@ -49,8 +49,8 @@ function SmallBtn({ icon, label, onPress, accessibilityLabel }) {
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       style={({ pressed }) => ({
-        minHeight: 40,
-        minWidth: 40,
+        minHeight: 44,
+        minWidth: 44,
         paddingHorizontal: label ? 10 : 0,
         flexDirection: "row",
         alignItems: "center",
@@ -452,7 +452,7 @@ export function SignalMvdTile({ size, tasks, remaining, editing, onEditToggle, n
           onPress={onEditToggle}
           accessibilityRole="button"
           accessibilityLabel={editing ? "Done editing tasks" : "Edit tasks"}
-          style={{ marginLeft: 8, minHeight: 36, minWidth: 44, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" }}
+          style={{ marginLeft: 8, minHeight: 44, minWidth: 44, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" }}
         >
           <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.bodyBold, fontSize: 13 }}>{editing ? "Done" : "Edit"}</Text>
         </Pressable>
@@ -463,7 +463,7 @@ export function SignalMvdTile({ size, tasks, remaining, editing, onEditToggle, n
         ))}
       </View>
       {hidden > 0 ? (
-        <Pressable onPress={onEditToggle} accessibilityRole="button" style={{ minHeight: 40, justifyContent: "center" }}>
+        <Pressable onPress={onEditToggle} accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }}>
           <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodyBold, fontSize: 13 }}>{`+ ${hidden} more`}</Text>
         </Pressable>
       ) : null}

@@ -39,6 +39,7 @@ import {
   toggleReminderDone,
 } from "../store/slices/remindersSlice";
 import { usePalette } from "../theme/ThemeProvider";
+import { hexToRgb, inkFor, rgbToHex } from "../theme/tokens";
 import { withAlpha } from "../components/primitives";
 
 // The time tab: a pomodoro focus timer + reminders. Both schedule real OS
@@ -151,6 +152,16 @@ function PomodoroCard() {
   }
 
   const phaseColor = focus.phase === "work" ? palette.accent : palette.tertiary;
+  // Fills take the raw accent and the ink computed for it (in Signal the
+  // text accent is contrast-fitted and differs from the fill; in Classic
+  // these are the same colours as before).
+  const phaseFill = focus.phase === "work" ? palette.accentFill : palette.tertiary;
+  const phaseInk =
+    focus.phase === "work"
+      ? palette.accentInk
+      : palette.skin === "signal"
+        ? rgbToHex(inkFor(hexToRgb(palette.tertiary)))
+        : palette.onPrimary;
 
   return (
     <View
@@ -211,13 +222,13 @@ function PomodoroCard() {
             borderRadius: 32,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: phaseColor,
+            backgroundColor: phaseFill,
           }}
         >
           <MaterialIcons
             name={focus.running ? "pause" : "play-arrow"}
             size={32}
-            color={palette.onPrimary}
+            color={phaseInk}
           />
         </Pressable>
         <Pressable

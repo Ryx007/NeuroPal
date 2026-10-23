@@ -14,9 +14,14 @@ import { hexToRgb } from "../../theme/tokens";
 // frame and stop the loop (motion "Still", reduce-motion, unfocused screen).
 
 const VERT = "attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
+// highp where the GPU has it (all current phones): with mediump (fp16 on
+// Adreno/Mali/Apple) the sand noise and the growing time value lose
+// precision. The hash keeps its inputs small (Hoskins' hash12 on p mod 289)
+// so it also holds up at mediump.
 const FRAG =
-  "precision mediump float;uniform vec2 r;uniform float t;uniform vec3 c;uniform vec3 b;uniform float m;uniform float k;" +
-  "float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
+  "#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n" +
+  "uniform vec2 r;uniform float t;uniform vec3 c;uniform vec3 b;uniform float m;uniform float k;" +
+  "float h(vec2 p){p=mod(p,289.);vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}" +
   "float cl(vec2 p,float n,float q){return cos(n*3.14159*p.x)*cos(q*3.14159*p.y)-cos(q*3.14159*p.x)*cos(n*3.14159*p.y);}" +
   "void main(){vec2 p=(gl_FragCoord.xy-.5*r)/min(r.x,r.y);float v=0.;" +
   "if(m<.5){float i=floor(t/9.);float s=smoothstep(.2,.8,fract(t/9.));" +
@@ -109,6 +114,8 @@ export function SignalField({ mode = "Chladni", accent = "#FF3D2E", background =
         last = now;
         const p = cfg.current;
         simT += dt * p.speed;
+        // Wrap after 100 Chladni cycles (6 modes × 9 s) so time stays small.
+        if (simT > 5400) simT -= 5400;
         draw();
         if (p.speed > 0) raf.current = requestAnimationFrame(loop);
       };

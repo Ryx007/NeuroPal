@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -37,6 +37,10 @@ import {
 
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const clone = (o) => JSON.parse(JSON.stringify(o));
+// Undo here covers only what this screen edits. Pal and Home have their own
+// screens (and undo), and a look adopted from another device meanwhile must
+// not be rolled back by an old snapshot.
+const studioPart = (a) => clone({ skin: a.skin, classic: a.classic, signal: a.signal });
 
 const SKINS = [
   { id: "classic", name: "Classic", desc: "Calm glass · the original presets" },
@@ -70,13 +74,25 @@ export function StudioScreen() {
   const [fineOpen, setFineOpen] = useState(false);
   const scrollRef = useRef(null);
   const previewY = useRef(0);
+  const hueTimer = useRef(null);
+  // Delayed commits (the hue slider) must build on the latest look, not on
+  // the render they were scheduled from.
+  const currentRef = useRef(current);
+  currentRef.current = current;
+
+  // A committed accent (slider, swatch, undo, sync) ends any hue preview.
+  useEffect(() => {
+    setDraft(null);
+  }, [current.signal.acc]);
+  useEffect(() => () => hueTimer.current && clearTimeout(hueTimer.current), []);
 
   const commit = (next) => {
-    setHistory((h) => [...h, current].slice(-20));
+    const before = studioPart(currentRef.current);
+    setHistory((h) => [...h, before].slice(-20));
     dispatch(applyAppearance(next));
   };
   const edit = (fn) => {
-    const next = clone(current);
+    const next = clone(currentRef.current);
     fn(next);
     setProposal(null);
     commit(next);
@@ -86,7 +102,7 @@ export function StudioScreen() {
     const prev = history[history.length - 1];
     setHistory(history.slice(0, -1));
     setProposal(null);
-    dispatch(applyAppearance(prev));
+    dispatch(applyAppearance({ ...current, ...prev }));
     setStatus("Undone.");
   };
   const propose = (next, title, message) => {
@@ -268,12 +284,17 @@ export function StudioScreen() {
                   maximumTrackTintColor={palette.outlineVariant}
                   thumbTintColor={signalPalette.accentFill}
                   onValueChange={(h) => {
+                    const hex = hslToHex(h, 1, 0.56);
                     const d = clone(current);
-                    d.signal.acc = hslToHex(h, 1, 0.56);
+                    d.signal.acc = hex;
                     setDraft(d);
+                    // Screen readers adjust a slider without ever "releasing"
+                    // it, so the accent also commits after a short pause.
+                    if (hueTimer.current) clearTimeout(hueTimer.current);
+                    hueTimer.current = setTimeout(() => edit((n) => (n.signal.acc = hex)), 700);
                   }}
                   onSlidingComplete={(h) => {
-                    setDraft(null);
+                    if (hueTimer.current) clearTimeout(hueTimer.current);
                     edit((n) => (n.signal.acc = hslToHex(h, 1, 0.56)));
                   }}
                 />

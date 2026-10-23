@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import * as Speech from "expo-speech";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
@@ -93,11 +93,23 @@ export function PalBuilderScreen() {
     talkTimer.current = setTimeout(() => setSpeaking(false), 6000);
   };
 
-  const commitName = () => {
-    const n = nameDraft.trim().slice(0, 14) || "Pal";
-    setNameDraft(n);
-    if (n !== pal.name) set({ name: n });
-  };
+  // The name saves however the screen is left: Done, Back, the hardware
+  // back key or a swipe (beforeRemove), or leaving the field (onBlur — web
+  // has no onEndEditing).
+  const nameRef = useRef(nameDraft);
+  nameRef.current = nameDraft;
+  const palNameRef = useRef(pal.name);
+  palNameRef.current = pal.name;
+  const saveName = useCallback(
+    (draft) => {
+      const n = String(draft).trim().slice(0, 14) || "Pal";
+      if (n !== palNameRef.current) dispatch(patchPal({ name: n }));
+      return n;
+    },
+    [dispatch]
+  );
+  const commitName = () => setNameDraft(saveName(nameRef.current));
+  useEffect(() => navigation.addListener("beforeRemove", () => saveName(nameRef.current)), [navigation, saveName]);
 
   const line = say || palLine(pal, "your notes");
 
@@ -191,7 +203,7 @@ export function PalBuilderScreen() {
         <TextInput
           value={nameDraft}
           onChangeText={(t) => setNameDraft(t.slice(0, 14))}
-          onEndEditing={commitName}
+          onBlur={commitName}
           onSubmitEditing={commitName}
           maxLength={14}
           returnKeyType="done"

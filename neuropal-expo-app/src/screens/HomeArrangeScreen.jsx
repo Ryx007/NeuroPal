@@ -10,7 +10,7 @@ import { Chip, GlassPanel, NpGhostButton, NpPrimaryButton, SignalLabel, withAlph
 import { SignalBackdrop } from "../components/signal/Backdrop";
 import { setHome } from "../store/slices/lookSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
-import { HOME_SIZES, HOME_TILES, effectiveTiles, interpretHome, moveTile, normalizeHome, ordinal, patchTile } from "../theme/tokens";
+import { HOME_SIZES, HOME_TILES, effectiveTiles, homeForSkin, interpretHome, moveTile, ordinal, patchTile } from "../theme/tokens";
 
 // Arrange home (docs/PLATFORM-PLAN.md §5): order, size and visibility of the
 // Home tiles, plus day rules ("reading first on weekdays") through Ask Pal.
@@ -26,7 +26,10 @@ export function HomeArrangeScreen() {
   const { isSignal } = useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
-  const home = normalizeHome(useSelector((s) => s.look.home));
+  // What Home shows right now in this skin (Classic keeps its original layout
+  // until it's arranged); the first change saves it as the user's layout.
+  const skin = useSelector((s) => s.look.skin);
+  const home = homeForSkin(useSelector((s) => s.look.home), skin);
   const pal = useSelector((s) => s.look.pal);
   const [sel, setSel] = useState(home.tiles[0].id);
   const [history, setHistory] = useState([]);

@@ -932,6 +932,8 @@ function SignalExpandedPlayer({
   const palette = usePalette();
   const sh = Math.max(3, palette.shape.shadow);
   const ctx = readingWindow(words, wordIndex);
+  const wpmTimer = useRef(null);
+  useEffect(() => () => wpmTimer.current && clearTimeout(wpmTimer.current), []);
   const heading = sectionHeading && sectionHeading !== docTitle ? sectionHeading : null;
   const chip = `CH ${chapterIndex + 1}${heading ? ` · ${heading}` : ""}`.toUpperCase();
   const T = Math.PI * 2;
@@ -1017,7 +1019,7 @@ function SignalExpandedPlayer({
             onPress={onOpenChapters}
             accessibilityRole="button"
             accessibilityLabel={`Chapter ${chapterIndex + 1} of ${chapterCount}${heading ? `, ${heading}` : ""}. Open contents`}
-            style={{ marginLeft: 10, minHeight: 32, maxWidth: 200, paddingHorizontal: 8, justifyContent: "center", borderWidth: 1.5, borderColor: palette.control }}
+            style={{ marginLeft: 10, minHeight: 44, maxWidth: 200, paddingHorizontal: 8, justifyContent: "center", borderWidth: 1.5, borderColor: palette.control }}
           >
             <Text numberOfLines={1} style={{ color: palette.onSurface, fontFamily: palette.fonts.label, fontSize: 11, letterSpacing: 1 }}>
               {chip}
@@ -1097,19 +1099,32 @@ function SignalExpandedPlayer({
             <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.display, fontSize: 18 }}>{wpm}</Text>
             <Text style={{ marginLeft: 6, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 12 }}>{`WPM · ${speedX}×`}</Text>
           </View>
-          <Slider
-            value={wpm}
-            minimumValue={120}
-            maximumValue={950}
-            step={10}
-            onSlidingComplete={(v) => onWpm(Math.round(v))}
-            minimumTrackTintColor={palette.accentFill}
-            maximumTrackTintColor={palette.outline}
-            thumbTintColor={palette.accentFill}
-            accessibilityLabel="Reading speed"
-            accessibilityValue={{ min: 120, max: 950, now: wpm, text: `${wpm} words per minute` }}
-            style={{ marginTop: 6, height: 40 }}
-          />
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+            <BoxButton icon="remove" label="Slower" onPress={() => onWpm(Math.max(120, wpm - 10))} size={44} iconSize={20} />
+            <Slider
+              value={wpm}
+              minimumValue={120}
+              maximumValue={950}
+              step={10}
+              // Screen-reader adjustments only fire onValueChange, so commit
+              // from there too (debounced) — not just when a drag ends.
+              onValueChange={(v) => {
+                if (wpmTimer.current) clearTimeout(wpmTimer.current);
+                wpmTimer.current = setTimeout(() => onWpm(Math.round(v)), 350);
+              }}
+              onSlidingComplete={(v) => {
+                if (wpmTimer.current) clearTimeout(wpmTimer.current);
+                onWpm(Math.round(v));
+              }}
+              minimumTrackTintColor={palette.accentFill}
+              maximumTrackTintColor={palette.outline}
+              thumbTintColor={palette.accentFill}
+              accessibilityLabel="Reading speed"
+              accessibilityValue={{ min: 120, max: 950, now: wpm, text: `${wpm} words per minute` }}
+              style={{ flex: 1, height: 44, marginHorizontal: 6 }}
+            />
+            <BoxButton icon="add" label="Faster" onPress={() => onWpm(Math.min(950, wpm + 10))} size={44} iconSize={20} />
+          </View>
         </GlassPanel>
 
         {/* voice */}

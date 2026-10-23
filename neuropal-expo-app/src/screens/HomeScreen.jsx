@@ -37,12 +37,15 @@ import {
 } from "../store/slices/homeSlice";
 import { setIntroSeen, setSkin } from "../store/slices/lookSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
-import { effectiveTiles, palLine } from "../theme/tokens";
+import { effectiveTiles, homeForSkin, palLine } from "../theme/tokens";
 import { GlassPanel, SectionHeader, SignalLabel, withAlpha } from "../components/primitives";
 
 const MOOD = { green: "okay", yellow: "off", red: "over" };
 // In Signal, two consecutive M tiles of these kinds share a row (S-Today board).
 const PAIRABLE = new Set(["anchor", "focus", "reading", "pal"]);
+// Classic's original gaps above each section (pre-v2 Home), so its default
+// layout renders exactly as it did.
+const CLASSIC_GAP = { state: 26, mvd: 30, anchor: 24, reading: 16, focus: 24, pal: 24 };
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -99,7 +102,7 @@ export function HomeScreen() {
   // day rules ("reading first on weekdays"), from Arrange home.
   // Tiles with nothing to show today (no document to resume) drop out first,
   // so pairing never leaves a hole.
-  const tiles = effectiveTiles(look.home, today).filter((t) => t.id !== "reading" || resume);
+  const tiles = effectiveTiles(homeForSkin(look.home, look.skin), today).filter((t) => t.id !== "reading" || resume);
   const firstOpenTask = tasks.find((t) => !t.done);
   const name = userName || "Ryx";
   const palText = palLine(look.pal, firstOpenTask ? `“${firstOpenTask.title}”` : "your next task");
@@ -353,33 +356,37 @@ export function HomeScreen() {
         : tiles.map((tile) => {
             const node = renderTile(tile);
             return node ? (
-              <View key={tile.id} style={{ marginTop: 24 }}>
+              <View key={tile.id} style={{ marginTop: CLASSIC_GAP[tile.id] ?? 24 }}>
                 {node}
               </View>
             ) : null;
           })}
 
-      <Pressable
-        onPress={() => navigation.getParent()?.navigate("HomeArrange")}
-        accessibilityRole="button"
-        accessibilityLabel="Arrange home: reorder, resize or hide these tiles"
-        style={{
-          marginTop: 22,
-          minHeight: 44,
-          alignSelf: "center",
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 14,
-          borderRadius: isSignal ? palette.shape.radiusControl : 999,
-          borderWidth: 1,
-          borderColor: isSignal ? palette.control : withAlpha(palette.outlineVariant, 0.4),
-        }}
-      >
-        <MaterialIcons name="dashboard-customize" size={16} color={palette.onSurfaceVariant} />
-        <Text style={{ marginLeft: 8, color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
-          Arrange home
-        </Text>
-      </Pressable>
+      {/* Classic Home stays exactly as it was; its layout is arranged from
+          Make it yours. Signal gets the shortcut here. */}
+      {isSignal ? (
+        <Pressable
+          onPress={() => navigation.getParent()?.navigate("HomeArrange")}
+          accessibilityRole="button"
+          accessibilityLabel="Arrange home: reorder, resize or hide these tiles"
+          style={{
+            marginTop: 22,
+            minHeight: 44,
+            alignSelf: "center",
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 14,
+            borderRadius: palette.shape.radiusControl,
+            borderWidth: 1,
+            borderColor: palette.control,
+          }}
+        >
+          <MaterialIcons name="dashboard-customize" size={16} color={palette.onSurfaceVariant} />
+          <Text style={{ marginLeft: 8, color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
+            Arrange home
+          </Text>
+        </Pressable>
+      ) : null}
 
       <AnchorEditor
         visible={Boolean(anchorEditor)}
@@ -518,9 +525,9 @@ function StateTile({ size, nervous, onPick }) {
   );
 }
 
+// Classic only (Signal renders SignalMvdTile). Size L is the original tile.
 function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNewTask, onAdd, onToggle, onRemove }) {
   const palette = usePalette();
-  const { isSignal } = useTheme();
   if (size === "S") {
     return <OneLine icon="checklist" label="Minimum day" value={remaining ? `${remaining} left` : "all done"} onPress={onEditToggle} />;
   }
@@ -541,9 +548,7 @@ function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNe
             marginLeft: 10,
             paddingHorizontal: 12,
             paddingVertical: 6,
-            minHeight: 32,
-            justifyContent: "center",
-            borderRadius: isSignal ? palette.shape.radiusControl : 99,
+            borderRadius: 99,
             backgroundColor: editing ? withAlpha(palette.accent, 0.16) : palette.surfaceContainer,
           }}
         >
@@ -557,7 +562,7 @@ function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNe
         <MvdRow key={task.id} task={task} editing={editing} onToggle={() => onToggle(task.id)} onRemove={() => onRemove(task.id)} />
       ))}
       {hiddenCount > 0 ? (
-        <Pressable onPress={onEditToggle} accessibilityRole="button" style={{ minHeight: 36, justifyContent: "center", paddingHorizontal: 4 }}>
+        <Pressable onPress={onEditToggle} accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 4 }}>
           <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
             {`+ ${hiddenCount} more`}
           </Text>
@@ -576,7 +581,7 @@ function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNe
               flex: 1,
               paddingHorizontal: 14,
               paddingVertical: 12,
-              borderRadius: isSignal ? palette.shape.radiusControl : 14,
+              borderRadius: 14,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
               fontFamily: palette.fonts.body,
@@ -590,7 +595,7 @@ function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNe
             accessibilityLabel="Add task"
             style={{
               width: 46,
-              borderRadius: isSignal ? palette.shape.radiusControl : 14,
+              borderRadius: 14,
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: withAlpha(palette.accent, 0.16),
@@ -617,17 +622,17 @@ function AnchorTile({ size, anchor, onEdit, onDone, onAdd }) {
         accessibilityLabel="Set your next anchor"
         style={{
           padding: 18,
-          borderRadius: palette.skin === "signal" ? palette.shape.radius : 22,
+          borderRadius: 22,
           borderWidth: 1.4,
           borderStyle: "dashed",
-          borderColor: withAlpha(palette.outlineVariant, 0.6),
+          borderColor: withAlpha(palette.outlineVariant, 0.4),
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
         }}
       >
         <MaterialIcons name="add-alarm" size={22} color={palette.accent} />
-        <Text style={{ flex: 1, color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodyMedium, fontSize: 14 }}>
+        <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodyMedium, fontSize: 14 }}>
           Set your next anchor — meds, break, study block…
         </Text>
       </Pressable>
@@ -740,7 +745,7 @@ function PalTile({ size, pal, mood, line, onBuild, half = false }) {
             {mood === "over" ? "Nothing needed right now. Breathe with me if you like." : line}
           </Text>
           {!small ? (
-            <Pressable onPress={onBuild} accessibilityRole="button" accessibilityLabel={`Build your Pal, ${pal.name}`} style={{ minHeight: 36, justifyContent: "center", alignSelf: "flex-start" }}>
+            <Pressable onPress={onBuild} accessibilityRole="button" accessibilityLabel={`Build your Pal, ${pal.name}`} style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}>
               <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>Build your Pal</Text>
             </Pressable>
           ) : null}

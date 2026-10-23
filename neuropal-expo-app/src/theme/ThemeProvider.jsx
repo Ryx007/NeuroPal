@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 import { useSelector } from "react-redux";
 
@@ -39,6 +40,26 @@ const ThemeContext = createContext({
   isLight: false,
 });
 
+// The OS "reduce motion" setting, kept live. Reanimated's hook is read once
+// at start-up, so it only seeds the value; the listener follows changes made
+// while the app is open.
+function useLiveReduceMotion() {
+  const atStart = useReducedMotion();
+  const [reduce, setReduce] = useState(Boolean(atStart));
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((v) => alive && setReduce(Boolean(v)))
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.("reduceMotionChanged", (v) => setReduce(Boolean(v)));
+    return () => {
+      alive = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduce;
+}
+
 function fontFor(font) {
   switch (font) {
     case "atkinson":
@@ -58,7 +79,7 @@ export function ThemeProvider({ children }) {
   const look = useSelector((s) => s.look);
   const nervous = useSelector((s) => s.home.nervousState);
   // The OS setting always wins over the user's motion pick (WCAG 2.3.3).
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useLiveReduceMotion();
 
   const value = useMemo(() => {
     const isSignal = look.skin === "signal";
