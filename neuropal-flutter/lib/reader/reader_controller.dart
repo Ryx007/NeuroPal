@@ -20,6 +20,7 @@ import '../data/backend.dart';
 import '../data/document_source.dart';
 import '../data/models.dart';
 import '../data/settings_controller.dart';
+import '../platform/widget_bridge.dart';
 import '../services.dart';
 import 'reader_document.dart';
 import 'speech_engine.dart';
@@ -390,6 +391,8 @@ class ReaderController extends ChangeNotifier with WidgetsBindingObserver {
     _lastSavedAt = DateTime.now();
     // Same formula as the Expo reader (word / total), 1.0 when finished.
     final progress = finished ? 1.0 : index / content.wordCount;
+    // The iOS "Resume reading" widget follows the same position.
+    WidgetBridge.instance.setReading(id: doc.id, title: doc.title, progress: progress);
     try {
       await source.saveProgress(doc.id, progress: progress, lastWordIndex: index);
     } on ApiException catch (e) {

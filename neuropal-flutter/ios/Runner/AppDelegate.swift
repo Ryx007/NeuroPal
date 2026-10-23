@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Widgets + focus Live Activity (lib/platform/ios_extras.dart).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NeuroPalIOSExtras") {
+      NeuroPalIOSExtras.register(with: registrar)
+    }
   }
 }

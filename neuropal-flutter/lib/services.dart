@@ -12,6 +12,7 @@ import 'data/backend.dart';
 import 'data/demo_source.dart';
 import 'data/document_source.dart';
 import 'data/settings_controller.dart';
+import 'platform/widget_bridge.dart';
 import 'reader/speech_engine.dart';
 import 'theme/appearance_controller.dart';
 
@@ -35,6 +36,8 @@ class AppServices {
         await backend.putJson('/api/me/appearance', {'appearance': json});
       },
     );
+    // iOS Home/Lock Screen widgets wear the same look (no-op elsewhere).
+    WidgetBridge.instance.attach(appearance);
   }
 
   final SharedPreferences prefs;
