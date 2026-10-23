@@ -56,3 +56,6 @@ neuropal-expo-app/ios/
 
 # Session tooling artefacts (cloud workspace plugins)
 .harnesskit/
+
+# Kotlin compiler session files written during Android builds
+.kotlin/
