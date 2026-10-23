@@ -102,7 +102,7 @@ export function EpubTocSheet({
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: palette.fonts.bodySemi,
                       fontSize: 13,
                     }}
                   >
@@ -167,8 +167,8 @@ export function EpubTocSheet({
                             : palette.onSurfaceVariant,
                         fontFamily:
                           focused || topLevel
-                            ? "Inter_600SemiBold"
-                            : "Inter_400Regular",
+                            ? palette.fonts.bodySemi
+                            : palette.fonts.body,
                         fontSize: topLevel ? 14 : 13,
                       }}
                     >
@@ -178,7 +178,7 @@ export function EpubTocSheet({
                       <Text
                         style={{
                           color: palette.onSurfaceVariant,
-                          fontFamily: "JetBrainsMono_400Regular",
+                          fontFamily: palette.fonts.mono,
                           fontSize: 10,
                           marginLeft: 8,
                         }}
@@ -199,7 +199,7 @@ export function EpubTocSheet({
                 <Text
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: palette.fonts.body,
                     fontSize: 13,
                     paddingHorizontal: 20,
                     paddingVertical: 16,
@@ -228,7 +228,7 @@ export function EpubTocSheet({
                       numberOfLines={2}
                       style={{
                         color: palette.onSurface,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: palette.fonts.body,
                         fontSize: 13,
                         lineHeight: 18,
                       }}
@@ -238,7 +238,7 @@ export function EpubTocSheet({
                     <Text
                       style={{
                         color: palette.onSurfaceVariant,
-                        fontFamily: "JetBrainsMono_400Regular",
+                        fontFamily: palette.fonts.mono,
                         fontSize: 10,
                         marginTop: 2,
                       }}

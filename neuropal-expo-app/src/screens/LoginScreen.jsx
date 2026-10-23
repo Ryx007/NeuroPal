@@ -105,7 +105,7 @@ export function LoginScreen() {
                         <Text
                             style={{
                                 color: palette.accent,
-                                fontFamily: 'SpaceGrotesk_700Bold',
+                                fontFamily: palette.fonts.display,
                                 fontSize: 32,
                                 letterSpacing: -0.8,
                             }}
@@ -117,7 +117,7 @@ export function LoginScreen() {
                     <Text
                         style={{
                             color: palette.onSurface,
-                            fontFamily: 'SpaceGrotesk_700Bold',
+                            fontFamily: palette.fonts.display,
                             fontSize: 28,
                             marginBottom: 6,
                         }}
@@ -127,7 +127,7 @@ export function LoginScreen() {
                     <Text
                         style={{
                             color: palette.onSurfaceVariant,
-                            fontFamily: 'Inter_400Regular',
+                            fontFamily: palette.fonts.body,
                             fontSize: 14,
                             lineHeight: 20,
                             marginBottom: 24,
@@ -201,7 +201,7 @@ export function LoginScreen() {
                         <Text
                             style={{
                                 color: palette.accent,
-                                fontFamily: 'Inter_500Medium',
+                                fontFamily: palette.fonts.bodyMedium,
                                 fontSize: 14,
                             }}
                         >
@@ -214,7 +214,7 @@ export function LoginScreen() {
                     <Text
                         style={{
                             color: withAlpha(palette.onSurfaceVariant, 0.6),
-                            fontFamily: 'Inter_400Regular',
+                            fontFamily: palette.fonts.body,
                             fontSize: 11,
                             textAlign: 'center',
                             marginTop: 28,
@@ -237,7 +237,7 @@ function Field({ label, palette, ...props }) {
             <Text
                 style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: 'Inter_500Medium',
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 11,
                     letterSpacing: 2,
                     marginBottom: 6,
@@ -257,7 +257,7 @@ function Field({ label, palette, ...props }) {
                     paddingHorizontal: 14,
                     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
                     color: palette.onSurface,
-                    fontFamily: 'Inter_400Regular',
+                    fontFamily: palette.fonts.body,
                     fontSize: 15,
                 }}
             />

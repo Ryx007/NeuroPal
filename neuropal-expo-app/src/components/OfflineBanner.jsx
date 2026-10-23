@@ -48,7 +48,7 @@ export function OfflineBanner() {
         numberOfLines={1}
         style={{
           color: "#FFFFFF",
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 12,
           textAlign: "center",
         }}

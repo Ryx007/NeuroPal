@@ -103,7 +103,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           borderRadius: 12,
           backgroundColor: palette.surfaceHigh,
           color: palette.onSurface,
-          fontFamily: "JetBrainsMono_400Regular",
+          fontFamily: palette.fonts.mono,
           fontSize: 26,
         }}
       />
@@ -142,7 +142,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
             }}
           >
@@ -162,7 +162,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               borderRadius: 12,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 15,
             }}
           />
@@ -179,7 +179,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               borderRadius: 12,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 14,
             }}
           />
@@ -197,7 +197,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 26,
               }}
             >
@@ -246,7 +246,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: palette.fonts.bodyMedium,
                       fontSize: 12,
                     }}
                   >
@@ -290,7 +290,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               style={{
                 flex: 1,
                 color: location ? palette.accent : palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
               }}
             >
@@ -336,7 +336,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -362,7 +362,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >

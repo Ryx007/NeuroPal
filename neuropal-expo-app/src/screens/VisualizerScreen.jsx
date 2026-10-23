@@ -171,7 +171,7 @@ export function VisualizerScreen() {
             style={{
               flex: 1,
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
               marginLeft: 6,
             }}
@@ -195,7 +195,7 @@ export function VisualizerScreen() {
               <Text
                 style={{
                   color: palette.error,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 10,
                   letterSpacing: 0.6,
                 }}
@@ -232,7 +232,7 @@ export function VisualizerScreen() {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: 34,
           letterSpacing: -0.8,
         }}
@@ -242,7 +242,7 @@ export function VisualizerScreen() {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 16,
           marginTop: 4,
         }}
@@ -264,7 +264,7 @@ export function VisualizerScreen() {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: palette.fonts.bodySemi,
               fontSize: 14,
             }}
           >
@@ -273,7 +273,7 @@ export function VisualizerScreen() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 12,
               marginTop: 3,
             }}
@@ -297,7 +297,7 @@ export function VisualizerScreen() {
                 borderRadius: 12,
                 backgroundColor: palette.surfaceHigh,
                 color: palette.onSurface,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 14,
               }}
             />
@@ -328,7 +328,7 @@ export function VisualizerScreen() {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 12,
                 marginTop: 8,
               }}
@@ -368,7 +368,7 @@ export function VisualizerScreen() {
                 <Text
                   style={{
                     color: selected ? palette.accent : palette.onSurfaceVariant,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 13,
                   }}
                 >
@@ -386,7 +386,7 @@ export function VisualizerScreen() {
             <Text
               style={{
                 color: palette.error,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
               }}
             >
@@ -397,7 +397,7 @@ export function VisualizerScreen() {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 13,
                 lineHeight: 19,
               }}
@@ -426,7 +426,7 @@ export function VisualizerScreen() {
                 <Text
                   style={{
                     color: palette.onSurface,
-                    fontFamily: "SpaceGrotesk_600SemiBold",
+                    fontFamily: palette.fonts.displaySemi,
                     fontSize: 15,
                   }}
                 >
@@ -435,7 +435,7 @@ export function VisualizerScreen() {
                 <Text
                   style={{
                     color: sim.kind === "ai" ? palette.error : palette.onSurfaceVariant,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 10,
                     letterSpacing: 0.8,
                     marginTop: 3,
@@ -489,7 +489,7 @@ export function VisualizerScreen() {
               <Text
                 style={{
                   color: palette.onSurface,
-                  fontFamily: "SpaceGrotesk_600SemiBold",
+                  fontFamily: palette.fonts.displaySemi,
                   fontSize: 16,
                 }}
               >
@@ -499,7 +499,7 @@ export function VisualizerScreen() {
                 numberOfLines={2}
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 12,
                   marginTop: 3,
                   lineHeight: 17,

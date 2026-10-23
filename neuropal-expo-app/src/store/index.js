@@ -5,6 +5,7 @@ import flashcardsReducer from "./slices/flashcardsSlice";
 import focusReducer from "./slices/focusSlice";
 import homeReducer from "./slices/homeSlice";
 import libraryReducer from "./slices/librarySlice";
+import lookReducer from "./slices/lookSlice";
 import notesReducer from "./slices/notesSlice";
 import onboardingReducer from "./slices/onboardingSlice";
 import readerReducer from "./slices/readerSlice";
@@ -15,6 +16,7 @@ export const appStore = configureStore({
   reducer: {
     auth: authReducer,
     ui: uiReducer,
+    look: lookReducer,
     onboarding: onboardingReducer,
     home: homeReducer,
     library: libraryReducer,

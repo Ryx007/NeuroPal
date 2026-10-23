@@ -2,7 +2,7 @@
   "expo": {
     "name": "NeuroPal",
     "slug": "neuropal",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "scheme": "neuropal",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,8 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "package": "io.neuropal.app",
@@ -29,7 +30,8 @@
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
@@ -66,7 +68,8 @@
         {
           "locationWhenInUsePermission": "NeuroPal uses your location to trigger place-based anchors while the app is open."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "reactCompiler": true

@@ -1,4 +1,6 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
+import { useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
 import { Pressable, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
@@ -33,7 +35,8 @@ export function SettingsScreen() {
   const palette = usePalette();
   const dispatch = useDispatch();
   const tweaks = useSelector(selectUiState);
-  const { readerFontFamily } = useTheme();
+  const { readerFontFamily, isSignal } = useTheme();
+  const navigation = useNavigation();
 
   return (
     <KeyboardAwareScrollView
@@ -49,7 +52,7 @@ export function SettingsScreen() {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: 34,
           letterSpacing: -0.8,
         }}
@@ -59,7 +62,7 @@ export function SettingsScreen() {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 16,
           marginTop: 4,
         }}
@@ -68,6 +71,38 @@ export function SettingsScreen() {
       </Text>
 
       <Group title="Appearance">
+        <Pressable
+          onPress={() => navigation.navigate("Studio")}
+          accessibilityRole="button"
+          accessibilityLabel="Make it yours: skin, colours, motion, your Pal and Home layout"
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            minHeight: 56,
+            paddingHorizontal: 14,
+            marginBottom: 16,
+            borderRadius: 14,
+            backgroundColor: pressed ? withAlpha(palette.accent, 0.2) : withAlpha(palette.accent, 0.12),
+            borderWidth: 1,
+            borderColor: withAlpha(palette.accent, 0.4),
+          })}
+        >
+          <MaterialIcons name="palette" size={22} color={palette.accent} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.bodySemi, fontSize: 15 }}>Make it yours</Text>
+            <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.body, fontSize: 12.5, marginTop: 2 }}>
+              Skin, colours, motion, your Pal, Home layout
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={palette.onSurfaceVariant} />
+        </Pressable>
+        {isSignal ? (
+          <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.body, fontSize: 13.5, lineHeight: 19, marginBottom: 16 }}>
+            Signal is on. Its accent, base, motion and background live in Make it yours. Classic's themes come back when you switch skins.
+          </Text>
+        ) : null}
+        {!isSignal ? (
+          <>
         <SegmentRow
           label="Theme"
           value={tweaks.theme}
@@ -90,6 +125,8 @@ export function SettingsScreen() {
           ]}
           onChange={(value) => dispatch(setAccent(value))}
         />
+          </>
+        ) : null}
         <SegmentRow
           label="Density"
           value={tweaks.density}
@@ -223,7 +260,7 @@ function Group({ title, children }) {
       <Text
         style={{
           color: palette.accent,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 12,
           letterSpacing: 1.8,
           marginBottom: 14,
@@ -244,7 +281,7 @@ function SegmentRow({ label, value, entries, onChange }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 11,
           letterSpacing: 2,
           marginBottom: 8,
@@ -278,7 +315,7 @@ function SegmentRow({ label, value, entries, onChange }) {
               <Text
                 style={{
                   color: selected ? palette.accent : palette.onSurface,
-                  fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium",
+                  fontFamily: selected ? palette.fonts.bodySemi : palette.fonts.bodyMedium,
                   fontSize: 13,
                 }}
               >
@@ -308,7 +345,7 @@ function SliderRow({ label, value, min, max, step, formatter, onChange }) {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 11,
             letterSpacing: 2,
           }}
@@ -317,7 +354,7 @@ function SliderRow({ label, value, min, max, step, formatter, onChange }) {
         </Text>
         <Text
           style={{
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
             color: palette.accent,
           }}

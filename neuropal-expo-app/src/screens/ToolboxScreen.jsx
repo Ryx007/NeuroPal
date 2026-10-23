@@ -39,6 +39,7 @@ import {
   toggleReminderDone,
 } from "../store/slices/remindersSlice";
 import { usePalette } from "../theme/ThemeProvider";
+import { hexToRgb, inkFor, rgbToHex } from "../theme/tokens";
 import { withAlpha } from "../components/primitives";
 
 // The time tab: a pomodoro focus timer + reminders. Both schedule real OS
@@ -62,7 +63,7 @@ export function ToolboxScreen() {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: 34,
           letterSpacing: -0.8,
         }}
@@ -72,7 +73,7 @@ export function ToolboxScreen() {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 16,
           marginTop: 4,
         }}
@@ -151,6 +152,16 @@ function PomodoroCard() {
   }
 
   const phaseColor = focus.phase === "work" ? palette.accent : palette.tertiary;
+  // Fills take the raw accent and the ink computed for it (in Signal the
+  // text accent is contrast-fitted and differs from the fill; in Classic
+  // these are the same colours as before).
+  const phaseFill = focus.phase === "work" ? palette.accentFill : palette.tertiary;
+  const phaseInk =
+    focus.phase === "work"
+      ? palette.accentInk
+      : palette.skin === "signal"
+        ? rgbToHex(inkFor(hexToRgb(palette.tertiary)))
+        : palette.onPrimary;
 
   return (
     <View
@@ -168,7 +179,7 @@ function PomodoroCard() {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 12,
             letterSpacing: 1.6,
           }}
@@ -178,7 +189,7 @@ function PomodoroCard() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
           }}
         >
@@ -189,7 +200,7 @@ function PomodoroCard() {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "JetBrainsMono_400Regular",
+          fontFamily: palette.fonts.mono,
           fontSize: 64,
           textAlign: "center",
           marginVertical: 18,
@@ -211,13 +222,13 @@ function PomodoroCard() {
             borderRadius: 32,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: phaseColor,
+            backgroundColor: phaseFill,
           }}
         >
           <MaterialIcons
             name={focus.running ? "pause" : "play-arrow"}
             size={32}
-            color={palette.onPrimary}
+            color={phaseInk}
           />
         </Pressable>
         <Pressable
@@ -263,7 +274,7 @@ function PomodoroCard() {
           style={{
             marginTop: 14,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 11,
           }}
         >
@@ -293,7 +304,7 @@ function DurationStepper({ label, value, onChange, disabled }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 11,
           letterSpacing: 1.2,
         }}
@@ -320,7 +331,7 @@ function DurationStepper({ label, value, onChange, disabled }) {
           accessibilityLabel={`${label} minutes`}
           style={{
             color: palette.onSurface,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 16,
             minWidth: 52,
             textAlign: "center",
@@ -332,7 +343,7 @@ function DurationStepper({ label, value, onChange, disabled }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 11,
           }}
         >
@@ -473,7 +484,7 @@ function RemindersCard() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 12,
             letterSpacing: 1.6,
           }}
@@ -494,7 +505,7 @@ function RemindersCard() {
           borderRadius: 12,
           backgroundColor: palette.surfaceHigh,
           color: palette.onSurface,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 15,
         }}
       />
@@ -527,7 +538,7 @@ function RemindersCard() {
               <Text
                 style={{
                   color: selected ? palette.accent : palette.onSurfaceVariant,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: palette.fonts.bodyMedium,
                   fontSize: 12,
                 }}
               >
@@ -557,7 +568,7 @@ function RemindersCard() {
             <Text
               style={{
                 color: palette.accent,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 13,
               }}
             >
@@ -584,7 +595,7 @@ function RemindersCard() {
               width: 46,
               paddingVertical: 9,
               color: palette.onSurface,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 13,
             }}
           />
@@ -605,7 +616,7 @@ function RemindersCard() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
             }}
           >
@@ -641,7 +652,7 @@ function RemindersCard() {
                 <Text
                   style={{
                     color: palette.onSurface,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 14,
                     textDecorationLine: item.done ? "line-through" : "none",
                   }}
@@ -654,7 +665,7 @@ function RemindersCard() {
                       item.at < Date.now() && !item.done
                         ? palette.warn
                         : palette.onSurfaceVariant,
-                    fontFamily: "JetBrainsMono_400Regular",
+                    fontFamily: palette.fonts.mono,
                     fontSize: 11,
                     marginTop: 2,
                   }}
@@ -732,7 +743,7 @@ function PlannerCard() {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 12,
             letterSpacing: 1.6,
           }}
@@ -758,7 +769,7 @@ function PlannerCard() {
           <Text
             style={{
               color: palette.accent,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: palette.fonts.bodySemi,
               fontSize: 12,
             }}
           >
@@ -772,7 +783,7 @@ function PlannerCard() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
             }}
           >
@@ -821,7 +832,7 @@ function PlannerCard() {
                     width: 62,
                     marginLeft: 6,
                     color: past ? palette.warn : palette.accent,
-                    fontFamily: "JetBrainsMono_400Regular",
+                    fontFamily: palette.fonts.mono,
                     fontSize: 12,
                   }}
                 >
@@ -838,7 +849,7 @@ function PlannerCard() {
                     numberOfLines={1}
                     style={{
                       color: palette.onSurface,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: palette.fonts.bodyMedium,
                       fontSize: 14,
                       textDecorationLine: done ? "line-through" : "none",
                     }}
@@ -850,7 +861,7 @@ function PlannerCard() {
                       numberOfLines={1}
                       style={{
                         color: palette.onSurfaceVariant,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: palette.fonts.body,
                         fontSize: 11,
                       }}
                     >
@@ -923,7 +934,7 @@ function TodoCard() {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 12,
             letterSpacing: 1.6,
           }}
@@ -940,7 +951,7 @@ function TodoCard() {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 12,
               }}
             >
@@ -965,7 +976,7 @@ function TodoCard() {
             borderRadius: 12,
             backgroundColor: palette.surfaceHigh,
             color: palette.onSurface,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 15,
           }}
         />
@@ -1020,7 +1031,7 @@ function TodoCard() {
                 flex: 1,
                 marginLeft: 10,
                 color: palette.onSurface,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 14,
                 textDecorationLine: todo.done ? "line-through" : "none",
               }}

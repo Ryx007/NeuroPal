@@ -88,7 +88,7 @@ export function ReminderPopup() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 11,
               letterSpacing: 2.4,
               marginTop: 14,
@@ -99,7 +99,7 @@ export function ReminderPopup() {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 20,
               textAlign: "center",
               marginTop: 8,
@@ -110,7 +110,7 @@ export function ReminderPopup() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 12,
               marginTop: 6,
             }}
@@ -136,7 +136,7 @@ export function ReminderPopup() {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -159,7 +159,7 @@ export function ReminderPopup() {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >

@@ -445,7 +445,7 @@ export function CanvasNoteEditor({ note, onBack }) {
           style={{
             flex: 1,
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontFamily: palette.fonts.displaySemi,
             fontSize: 17,
             paddingVertical: 6,
           }}
@@ -792,7 +792,7 @@ function TextBlock({
           accessibilityLabel="Text box content in Markdown"
           style={{
             color: palette.onSurface,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 14,
             lineHeight: 21,
             padding: 8,
@@ -808,7 +808,7 @@ function TextBlock({
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 13,
                 fontStyle: "italic",
               }}
@@ -874,7 +874,7 @@ function ExportSheet({ onClose, onExport, palette }) {
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 15,
               }}
             >

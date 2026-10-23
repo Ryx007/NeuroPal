@@ -54,7 +54,7 @@ function FlashcardsDeck({ cards }) {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontFamily: palette.fonts.displaySemi,
             fontSize: 16,
           }}
         >
@@ -76,7 +76,7 @@ function FlashcardsDeck({ cards }) {
             borderColor: withAlpha(palette.accent, 0.4),
           }}
         >
-          <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>
+          <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi }}>
             Shuffle & restart
           </Text>
         </Pressable>
@@ -89,7 +89,7 @@ function FlashcardsDeck({ cards }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "JetBrainsMono_400Regular",
+          fontFamily: palette.fonts.mono,
           fontSize: 11,
           textAlign: "center",
         }}
@@ -117,7 +117,7 @@ function FlashcardsDeck({ cards }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 1.6,
             marginBottom: 10,
@@ -129,7 +129,7 @@ function FlashcardsDeck({ cards }) {
           selectable
           style={{
             color: palette.onSurface,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 16,
             lineHeight: 24,
           }}
@@ -154,7 +154,7 @@ function FlashcardsDeck({ cards }) {
               borderColor: withAlpha(palette.warn, 0.4),
             }}
           >
-            <Text style={{ color: palette.warn, fontFamily: "Inter_600SemiBold" }}>
+            <Text style={{ color: palette.warn, fontFamily: palette.fonts.bodySemi }}>
               Again
             </Text>
           </Pressable>
@@ -172,7 +172,7 @@ function FlashcardsDeck({ cards }) {
               borderColor: withAlpha(palette.accent, 0.45),
             }}
           >
-            <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>
+            <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi }}>
               Got it
             </Text>
           </Pressable>
@@ -272,7 +272,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
               style={{
                 flex: 1,
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 18,
               }}
             >
@@ -314,7 +314,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: palette.fonts.bodySemi,
                       fontSize: 13,
                     }}
                   >
@@ -334,7 +334,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 14,
                   lineHeight: 21,
                 }}
@@ -348,7 +348,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                 <Text
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: palette.fonts.body,
                     fontSize: 13,
                   }}
                 >
@@ -361,7 +361,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                   accessibilityRole="alert"
                   style={{
                     color: palette.error,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 14,
                     lineHeight: 20,
                   }}
@@ -380,7 +380,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                     backgroundColor: withAlpha(palette.error, 0.14),
                   }}
                 >
-                  <Text style={{ color: palette.error, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                  <Text style={{ color: palette.error, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
                     Retry
                   </Text>
                 </Pressable>
@@ -392,7 +392,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                 selectable
                 style={{
                   color: palette.onSurface,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 14,
                   lineHeight: 22,
                 }}
@@ -422,7 +422,7 @@ export function StudySheet({ visible, onClose, documentId, documentTitle }) {
                 <Text
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 12,
                   }}
                 >

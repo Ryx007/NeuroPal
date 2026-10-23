@@ -7,7 +7,11 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-08-04 (port split — web app on :8081, API on :4000, with
+_Last updated: 2026-10-23 — **v2 platform build-out in progress on branch
+`v2-platform`** (two skins, Make it yours, Signal Home, appearance sync,
+Flutter app, Next.js platform, iOS widgets, CI). Read `docs/PLATFORM-PLAN.md`
+and HANDOFF §0 first; everything below describes `main`.
+Previous update: 2026-08-04 (port split — web app on :8081, API on :4000, with
 a proxy that preserves the zero-baked-URL / any-domain property; adversarial
 proxy hardening; README/BRAIN de-staled for collaborators; `docs/HANDOFF.md`
 added. Prior line: 2026-07-08 reader/notes/visualizer overhaul. Full history
@@ -102,6 +106,15 @@ Ollama), all other devices are LAN clients. See
 
 > Full mid-flight context, established root causes (don't re-derive), and
 > rejected alternatives live in **`docs/HANDOFF.md`** — read it first.
+
+**v2 (branch `v2-platform`, PR to `main`):** milestone M1 per
+`docs/PLATFORM-PLAN.md` §5 is built: Expo app 0.2.0 and the Flutter app
+"NeuroPal F" (both APKs handed to the owner 2026-10-23), the Next.js
+platform site, iOS widgets (simulator-built in CI), CI for everything.
+Next gates: owner acceptance on the S24, and the AI-provider decision
+(HANDOFF §0). Then M2: Focus soundscapes in Expo, a Signal pass over
+Library/Notes/Toolbox, Flutter catch-up (Pal, Home, interpreters, two-way
+sync).
 
 0. **S24 on-device acceptance (the only real work left).** Everything is
    browser-verified; these paths exist only on the phone. **The APK on

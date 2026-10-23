@@ -11,7 +11,9 @@ import {
   setSpeakEquations,
   setTheme,
 } from "../../store/slices/uiSlice";
-import { usePalette } from "../../theme/ThemeProvider";
+import { patchSignal } from "../../store/slices/lookSlice";
+import { usePalette, useTheme } from "../../theme/ThemeProvider";
+import { SIGNAL_OPTIONS } from "../../theme/tokens";
 import { withAlpha } from "../primitives";
 
 // D8 — the Play-Books "Aa" display options: the reader-relevant subset of
@@ -43,6 +45,8 @@ export function DisplayOptionsSheet({ visible, onClose, epub = false }) {
   const palette = usePalette();
   const dispatch = useDispatch();
   const tweaks = useSelector(selectUiState);
+  const { isSignal } = useTheme();
+  const signalBase = useSelector((s) => s.look.signal.base);
 
   if (!visible) return null;
 
@@ -71,7 +75,7 @@ export function DisplayOptionsSheet({ visible, onClose, epub = false }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
               marginBottom: 14,
             }}
@@ -79,16 +83,26 @@ export function DisplayOptionsSheet({ visible, onClose, epub = false }) {
             Display options
           </Text>
 
-          <Row label="THEME">
-            {THEMES.map(([key, label]) => (
-              <Chip
-                key={key}
-                label={label}
-                selected={tweaks.theme === key}
-                onPress={() => dispatch(setTheme(key))}
-              />
-            ))}
-          </Row>
+          {/* Classic themes don't exist in Signal: there the same row picks
+              the Signal base (Concrete = light, Warm = sepia-like). */}
+          {isSignal ? (
+            <Row label="BASE">
+              {SIGNAL_OPTIONS.base.map((key) => (
+                <Chip key={key} label={key} selected={signalBase === key} onPress={() => dispatch(patchSignal({ base: key }))} />
+              ))}
+            </Row>
+          ) : (
+            <Row label="THEME">
+              {THEMES.map(([key, label]) => (
+                <Chip
+                  key={key}
+                  label={label}
+                  selected={tweaks.theme === key}
+                  onPress={() => dispatch(setTheme(key))}
+                />
+              ))}
+            </Row>
+          )}
           <Row label="READER FONT">
             {fonts.map(([key, label]) => (
               <Chip
@@ -153,7 +167,7 @@ function Row({ label, children }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 10,
           letterSpacing: 1.6,
           marginBottom: 8,
@@ -188,7 +202,7 @@ function Chip({ label, selected, onPress }) {
       <Text
         style={{
           color: selected ? palette.accent : palette.onSurface,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 12,
         }}
       >
@@ -207,7 +221,7 @@ function SliderRow({ label, value, min, max, step, display, onChange }) {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 10,
             letterSpacing: 1.6,
           }}
@@ -217,7 +231,7 @@ function SliderRow({ label, value, min, max, step, display, onChange }) {
         <Text
           style={{
             color: palette.accent,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
           }}
         >

@@ -40,7 +40,10 @@ import { ReminderPopup } from "./src/components/ReminderPopup";
 import { ToastHost } from "./src/components/toast";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { AppProviders } from "./src/providers/AppProviders";
+import { AppErrorBoundary } from "./src/components/AppErrorBoundary";
+import { appStore } from "./src/store";
 import { MuiProvider } from "./src/providers/MuiProvider";
+import { SIGNAL_FONT_ASSETS } from "./src/theme/fonts";
 import { ThemeProvider, usePalette, useTheme } from "./src/theme/ThemeProvider";
 
 SplashScreen.preventAutoHideAsync();
@@ -89,6 +92,8 @@ export default function App() {
     AtkinsonHyperlegible_700Bold,
     Lora_400Regular,
     Fraunces_400Regular,
+    // v2 Signal skin: Archivo display + Atkinson Hyperlegible Next/Mono.
+    ...SIGNAL_FONT_ASSETS,
   });
 
   useEffect(() => {
@@ -105,11 +110,13 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProviders>
-          <ThemeProvider>
-            <MuiProvider>
-              <AppChrome />
-            </MuiProvider>
-          </ThemeProvider>
+          <AppErrorBoundary store={appStore}>
+            <ThemeProvider>
+              <MuiProvider>
+                <AppChrome />
+              </MuiProvider>
+            </ThemeProvider>
+          </AppErrorBoundary>
         </AppProviders>
       </SafeAreaProvider>
     </GestureHandlerRootView>

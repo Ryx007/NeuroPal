@@ -119,6 +119,7 @@ function publicUser(u) {
         timezone: u.timezone,
         locale: u.locale,
         tweaks: u.tweaks,
+        appearance: u.appearance || null,
         profile: u.profile,
     };
 }

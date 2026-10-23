@@ -24,7 +24,7 @@ export function ProfileScreen() {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: 34,
           letterSpacing: -0.8,
         }}
@@ -57,7 +57,7 @@ export function ProfileScreen() {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontFamily: palette.fonts.displaySemi,
             fontSize: 16,
           }}
         >
@@ -67,7 +67,7 @@ export function ProfileScreen() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 13,
             lineHeight: 20,
           }}
@@ -104,7 +104,7 @@ function ProfileCard({ title, value }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 11,
             letterSpacing: 2,
           }}
@@ -115,7 +115,7 @@ function ProfileCard({ title, value }) {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 15,
           }}
         >

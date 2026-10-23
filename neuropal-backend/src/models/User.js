@@ -118,6 +118,12 @@ const UserSchema = new Schema(
 
         // Embedded blocks
         tweaks: { type: TweaksSchema, default: () => ({}) },
+        // v2 "Make it yours" settings (skin, Signal tokens, Pal, Home layout).
+        // Stored as the normalised object from packages/tokens — the route
+        // runs normalizeAppearance() before every write, so the shape is
+        // enforced there (one implementation shared with every client)
+        // rather than duplicated as a Mongoose sub-schema. null = never set.
+        appearance: { type: Schema.Types.Mixed, default: null },
         profile: { type: ConditionProfileSchema, default: () => ({}) },
         entitlement: { type: EntitlementSchema, default: () => ({}) },
 

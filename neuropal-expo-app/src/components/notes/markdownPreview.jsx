@@ -58,7 +58,7 @@ export function PreviewBlock({ block, palette, fontSize = 15 }) {
           marginVertical: 6,
         }}
       >
-        <Text style={{ color: palette.onSurface, fontFamily: "JetBrainsMono_400Regular", fontSize: fontSize - 2 }}>
+        <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.mono, fontSize: fontSize - 2 }}>
           {body}
         </Text>
       </View>
@@ -73,7 +73,7 @@ export function PreviewBlock({ block, palette, fontSize = 15 }) {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: level === 1 ? fontSize + 11 : level === 2 ? fontSize + 6 : fontSize + 2,
           marginTop: 14,
           marginBottom: 4,
@@ -113,7 +113,7 @@ export function InlineText({ text, palette, fontSize = 15 }) {
     <Text
       style={{
         color: palette.onSurface,
-        fontFamily: "Inter_400Regular",
+        fontFamily: palette.fonts.body,
         fontSize,
         lineHeight: Math.round(fontSize * 1.6),
         flex: 1,
@@ -145,7 +145,7 @@ function StyledSpans({ text, palette }) {
   return parts.map((part, i) => {
     if (/^\*\*[^*]+\*\*$/.test(part)) {
       return (
-        <Text key={i} style={{ fontFamily: "Inter_600SemiBold" }}>
+        <Text key={i} style={{ fontFamily: palette.fonts.bodySemi }}>
           {part.slice(2, -2)}
         </Text>
       );
@@ -162,7 +162,7 @@ function StyledSpans({ text, palette }) {
         <Text
           key={i}
           style={{
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             backgroundColor: withAlpha(palette.onSurfaceVariant, 0.15),
           }}
         >

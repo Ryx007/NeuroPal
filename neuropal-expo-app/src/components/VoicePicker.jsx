@@ -57,7 +57,7 @@ export function VoicePicker() {
           style={{
             flex: 1,
             color: palette.onSurface,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 14,
           }}
         >
@@ -68,7 +68,7 @@ export function VoicePicker() {
           style={{
             maxWidth: 160,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
           }}
         >
@@ -80,7 +80,7 @@ export function VoicePicker() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
             marginTop: 8,
           }}
@@ -91,7 +91,7 @@ export function VoicePicker() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
             lineHeight: 17,
             marginTop: 8,
@@ -106,7 +106,7 @@ export function VoicePicker() {
             <Text
               style={{
                 color: palette.secondary,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 11,
                 marginTop: 8,
               }}
@@ -119,7 +119,7 @@ export function VoicePicker() {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 11,
                 lineHeight: 16,
                 marginTop: 8,
@@ -171,7 +171,7 @@ export function VoicePicker() {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 13,
                 }}
               >
@@ -218,7 +218,7 @@ function VoiceRow({ name, sub, hq, active, onSelect, onPreview }) {
             numberOfLines={1}
             style={{
               color: palette.onSurface,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 13,
             }}
           >
@@ -229,7 +229,7 @@ function VoiceRow({ name, sub, hq, active, onSelect, onPreview }) {
               numberOfLines={1}
               style={{
                 color: hq ? palette.secondary : palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 11,
               }}
             >

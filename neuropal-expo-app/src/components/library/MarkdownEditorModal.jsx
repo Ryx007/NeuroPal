@@ -98,7 +98,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
               numberOfLines={1}
               style={{
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 16,
               }}
             >
@@ -107,7 +107,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 11,
               }}
             >
@@ -140,7 +140,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
             <Text
               style={{
                 color: palette.accent,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 13,
               }}
             >
@@ -155,7 +155,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
               accessibilityRole="alert"
               style={{
                 color: palette.error,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 14,
               }}
             >
@@ -182,7 +182,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
               flex: 1,
               padding: 18,
               color: palette.onSurface,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 14,
               lineHeight: 22,
             }}

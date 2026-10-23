@@ -9,6 +9,7 @@ const searchRoutes = require('./routes/search');
 const simulationsRoutes = require('./routes/simulations');
 const vizRoutes = require('./routes/viz');
 const authRoutes = require('./routes/auth');
+const meRoutes = require('./routes/me');
 const documentsRoutes = require('./routes/documents');
 const queryRoutes = require('./routes/query');
 const studyRoutes = require('./routes/study');
@@ -63,6 +64,7 @@ function buildApp() {
 
     // Routers. Each file uses Express Router with GET/POST only.
     app.use('/api/auth', authRoutes);
+    app.use('/api/me', meRoutes); // v2 appearance sync (skin, Pal, Home layout)
     app.use('/api/documents', documentsRoutes);
     app.use('/api', queryRoutes); // owns POST /api/documents/:id/query
     app.use('/api', studyRoutes); // owns /api/documents/:id/{summarize,quiz,cheatsheet,explain}
