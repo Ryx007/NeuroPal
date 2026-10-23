@@ -35,7 +35,16 @@ router.get(
 // Last write wins by `updatedAt`: an older copy (e.g. a phone that was
 // offline while you changed the look on the laptop) is refused with 409 and
 // the stored copy, so the client adopts it instead of clobbering it.
+//
+// Client clocks are not trusted: a stamp from the future is clamped to the
+// server's clock (one fast phone would otherwise make every other device's
+// edits look "older" forever), and a stored stamp more than a minute in the
+// future (written before this clamp existed) no longer blocks anyone. The
+// check and the write are one conditional update, so two near-simultaneous
+// PUTs can't both pass the check and let the older one land last.
 // ---------------------------------------------------------------------------
+const FUTURE_SLACK_MS = 60 * 1000;
+
 router.put(
     '/appearance',
     requireAuth,
@@ -47,18 +56,26 @@ router.put(
         const { normalizeAppearance } = await tokens();
         const next = normalizeAppearance(incoming);
 
+        const now = Date.now();
         const incomingAt = Date.parse(next.updatedAt || '');
-        next.updatedAt = Number.isFinite(incomingAt)
-            ? new Date(incomingAt).toISOString()
-            : new Date().toISOString();
+        next.updatedAt = new Date(Number.isFinite(incomingAt) ? Math.min(incomingAt, now) : now).toISOString();
 
-        const stored = req.user.appearance;
-        const storedAt = stored ? Date.parse(stored.updatedAt || '') : NaN;
-        if (Number.isFinite(storedAt) && storedAt > Date.parse(next.updatedAt)) {
-            return res.status(409).json({ error: 'stale appearance', appearance: stored });
+        const result = await User.updateOne(
+            {
+                _id: req.user._id,
+                $or: [
+                    { appearance: null },
+                    { 'appearance.updatedAt': { $not: { $type: 'string' } } },
+                    { 'appearance.updatedAt': { $lte: next.updatedAt } },
+                    { 'appearance.updatedAt': { $gt: new Date(now + FUTURE_SLACK_MS).toISOString() } },
+                ],
+            },
+            { $set: { appearance: next } },
+        );
+        if (result.matchedCount === 0) {
+            const fresh = await User.findById(req.user._id).select('appearance').lean();
+            return res.status(409).json({ error: 'stale appearance', appearance: (fresh && fresh.appearance) || null });
         }
-
-        await User.updateOne({ _id: req.user._id }, { $set: { appearance: next } });
         res.json({ appearance: next });
     }),
 );

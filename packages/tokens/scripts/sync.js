@@ -135,6 +135,10 @@ const appearanceTexts = [
   ["signal", "bake me a cake"], ["signal", "daylight grid condensed"], ["signal", "red and grey, sharper, bolder"],
   ["classic", "Warmer"], ["classic", "More contrast"], ["classic", "Make it funky"], ["classic", "blue please"],
   ["classic", "bright"],
+  // v2: negations, absolute vs comparative, "already" replies.
+  ["signal", "no grain please"], ["signal", "no grid"], ["signal", "make it calm"], ["signal", "make it lively"],
+  ["signal", "not so bright"], ["signal", "without the background"], ["signal", "less contrast"], ["signal", "no chladni"],
+  ["classic", "red"], ["classic", "not bright"],
 ];
 const interpretAppearanceCases = appearanceTexts.map(([skin, text]) => {
   const input = T.normalizeAppearance({ skin });
@@ -144,6 +148,9 @@ const interpretAppearanceCases = appearanceTexts.map(([skin, text]) => {
 const homeTexts = [
   "Reading first on weekdays", "Hide Pal’s note", "Bigger focus", "show the check-in", "tasks last",
   "anchor first on weekends", "make it nicer", "reading smaller", "hide anchor on weekends",
+  // v2: whole-word tile matching, nothing-to-do replies.
+  "I'm ready to focus, put it first", "move my notebook to the top", "hide the palette", "bring back focus",
+  "show focus on weekends", "hide Pal's notes",
 ];
 const interpretHomeCases = homeTexts.map((text) => {
   const r = T.interpretHome(text, T.normalizeHome({}));
@@ -153,11 +160,15 @@ const ruleHome = {
   tiles: T.normalizeHome({}).tiles,
   rules: [{ scope: "Weekdays", tile: "reading", act: "first" }, { scope: "Weekends", tile: "mvd", act: "hide" }],
 };
-const effectiveCases = ["2026-10-22T09:00:00", "2026-10-24T09:00:00"].map((date) => ({
-  home: ruleHome,
-  date,
-  ids: T.effectiveTiles(ruleHome, new Date(date)).map((t) => t.id),
-}));
+// A base-hidden tile with a position rule stays hidden (rules only move).
+const hiddenRuleHome = {
+  tiles: T.normalizeHome({}).tiles.map((t) => (t.id === "reading" ? { ...t, hidden: true } : t)),
+  rules: [{ scope: "Weekdays", tile: "reading", act: "first" }],
+};
+const effectiveCases = [
+  ...["2026-10-22T09:00:00", "2026-10-24T09:00:00"].map((date) => ({ home: ruleHome, date })),
+  { home: hiddenRuleHome, date: "2026-10-22T09:00:00" },
+].map((c) => ({ ...c, ids: T.effectiveTiles(c.home, new Date(c.date)).map((t) => t.id) }));
 const palCases = Object.values(T.PAL_OPTIONS.colour).flatMap((body) =>
   ["#FF3D2E", "#2EC7F0", "#E4E4E8"].map((acc) => ({ body, acc, faceInk: T.palFaceInk(body), visor: T.palVisor(body, acc) })),
 );

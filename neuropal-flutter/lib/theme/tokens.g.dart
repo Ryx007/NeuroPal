@@ -2,7 +2,7 @@
 // Change packages/tokens, then run: node packages/tokens/scripts/sync.js
 // ignore_for_file: constant_identifier_names, lines_longer_than_80_chars
 
-const int kTokensVersion = 1;
+const int kTokensVersion = 2;
 
 const Map<String, Map<String, String>> kClassicThemes = {
   'dark': {
@@ -248,10 +248,10 @@ const Map<String, Map<String, Object>> kSignalBases = {
     'grid': '#000000',
     'gridAlpha': 0.07,
     'palBody': '#FFFFFF',
-    'secondary': '#1A5E3F',
+    'secondary': '#18563A',
     'tertiary': '#5E4D00',
-    'error': '#8A4B00',
-    'warn': '#704800',
+    'error': '#753F00',
+    'warn': '#6C4500',
   },
   'Black': {
     'dark': true,
@@ -704,6 +704,7 @@ const Map<String, Map<String, Object>> kHomeTiles = {
     'short': 'ANCHOR',
     'words': [
       'anchor',
+      'anchors',
       'schedule',
       'next up',
       'calendar',
@@ -744,6 +745,7 @@ const Map<String, Map<String, Object>> kHomeTiles = {
       'paper',
       'papers',
       'book',
+      'books',
     ],
   },
   'pal': {
@@ -751,7 +753,9 @@ const Map<String, Map<String, Object>> kHomeTiles = {
     'short': 'PAL',
     'words': [
       'pal',
+      'pals',
       'note',
+      'notes',
     ],
   },
 };

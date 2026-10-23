@@ -1,6 +1,6 @@
 // GENERATED from packages/tokens/src — do not edit here.
 // Change packages/tokens, then run: node packages/tokens/scripts/sync.js
-import { HOME_DEFAULT, HOME_RULE_ACTS, HOME_RULE_SCOPES, HOME_SIZES, HOME_TILES } from "./tokens.js";
+import { CLASSIC_HOME_DEFAULT, HOME_DEFAULT, HOME_RULE_ACTS, HOME_RULE_SCOPES, HOME_SIZES, HOME_TILES } from "./tokens.js";
 
 const TILE_IDS = Object.keys(HOME_TILES);
 
@@ -49,7 +49,7 @@ export function effectiveTiles(home, date = new Date()) {
       t.hidden = true;
       out.splice(i, 0, t);
     } else if (r.act === "first") {
-      t.hidden = false;
+      // Position rules move a tile; they never change whether it shows.
       out.unshift(t);
     } else {
       out.push(t);
@@ -76,4 +76,18 @@ export function patchTile(home, id, patch) {
 export function ordinal(n) {
   const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
   return `${n}${s}`;
+}
+
+export function isDefaultHome(home) {
+  const h = normalizeHome(home);
+  return h.rules.length === 0 && JSON.stringify(h.tiles) === JSON.stringify(HOME_DEFAULT.tiles);
+}
+
+// The layout a skin shows. Until the user arranges Home, Classic keeps its
+// original screen and Signal uses the v2 default; once arranged, the user's
+// layout applies to both skins.
+export function homeForSkin(home, skin) {
+  const h = normalizeHome(home);
+  if (skin === "classic" && isDefaultHome(h)) return normalizeHome(CLASSIC_HOME_DEFAULT);
+  return h;
 }

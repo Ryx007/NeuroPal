@@ -1,6 +1,6 @@
 {
   "generatedFrom": "packages/tokens",
-  "tokensVersion": 1,
+  "tokensVersion": 2,
   "classic": [
     {
       "input": {
@@ -1049,10 +1049,10 @@
         "primary": "#E5261F",
         "primaryContainer": "#731310",
         "onPrimary": "#000000",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#A71C17",
         "accentGlow": "rgba(229,38,31,0.3)",
         "skin": "signal",
@@ -1297,10 +1297,10 @@
         "primary": "#FF1F1F",
         "primaryContainer": "#801010",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#BA1717",
         "accentGlow": "rgba(255,31,31,0.3)",
         "skin": "signal",
@@ -1545,10 +1545,10 @@
         "primary": "#FFB870",
         "primaryContainer": "#805C38",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#6E4F31",
         "accentGlow": "rgba(255,184,112,0.3)",
         "skin": "signal",
@@ -1793,10 +1793,10 @@
         "primary": "#66CC00",
         "primaryContainer": "#336600",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#326200",
         "accentGlow": "rgba(102,204,0,0.3)",
         "skin": "signal",
@@ -2041,10 +2041,10 @@
         "primary": "#1FFF1F",
         "primaryContainer": "#108010",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#0D630D",
         "accentGlow": "rgba(31,255,31,0.3)",
         "skin": "signal",
@@ -2289,10 +2289,10 @@
         "primary": "#70FFB8",
         "primaryContainer": "#38805C",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#2C6347",
         "accentGlow": "rgba(112,255,184,0.3)",
         "skin": "signal",
@@ -2537,10 +2537,10 @@
         "primary": "#0066CC",
         "primaryContainer": "#003366",
         "onPrimary": "#FFFFFF",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#005CB8",
         "accentGlow": "rgba(0,102,204,0.3)",
         "skin": "signal",
@@ -2785,10 +2785,10 @@
         "primary": "#1F1FFF",
         "primaryContainer": "#101080",
         "onPrimary": "#FFFFFF",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#1F1FFF",
         "accentGlow": "rgba(31,31,255,0.3)",
         "skin": "signal",
@@ -3033,10 +3033,10 @@
         "primary": "#B870FF",
         "primaryContainer": "#5C3880",
         "onPrimary": "#141416",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#6D4396",
         "accentGlow": "rgba(184,112,255,0.3)",
         "skin": "signal",
@@ -3281,10 +3281,10 @@
         "primary": "#CC0066",
         "primaryContainer": "#660033",
         "onPrimary": "#FFFFFF",
-        "secondary": "#1A5E3F",
+        "secondary": "#18563A",
         "tertiary": "#5E4D00",
-        "error": "#8A4B00",
-        "warn": "#704800",
+        "error": "#753F00",
+        "warn": "#6C4500",
         "accent": "#B8005C",
         "accentGlow": "rgba(204,0,102,0.3)",
         "skin": "signal",
@@ -4659,6 +4659,502 @@
         },
         "updatedAt": null
       }
+    },
+    {
+      "skin": "signal",
+      "text": "no grain please",
+      "rows": [
+        {
+          "k": "Texture",
+          "from": "Grain",
+          "to": "None"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "None",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "no grid",
+      "rows": null,
+      "error": "That’s already how it looks.",
+      "next": null
+    },
+    {
+      "skin": "signal",
+      "text": "make it calm",
+      "rows": [
+        {
+          "k": "Motion",
+          "from": "Lively",
+          "to": "Calm"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Calm",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "make it lively",
+      "rows": null,
+      "error": "That’s already how it looks.",
+      "next": null
+    },
+    {
+      "skin": "signal",
+      "text": "not so bright",
+      "rows": [
+        {
+          "k": "Base",
+          "from": "Graphite",
+          "to": "Black"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Black",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "without the background",
+      "rows": [
+        {
+          "k": "Background",
+          "from": "Chladni",
+          "to": "None"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "None",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "less contrast",
+      "rows": [
+        {
+          "k": "Brutality",
+          "from": "2",
+          "to": "1"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "Chladni",
+          "brutality": 1,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "signal",
+      "text": "no chladni",
+      "rows": [
+        {
+          "k": "Background",
+          "from": "Chladni",
+          "to": "None"
+        }
+      ],
+      "error": null,
+      "next": {
+        "v": 1,
+        "skin": "signal",
+        "classic": {
+          "theme": "dark",
+          "accent": "ruby"
+        },
+        "signal": {
+          "acc": "#FF3D2E",
+          "base": "Graphite",
+          "motion": "Lively",
+          "field": "None",
+          "brutality": 2,
+          "corners": "Soft",
+          "texture": "Grain",
+          "type": "Wide"
+        },
+        "suggestLooks": true,
+        "pal": {
+          "name": "Pal",
+          "shape": "Pebble",
+          "colour": "Chalk",
+          "eyes": "Visor",
+          "mouth": "Smile",
+          "extra": "Headphones",
+          "talk": "Gentle",
+          "voice": "Soft",
+          "people": true
+        },
+        "home": {
+          "tiles": [
+            {
+              "id": "state",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "anchor",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "focus",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "mvd",
+              "size": "L",
+              "hidden": false
+            },
+            {
+              "id": "reading",
+              "size": "M",
+              "hidden": false
+            },
+            {
+              "id": "pal",
+              "size": "S",
+              "hidden": false
+            }
+          ],
+          "rules": []
+        },
+        "updatedAt": null
+      }
+    },
+    {
+      "skin": "classic",
+      "text": "red",
+      "rows": null,
+      "error": "That’s already how it looks.",
+      "next": null
+    },
+    {
+      "skin": "classic",
+      "text": "not bright",
+      "rows": null,
+      "error": "That’s already how it looks.",
+      "next": null
     }
   ],
   "interpretHome": [
@@ -5022,6 +5518,128 @@
         ]
       },
       "title": "Next anchor hidden on weekends?"
+    },
+    {
+      "text": "I'm ready to focus, put it first",
+      "rows": [
+        {
+          "k": "Position",
+          "from": "3rd",
+          "to": "1st"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Focus?"
+    },
+    {
+      "text": "move my notebook to the top",
+      "rows": null,
+      "error": "I couldn’t tell which tile you mean. Try reading, focus, anchor, check-in, tasks or Pal.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "hide the palette",
+      "rows": null,
+      "error": "I couldn’t tell which tile you mean. Try reading, focus, anchor, check-in, tasks or Pal.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "bring back focus",
+      "rows": null,
+      "error": "Focus is already like that.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "show focus on weekends",
+      "rows": null,
+      "error": "Focus is already like that.",
+      "next": null,
+      "title": null
+    },
+    {
+      "text": "hide Pal's notes",
+      "rows": [
+        {
+          "k": "Visible",
+          "from": "yes",
+          "to": "no"
+        }
+      ],
+      "error": null,
+      "next": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": true
+          }
+        ],
+        "rules": []
+      },
+      "title": "Change Pal’s note?"
     }
   ],
   "effectiveTiles": [
@@ -5135,6 +5753,57 @@
         "anchor",
         "focus",
         "reading",
+        "pal"
+      ]
+    },
+    {
+      "home": {
+        "tiles": [
+          {
+            "id": "state",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "anchor",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "focus",
+            "size": "M",
+            "hidden": false
+          },
+          {
+            "id": "mvd",
+            "size": "L",
+            "hidden": false
+          },
+          {
+            "id": "reading",
+            "size": "M",
+            "hidden": true
+          },
+          {
+            "id": "pal",
+            "size": "S",
+            "hidden": false
+          }
+        ],
+        "rules": [
+          {
+            "scope": "Weekdays",
+            "tile": "reading",
+            "act": "first"
+          }
+        ]
+      },
+      "date": "2026-10-22T09:00:00",
+      "ids": [
+        "state",
+        "anchor",
+        "focus",
+        "mvd",
         "pal"
       ]
     }

@@ -68,15 +68,17 @@ export function matchLook(appearance) {
   );
 }
 
+const ownLook = (skin, name) => (typeof name === "string" && Object.prototype.hasOwnProperty.call(LOOKS[skin] || {}, name) ? LOOKS[skin][name] : null);
+
 export function applyLook(appearance, name) {
   const a = normalizeAppearance(appearance);
-  const d = LOOKS[a.skin][name];
+  const d = ownLook(a.skin, name);
   if (!d) return a;
   if (a.skin === "signal") return { ...a, signal: normalizeSignal(d.sig) };
   return { ...a, classic: normalizeClassic({ theme: d.theme, accent: d.accent }) };
 }
 
 export function lookDescription(skin, name) {
-  const d = (LOOKS[skin] || {})[name];
+  const d = ownLook(skin, name);
   return d ? d.desc : "";
 }

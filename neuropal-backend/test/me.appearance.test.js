@@ -25,6 +25,10 @@ after(async () => {
     await mongod.stop();
 });
 
+// Stamps relative to the real clock, so the suite passes on any date.
+const iso = (msFromNow) => new Date(Date.now() + msFromNow).toISOString();
+const HOUR = 3600 * 1000;
+
 const put = (appearance) =>
     fetch(`${base}/api/me/appearance`, {
         method: 'PUT',
@@ -44,7 +48,7 @@ test('PUT normalises junk and stores it; /auth/me carries it', async () => {
         signal: { acc: '#abc', base: 'Lava', brutality: 9 },
         pal: { name: '  Quarky the very long name ', colour: 'Mint' },
         home: { tiles: [{ id: 'reading', size: 'L' }, { id: 'ghost' }], rules: [{ scope: 'Weekdays', tile: 'reading', act: 'first' }] },
-        updatedAt: '2026-10-23T10:00:00.000Z',
+        updatedAt: iso(-2 * HOUR),
         extra: 'dropped',
     });
     assert.equal(r.status, 200);
@@ -65,14 +69,14 @@ test('PUT normalises junk and stores it; /auth/me carries it', async () => {
 });
 
 test('an older copy is refused with 409 and the stored copy', async () => {
-    const r = await put({ skin: 'classic', updatedAt: '2026-10-22T10:00:00.000Z' });
+    const r = await put({ skin: 'classic', updatedAt: iso(-26 * HOUR) });
     assert.equal(r.status, 409);
     const body = await r.json();
     assert.equal(body.appearance.skin, 'signal');
 });
 
 test('a newer copy wins', async () => {
-    const r = await put({ skin: 'classic', classic: { theme: 'sepia', accent: 'green' }, updatedAt: '2026-10-24T10:00:00.000Z' });
+    const r = await put({ skin: 'classic', classic: { theme: 'sepia', accent: 'green' }, updatedAt: iso(-1 * HOUR) });
     assert.equal(r.status, 200);
     const got = await (await fetch(`${base}/api/me/appearance`)).json();
     assert.equal(got.appearance.skin, 'classic');
@@ -86,4 +90,29 @@ test('non-object payloads are rejected', async () => {
         body: JSON.stringify({ appearance: 'signal' }),
     });
     assert.equal(r.status, 422);
+});
+
+test('a stamp from the future is clamped to the server clock', async () => {
+    const r = await put({ skin: 'signal', updatedAt: '9999-12-31T00:00:00.000Z' });
+    assert.equal(r.status, 200);
+    const { appearance } = await r.json();
+    assert.ok(Date.parse(appearance.updatedAt) <= Date.now(), appearance.updatedAt);
+    // …so a device with a correct clock can still save right after.
+    const ok = await put({ skin: 'classic', updatedAt: iso(0) });
+    assert.equal(ok.status, 200);
+});
+
+test('a bogus future stamp already stored does not lock other devices out', async () => {
+    await mongoose.connection.collection('users').updateMany({}, { $set: { 'appearance.updatedAt': '9999-12-31T00:00:00.000Z' } });
+    const r = await put({ skin: 'signal', updatedAt: iso(0) });
+    assert.equal(r.status, 200);
+});
+
+test('prototype names and nested nulls normalise instead of crashing clients', async () => {
+    const r = await put({ pal: { talk: 'constructor', voice: '__proto__' }, classic: null, signal: null, updatedAt: iso(0) });
+    assert.equal(r.status, 200);
+    const { appearance } = await r.json();
+    assert.equal(appearance.pal.talk, 'Gentle');
+    assert.equal(appearance.pal.voice, 'Soft');
+    assert.deepEqual(appearance.classic, { theme: 'dark', accent: 'ruby' });
 });

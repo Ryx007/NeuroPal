@@ -11,9 +11,15 @@ import {
   SIGNAL_PRESETS,
   applyLook,
   contrastRatio,
+  fitContrast,
+  normalizeClassic,
+  normalizePal,
+  palLine,
+  rgbToHex,
   diffAppearance,
   effectiveTiles,
   hexToRgb,
+  homeForSkin,
   hslToHex,
   interpretAppearance,
   interpretHome,
@@ -61,7 +67,7 @@ test("Signal: every hue on every base keeps text at AA (≥ 4.5:1)", () => {
 test("Signal: body text on every base passes AA", () => {
   for (const [name, b] of Object.entries(SIGNAL_BASES)) {
     for (const key of ["onSurface", "onSurfaceVariant", "outline", "error", "warn", "secondary", "tertiary"]) {
-      for (const bg of ["surface", "surfaceContainer"]) {
+      for (const bg of ["surface", "surfaceLowest", "surfaceLow", "surfaceContainer", "surfaceHigh", "surfaceHighest"]) {
         const r = contrastRatio(hexToRgb(b[key]), hexToRgb(b[bg]));
         assert.ok(r >= 4.5, `${name}.${key} on ${bg} = ${r.toFixed(2)}`);
       }
@@ -140,4 +146,78 @@ test("looks: apply, match and diff", () => {
 test("Pal's visor never vanishes into a same-colour body", () => {
   assert.equal(palVisor("#FF3D2E", "#FF3D2E"), "#141416");
   assert.equal(palVisor("#E4E4E8", "#FF3D2E"), "#FF3D2E");
+});
+
+test("synced junk can't resolve to Object members (prototype names, nulls)", () => {
+  const evil = { shape: "toString", colour: "hasOwnProperty", talk: "constructor", voice: "__proto__", eyes: "valueOf" };
+  const p = normalizePal(evil);
+  assert.deepEqual([p.shape, p.colour, p.talk, p.voice, p.eyes], ["Pebble", "Chalk", "Gentle", "Soft", "Visor"]);
+  assert.equal(typeof palLine(evil, "the notes"), "string");
+  assert.deepEqual(normalizeClassic(null), { theme: "dark", accent: "ruby" });
+  const a = normalizeAppearance({ classic: null, signal: null, pal: null, home: null, skin: "signal" });
+  assert.equal(a.classic.theme, "dark");
+  assert.equal(a.signal.base, "Graphite");
+  assert.equal(applyLook(a, "constructor").signal.base, "Graphite");
+});
+
+test("fitContrast picks the extreme that can actually reach the target", () => {
+  // Luminance ≈ 0.198: white tops out below 4.6:1 here, black does not.
+  const bg = [124, 124, 124];
+  const out = fitContrast([150, 150, 150], bg);
+  assert.ok(contrastRatio(out, bg) >= 4.6, `got ${contrastRatio(out, bg).toFixed(2)} with ${rgbToHex(out)}`);
+});
+
+test("Ask Pal understands negations and 'already'", () => {
+  const sig = (patch = {}) => normalizeAppearance({ skin: "signal", signal: { ...normalizeAppearance({}).signal, ...patch } });
+  const rows = (t, a) => {
+    const r = interpretAppearance(t, a);
+    return r.error ? r.error : r.rows.map((x) => `${x.k}:${x.from}>${x.to}`).join("|");
+  };
+  assert.equal(rows("no grid", sig({ field: "Grid" })), "Background:Grid>None");
+  assert.match(rows("no grid", sig({ field: "Chladni" })), /already/);
+  assert.equal(rows("less bright please", sig({ base: "Concrete" })), "Base:Concrete>Graphite");
+  assert.match(rows("make it calm", sig({ motion: "Calm" })), /already/);
+  assert.equal(rows("make it calm", sig({ motion: "Wild" })), "Motion:Wild>Calm");
+  assert.equal(rows("without grain", sig({ texture: "Grain" })), "Texture:Grain>None");
+  assert.equal(rows("not so wild", sig({ motion: "Wild" })), "Motion:Wild>Lively");
+  assert.match(rows("red", normalizeAppearance({ skin: "classic" })), /already/);
+});
+
+test("Ask Pal finds tiles by whole words only", () => {
+  const home = normalizeHome({});
+  assert.equal(interpretHome("I'm ready to focus, put it first", home).next.tiles[0].id, "focus");
+  assert.match(interpretHome("move my notebook to the top", home).error, /which tile/);
+  assert.match(interpretHome("hide the palette", home).error, /which tile/);
+  assert.equal(interpretHome("hide Pal's notes", home).rows[0].to, "no");
+});
+
+test("Home rules: show lifts a hide rule; position rules never un-hide", () => {
+  const base = normalizeHome({});
+  const withRule = { tiles: base.tiles, rules: [{ scope: "Weekends", tile: "focus", act: "hide" }] };
+  assert.deepEqual(interpretHome("show focus on weekends", withRule).next.rules, []);
+  const back = interpretHome("bring back focus", withRule);
+  assert.deepEqual(back.next.rules, []);
+  assert.equal(back.rows[0].k, "Weekends");
+
+  const hiddenFirst = { tiles: base.tiles.map((t) => (t.id === "state" ? { ...t, hidden: true } : t)), rules: [] };
+  const r = interpretHome("check-in first", hiddenFirst);
+  assert.deepEqual(r.rows, [{ k: "Visible", from: "no", to: "yes" }]);
+
+  const hiddenReading = {
+    tiles: base.tiles.map((t) => (t.id === "reading" ? { ...t, hidden: true } : t)),
+    rules: [{ scope: "Weekdays", tile: "reading", act: "first" }],
+  };
+  const thursday = new Date("2026-10-22T09:00:00");
+  assert.ok(!effectiveTiles(hiddenReading, thursday).some((t) => t.id === "reading"));
+  const prop = interpretHome("reading last on weekends", hiddenReading);
+  assert.equal(prop.next.tiles.find((t) => t.id === "reading").hidden, false);
+  assert.equal(prop.rows[0].k, "Visible");
+});
+
+test("Classic keeps its original Home until the user arranges it", () => {
+  const classic = homeForSkin(normalizeHome({}), "classic");
+  assert.deepEqual(effectiveTiles(classic, new Date("2026-10-22T09:00:00")).map((t) => t.id), ["state", "mvd", "anchor", "reading"]);
+  assert.equal(effectiveTiles(homeForSkin({}, "signal"), new Date("2026-10-22T09:00:00")).length, 6);
+  const arranged = normalizeHome({ tiles: [{ id: "reading", size: "L" }] });
+  assert.equal(homeForSkin(arranged, "classic").tiles[0].id, "reading");
 });

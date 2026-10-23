@@ -9,7 +9,7 @@
 // Edit HERE, then run `node packages/tokens/scripts/sync.js` to regenerate
 // the copies inside each app (Expo JS, web JS, Flutter Dart, Swift, CSS).
 
-export const TOKENS_VERSION = 1;
+export const TOKENS_VERSION = 2;
 
 // ---------------------------------------------------------------- Classic --
 export const CLASSIC_THEMES = {
@@ -145,7 +145,7 @@ export const SIGNAL_BASES = {
     onSurface: "#141416", onSurfaceVariant: "#3A3A40", outline: "#4E4E56", outlineVariant: "#141416",
     line: "#141416", control: "#141416", shadow: "#141416", panelAlpha: 0.74,
     grid: "#000000", gridAlpha: 0.07, palBody: "#FFFFFF",
-    secondary: "#1A5E3F", tertiary: "#5E4D00", error: "#8A4B00", warn: "#704800",
+    secondary: "#18563A", tertiary: "#5E4D00", error: "#753F00", warn: "#6C4500",
   },
   Black: {
     dark: true,
@@ -273,11 +273,11 @@ export const PAL_DEFAULT = {
 // tiles stay in the arranger list so they can be brought back.
 export const HOME_TILES = {
   state: { name: "State check-in", short: "CHECK-IN", words: ["state", "check-in", "checkin", "check in", "mood", "how are you", "feelings"] },
-  anchor: { name: "Next anchor", short: "ANCHOR", words: ["anchor", "schedule", "next up", "calendar"] },
+  anchor: { name: "Next anchor", short: "ANCHOR", words: ["anchor", "anchors", "schedule", "next up", "calendar"] },
   focus: { name: "Focus", short: "FOCUS", words: ["focus", "sound", "music", "noise", "soundscape", "timer", "pomodoro"] },
   mvd: { name: "Minimum day", short: "MIN. DAY", words: ["minimum", "mvd", "tasks", "to-do", "todo", "to do"] },
-  reading: { name: "Resume reading", short: "READING", words: ["reading", "reader", "read", "paper", "papers", "book"] },
-  pal: { name: "Pal’s note", short: "PAL", words: ["pal", "note"] },
+  reading: { name: "Resume reading", short: "READING", words: ["reading", "reader", "read", "paper", "papers", "book", "books"] },
+  pal: { name: "Pal’s note", short: "PAL", words: ["pal", "pals", "note", "notes"] },
 };
 
 export const HOME_DEFAULT = {
@@ -288,6 +288,20 @@ export const HOME_DEFAULT = {
     { id: "mvd", size: "L", hidden: false },
     { id: "reading", size: "M", hidden: false },
     { id: "pal", size: "S", hidden: false },
+  ],
+  rules: [],
+};
+
+// Classic's Home before anyone arranges it: exactly the pre-v2 screen
+// (check-in, minimum day, next anchor, resume reading; no Focus or Pal tiles).
+export const CLASSIC_HOME_DEFAULT = {
+  tiles: [
+    { id: "state", size: "L", hidden: false },
+    { id: "mvd", size: "L", hidden: false },
+    { id: "anchor", size: "M", hidden: false },
+    { id: "reading", size: "M", hidden: false },
+    { id: "focus", size: "M", hidden: true },
+    { id: "pal", size: "S", hidden: true },
   ],
   rules: [],
 };

@@ -2,8 +2,9 @@ import { contrastRatio, fitContrast, hexToRgb, rgbToHex } from "./color.js";
 import { CLASSIC_ACCENT_NAMES, CLASSIC_ACCENT_VARIANTS, CLASSIC_SHAPE, CLASSIC_THEMES, CLASSIC_THEME_NAMES } from "./tokens.js";
 
 export function normalizeClassic(input = {}) {
-  const theme = CLASSIC_THEME_NAMES.includes(input.theme) ? input.theme : "dark";
-  const accent = CLASSIC_ACCENT_NAMES.includes(input.accent) ? input.accent : "ruby";
+  const src = input && typeof input === "object" ? input : {};
+  const theme = CLASSIC_THEME_NAMES.includes(src.theme) ? src.theme : "dark";
+  const accent = CLASSIC_ACCENT_NAMES.includes(src.accent) ? src.accent : "ruby";
   return { theme, accent };
 }
 

@@ -51,7 +51,9 @@ export function mix(a, b, t) {
 // that lets users pick ANY accent hue and still get AA text.
 export function fitContrast(fg, bg, min = 4.6) {
   let c = fg.slice();
-  const target = luminance(bg) < 0.2 ? [255, 255, 255] : [0, 0, 0];
+  // Tint toward whichever extreme can actually reach the target on this
+  // background (white stops working just below luminance 0.2).
+  const target = contrastRatio([255, 255, 255], bg) >= contrastRatio([0, 0, 0], bg) ? [255, 255, 255] : [0, 0, 0];
   for (let i = 0; i < 24 && contrastRatio(c, bg) < min; i += 1) c = mix(c, target, 0.1);
   return c;
 }

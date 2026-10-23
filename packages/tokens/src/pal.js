@@ -1,18 +1,22 @@
 import { contrastRatio, hexToRgb } from "./color.js";
 import { PAL_DEFAULT, PAL_OPTIONS } from "./tokens.js";
 
+// Own keys only: a synced value like "constructor" or "__proto__" must fall
+// back to the default, never resolve to an inherited Object member.
+const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
+
 export function normalizePal(input = {}) {
   const src = input && typeof input === "object" ? input : {};
   const out = { ...PAL_DEFAULT };
   const name = typeof src.name === "string" ? src.name.trim().slice(0, 14) : "";
   if (name) out.name = name;
-  if (PAL_OPTIONS.shape[src.shape]) out.shape = src.shape;
-  if (PAL_OPTIONS.colour[src.colour]) out.colour = src.colour;
+  if (own(PAL_OPTIONS.shape, src.shape)) out.shape = src.shape;
+  if (own(PAL_OPTIONS.colour, src.colour)) out.colour = src.colour;
   if (PAL_OPTIONS.eyes.includes(src.eyes)) out.eyes = src.eyes;
   if (PAL_OPTIONS.mouth.includes(src.mouth)) out.mouth = src.mouth;
   if (PAL_OPTIONS.extra.includes(src.extra)) out.extra = src.extra;
-  if (PAL_OPTIONS.talk[src.talk]) out.talk = src.talk;
-  if (PAL_OPTIONS.voice[src.voice]) out.voice = src.voice;
+  if (own(PAL_OPTIONS.talk, src.talk)) out.talk = src.talk;
+  if (own(PAL_OPTIONS.voice, src.voice)) out.voice = src.voice;
   if (typeof src.people === "boolean") out.people = src.people;
   return out;
 }
