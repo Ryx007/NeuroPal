@@ -8,12 +8,77 @@
 > `docs/PROJECT-STATUS.md` (phase table + Next actions). `BUILD-BRIEF.md` is
 > the original spec but predates most of what's below.
 >
-> _Written 2026-08-04 after the port-split + collaborator-prep session._
+> _Written 2026-08-04 after the port-split + collaborator-prep session;
+> §0 added 2026-10-23 for the v2 platform branch._
 > _Author: Claude (Opus/Sonnet/Fable across the session), owner "Ryx"._
 
 ---
 
-## 1. Where things stand RIGHT NOW
+## 0. v2 PLATFORM BUILD-OUT (branch `v2-platform`, 2026-10-23) — read first
+
+The owner signed off the v2 render (two skins: **Classic** = the original
+look, untouched; **Signal** = brutal glass, red on graphite by default, every
+token adjustable) and asked for the apps + platform. Locked decisions and the
+full plan: **`docs/PLATFORM-PLAN.md`** (repo layout, the appearance object,
+parity table, milestones). What exists on the branch:
+
+- **`packages/tokens/`** — the single source of truth for both skins:
+  colour maths with auto-contrast (any accent on any Signal base keeps text ≥
+  4.5:1 — tested), `resolveClassicPalette` (byte-identical to the old
+  `palette.js` — tested against it), `resolveSignalPalette`,
+  `normalizeAppearance`, the Ask-Pal keyword interpreters, Home day rules,
+  Pal options. `node packages/tokens/scripts/sync.js` regenerates every copy
+  (Expo, platform, backend vendor dir, Dart `tokens.g.dart` + fixtures, Swift
+  widget fallbacks, CSS); CI runs `--check`. **Never edit a generated copy.**
+- **Backend:** `GET/PUT /api/me/appearance` (BRAIN §4), `User.appearance`
+  (Mixed), last write wins by `updatedAt`, stale → 409 + stored copy.
+  `npm test` (node:test + mongodb-memory-server).
+- **Expo app (leads, v0.2.0):** `ThemeProvider` now resolves either skin into
+  the SAME token names, plus `palette.fonts.<role>` (a codemod replaced ~300
+  hard-coded font names), `palette.shape`, motion/field/texture.
+  `ThemeOverride` previews a proposed look in a subtree. Signal primitives:
+  hard-shadow panels, press-into-shadow buttons, mono labels, expo-gl
+  Chladni/interference field (Home only) + grid/grain/scanline backdrop.
+  New screens: **Make it yours** (`StudioScreen` — skin, vibes, fine-tune,
+  any-hue slider, Ask Pal preview→apply→undo, saved looks), **Build your
+  Pal**, **Arrange home** (order/size/hide + weekday/weekend rules). Home
+  renders the user's tile layout; Signal Home follows the S-Today board
+  (state dial, countdown anchor, focus scope, M tiles pair up). The Reader's
+  expanded player has a Signal version after the S-Reader board. Appearance
+  syncs through `services/appearanceSync.js` (local-first, debounced PUT,
+  409 → adopt). Library/Notes/Toolbox/etc. follow the skin's colours and
+  fonts but keep their Classic layouts (a Signal pass for them is M2).
+- **Flutter app (`neuropal-flutter/`, follows):** see PLATFORM-PLAN §4.
+- **Web platform (`neuropal-platform/`):** Next.js static site; see
+  PLATFORM-PLAN §4.
+- **iOS extras:** WidgetKit extension in `neuropal-flutter/ios/NeuroPalWidget/`
+  (check-in widget with App Intents, resume-reading widget, focus Live
+  Activity), wired by `ios/scripts/add_widget_target.rb`; the app side is
+  `ios/Runner/NeuroPalIOSExtras.swift` + `lib/platform/ios_extras.dart`.
+  Verified only by the macOS CI build — never run on a device yet.
+- **CI:** `.github/workflows/ci.yml` (tokens, backend, Expo bundles, Flutter
+  analyze/test, platform lint/typecheck/build), `android.yml` (both APKs as
+  artifacts; manual or on main), `ios.yml` (simulator builds of both apps on
+  macOS runners).
+
+**Builds done in the cloud workspace:** Android SDK 36 + JDK 17 + Gradle with
+a Maven Central mirror (`~/.gradle/init.d/maven-mirror.gradle` — Central
+rate-limits to 429). The box has 8 GB and no swap: **never run two Gradle
+builds at once** (they were serialised with `flock` on a shared lock file).
+APKs are signed with the React Native template's debug key (same as the
+Mini's local builds), so they update the installed app in place.
+
+**Traps found in v2 (don't re-derive):**
+- RN-web: SVG `<Pattern id>`s are document-global — two mounted backdrops
+  sharing an id made the visible one blank. Ids now come from `useId()`.
+- RN-web: `Image resizeMode="repeat"` draws the tile once; the grain is a CSS
+  background on web (`expo-asset` resolves its URL).
+- Pal talk templates take a complete phrase (`{task}` = "the CPI notes" or a
+  quoted task title) — they no longer contain "the".
+- The RN Gradle plugin does not support `-x createBundleReleaseJsAndAssets`
+  (it fails resolving generated res) — native-only warm-up builds don't work.
+
+## 1. Where things stand RIGHT NOW (pre-v2 — still true for `main`)
 
 `main` HEAD is **`884e395`** (owner's travel scripts), on top of my
 **`4e0bcb0`** (docs/readme) — clean, pushed, `Ryx007/NeuroPal` (PUBLIC repo).

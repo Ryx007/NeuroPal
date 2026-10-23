@@ -53,3 +53,6 @@ neuropal-expo-app/ios/
 
 # Machine-local Claude Code settings
 .claude/settings.local.json
+
+# Session tooling artefacts (cloud workspace plugins)
+.harnesskit/

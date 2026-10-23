@@ -75,7 +75,9 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | Endpoint | In | Out (essentials) |
 |---|---|---|
 | `GET /healthz` (no /api) | — | `{status:'ok', uptime}` |
-| `GET /api/auth/me` | — | public user `{id, email, name, tweaks…}` (added 2026-07-07; client boot probe) |
+| `GET /api/auth/me` | — | public user `{id, email, name, tweaks…, appearance}` (added 2026-07-07; client boot probe; `appearance` since v2) |
+| `GET /api/me/appearance` | — | v2 (2026-10-23): `{appearance}` — the shared look object (skin, Classic theme/accent, Signal settings, Pal, Home layout; shape in `docs/PLATFORM-PLAN.md` §3.2); `null` when never saved |
+| `PUT /api/me/appearance` | `{appearance}` | v2: normalised by `packages/tokens` (vendored at `src/vendor/tokens/`, ESM, loaded by dynamic import) → `{appearance}`. **Last write wins by `updatedAt`:** an incoming copy OLDER than the stored one gets **409 `{error:'stale appearance', appearance:<stored>}`** and the client adopts it. Non-object body → 422. Tests: `test/me.appearance.test.js` (in-memory Mongo) |
 | `POST /api/auth/register` / `login` | `{email,password[,name]}` | `{token, user}` |
 | `POST /api/documents/upload` | multipart field `file` (+`title`,`subtitle`) | 201 Document (status `pending`; ingest is fire-and-forget) |
 | `GET /api/documents` | `?type=&status=&q=` all optional (P4; `status=processing` = the 4 in-flight states; `q` = escaped title/subtitle substring; bad values → 400) | Document[] (newest first, soft-deleted excluded) — each doc carries `readingProgress` 0..1 + `lastReadAt` joined from ReadingSession (real reading state; `progress` remains INGEST progress) |
