@@ -48,9 +48,21 @@ parity table, milestones). What exists on the branch:
   syncs through `services/appearanceSync.js` (local-first, debounced PUT,
   409 → adopt). Library/Notes/Toolbox/etc. follow the skin's colours and
   fonts but keep their Classic layouts (a Signal pass for them is M2).
-- **Flutter app (`neuropal-flutter/`, follows):** see PLATFORM-PLAN §4.
-- **Web platform (`neuropal-platform/`):** Next.js static site; see
-  PLATFORM-PLAN §4.
+- **Flutter app (`neuropal-flutter/`, follows; "NeuroPal F",
+  `io.neuropal.flutter`):** reader-first M1 — library with ingest status,
+  reader with TTS highlight and a Signal player, Ask with sources, both
+  skins, settings (backend address with Tailscale → LAN fallback, demo
+  library opt-in). Dart port of the palette logic, parity-tested against the
+  JS fixtures. Speed calibration constant: `kEngineNormalWpm` in
+  `lib/reader/wpm.dart` (check on the S24). Screenshot harness:
+  `flutter test tool/screenshots_test.dart` (not run by CI). README has the
+  rest, including known limits.
+- **Web platform (`neuropal-platform/`):** Next.js 16 static export —
+  landing (WebGL hero), `/learn` + the two-source interference lesson,
+  `/appearance` (Make it yours on the web, saves to the server), `/sign-in`,
+  `/privacy`. Typed token layer: `src/lib/appearance.ts`. QA: `npm run
+  serve`, then `npm run qa:shots` / `qa:axe` (needs `npx playwright install
+  chromium` once).
 - **iOS extras:** WidgetKit extension in `neuropal-flutter/ios/NeuroPalWidget/`
   (check-in widget with App Intents, resume-reading widget, focus Live
   Activity), wired by `ios/scripts/add_widget_target.rb`; the app side is
@@ -68,6 +80,22 @@ builds at once** (they were serialised with `flock` on a shared lock file).
 APKs are signed with the React Native template's debug key (same as the
 Mini's local builds), so they update the installed app in place.
 
+**Waiting on the owner (v2):**
+1. Install and try both APKs on the S24 (Expo 0.2.0 updates the current
+   app in place; "NeuroPal F" installs alongside).
+2. **AI provider vs "your data never trains models".** The default provider
+   is the free Gemini tier, whose terms let Google use submitted content to
+   improve its products (paid use doesn't). Choose: paid Gemini, Claude, or
+   Ollama-only.
+3. iOS on a device needs an Apple developer team and the App Group
+   `group.io.neuropal.flutter` registered; CI only builds for the simulator.
+
+**Review fixes already in (from an independent review of the v2 diff):**
+prototype-safe normalisers, clock-safe last-write-wins on the server,
+never-dropped sync edits, Classic Home restored pixel-for-pixel until
+arranged, live reduce-motion, scoped studio undo, screen-reader-settable
+sliders, error boundary with "Reset the look". Each has a test or a check.
+
 **Traps found in v2 (don't re-derive):**
 - RN-web: SVG `<Pattern id>`s are document-global — two mounted backdrops
   sharing an id made the visible one blank. Ids now come from `useId()`.
@@ -77,6 +105,12 @@ Mini's local builds), so they update the installed app in place.
   quoted task title) — they no longer contain "the".
 - The RN Gradle plugin does not support `-x createBundleReleaseJsAndAssets`
   (it fails resolving generated res) — native-only warm-up builds don't work.
+- Reanimated 4's `useReducedMotion()` is fixed at start-up; ThemeProvider
+  follows `AccessibilityInfo`'s `reduceMotionChanged` instead.
+- The community slider's `onSlidingComplete` never fires for TalkBack or
+  VoiceOver adjustments — never commit a value only there.
+- A single-branch clone only fetches `main`; add a fetch refspec for a
+  feature branch or `git status` claims it was never pushed.
 
 ## 1. Where things stand RIGHT NOW (pre-v2 — still true for `main`)
 

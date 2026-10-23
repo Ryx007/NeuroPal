@@ -83,17 +83,24 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · — not planned for that 
 
 | Feature | Expo (Android/iOS/web) | Flutter (Android/iOS) | Platform site |
 |---|---|---|---|
-| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 M1: library, reader + TTS highlight, Ask | — |
+| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 M1: library with ingest status, reader + TTS highlight, Ask with sources (no upload or study tools yet) | — |
 | Two skins (Classic + Signal) with auto-contrast | ✅ M1 | ✅ M1 | ✅ M1 (Signal default) |
-| Make it yours: studio, vibes, fine-tune, Ask Pal, saved looks, undo | ✅ M1 | ⬜ M2 | — |
+| Make it yours: studio, vibes, fine-tune, Ask Pal, saved looks, undo | ✅ M1 | 🟡 M1: skin, vibes, Classic theme/accent in Settings | ✅ M1 (/appearance) |
+| Appearance sync (GET/PUT `/api/me/appearance`, 409 → adopt) | ✅ M1 (two-way) | 🟡 M1 (push only) | ✅ M1 (save; asks on 409) |
 | Build your Pal | ✅ M1 | ⬜ M2 | — |
-| Arrange Home + day rules | ✅ M1 | ⬜ M2 | — |
+| Arrange Home + day rules (Classic keeps its original Home until arranged) | ✅ M1 | ⬜ M2 (no Home yet) | — |
+| Signal Home (S-Today board) and Signal player (S-Reader board) | ✅ M1 | 🟡 M1: Signal player | — |
 | Signal background fields (Chladni / interference) | ✅ M1 (expo-gl) | ⬜ M2 (fragment shader) | ✅ M1 (WebGL) |
+| Signal layouts for Library, Notes, Toolbox (tokens apply already) | ⬜ M2 | — | — |
 | Focus soundscapes with evidence badges | ⬜ M2 | ⬜ M3 | — |
-| Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + 1 interactive lesson |
-| iOS widgets (Swift) | — | 🟡 M1 scaffold | — |
+| Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + two-source interference |
+| iOS widgets + focus Live Activity (Swift) | — | 🟡 M1: built for the simulator in CI; not run on a device | — |
 | Modules 1–2 (SCAFFOLD, state system) backend routes | ⬜ M3 | ⬜ M4 | — |
 | Module 7 AI companion | ⬜ M4 | ⬜ M5 | — |
+
+The Dart port covers the palette logic (parity-tested against
+`token_cases.json`); the Ask-Pal interpreters and Home rules are ported in M2
+(their fixture groups are skipped until then).
 
 ## 5. Milestones
 

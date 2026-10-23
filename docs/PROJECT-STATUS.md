@@ -107,11 +107,14 @@ Ollama), all other devices are LAN clients. See
 > Full mid-flight context, established root causes (don't re-derive), and
 > rejected alternatives live in **`docs/HANDOFF.md`** — read it first.
 
-**v2 (branch `v2-platform`):** milestone M1 per `docs/PLATFORM-PLAN.md` §5.
-The Expo app v0.2.0 (both skins, Make it yours, Signal Home + player) is
-built and was handed to the owner as an APK on 2026-10-23; owner acceptance
-on the S24 is the next gate. Then M2: Focus soundscapes in Expo, a Signal
-pass over Library/Notes/Toolbox, Flutter catch-up.
+**v2 (branch `v2-platform`, PR to `main`):** milestone M1 per
+`docs/PLATFORM-PLAN.md` §5 is built: Expo app 0.2.0 and the Flutter app
+"NeuroPal F" (both APKs handed to the owner 2026-10-23), the Next.js
+platform site, iOS widgets (simulator-built in CI), CI for everything.
+Next gates: owner acceptance on the S24, and the AI-provider decision
+(HANDOFF §0). Then M2: Focus soundscapes in Expo, a Signal pass over
+Library/Notes/Toolbox, Flutter catch-up (Pal, Home, interpreters, two-way
+sync).
 
 0. **S24 on-device acceptance (the only real work left).** Everything is
    browser-verified; these paths exist only on the phone. **The APK on
