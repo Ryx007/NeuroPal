@@ -1,0 +1,351 @@
+.apps {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 960px) {
+  .apps {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: clamp(1.25rem, 1rem + 1.2vw, 2rem);
+}
+
+.index {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--np-accent-text);
+}
+
+.karaoke {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+}
+
+.karaokeLine {
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.karaokeWord {
+  padding: 0 0.2em;
+  border-radius: 3px;
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--np-on-surface-variant);
+}
+
+.playerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: var(--btn-border);
+  border-radius: var(--np-radius-control);
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+  box-shadow: var(--btn-shadow);
+}
+
+.playerTrack {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--np-on-surface) 18%, transparent);
+}
+
+.playerTrack span {
+  position: absolute;
+  inset: 0 58% 0 0;
+  border-radius: 3px;
+  background: var(--np-accent-fill);
+}
+
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.features li {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.features li > :first-child {
+  justify-self: start;
+}
+
+@media (max-width: 420px) {
+  .features li {
+    grid-template-columns: 1fr;
+    gap: 0.375rem;
+  }
+}
+
+.appFoot {
+  margin-top: auto;
+  padding-top: 0.25rem;
+  color: var(--np-on-surface-variant);
+}
+
+.depths {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+  overflow: hidden;
+}
+
+.depths > div {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.depths > div + div {
+  border-top: var(--rule);
+}
+
+.depths dd {
+  line-height: 1.45;
+}
+
+@media (max-width: 420px) {
+  .depths > div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
+
+.yours {
+  display: grid;
+  gap: 2rem;
+  padding: clamp(1.25rem, 1rem + 2vw, 2.75rem);
+}
+
+@media (min-width: 960px) {
+  .yours {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    align-items: center;
+  }
+}
+
+.yoursCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vibes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 600px) {
+  .vibes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.vibe {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vibeSwatch {
+  position: relative;
+  display: block;
+  height: 84px;
+  margin-bottom: 0.375rem;
+  overflow: hidden;
+  border: 2px solid var(--v-line);
+  border-radius: var(--v-r);
+  background: var(--v-bg);
+}
+
+.vibePanel {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 46%;
+  height: 34%;
+  border: 2px solid var(--v-line);
+  border-radius: calc(var(--v-r) * 0.6);
+  background: var(--v-panel);
+  box-shadow: var(--v-sh) var(--v-sh) 0 var(--v-shadow);
+}
+
+.vibeBar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--v-acc);
+}
+
+.vibeName {
+  font-weight: 700;
+}
+
+.vibeMeta {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--np-on-surface-variant);
+}
+
+.principles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.principle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 1.25rem 1.25rem 1.375rem;
+}
+
+.principleTitle {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-variation-settings: "wdth" var(--display-wdth);
+  letter-spacing: var(--display-ls);
+  font-size: 1.375rem;
+  line-height: 1.05;
+}
+
+.research {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule);
+}
+
+.researchItem {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 1.5rem;
+  border-bottom: var(--rule);
+}
+
+@media (min-width: 900px) {
+  .researchItem {
+    grid-template-columns: 5rem minmax(0, 1fr);
+  }
+}
+
+.researchNum {
+  padding-top: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--np-accent-text);
+}
+
+.researchBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-width: 50rem;
+}
+
+.researchTitle {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-variation-settings: "wdth" var(--display-wdth);
+  letter-spacing: var(--display-ls);
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.625rem);
+  line-height: 1.08;
+}
+
+.researchUse {
+  color: var(--np-on-surface-variant);
+}
+
+.researchUse > span:first-child {
+  margin-right: 0.375rem;
+  vertical-align: 0.1em;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source {
+  display: inline-block;
+  padding-block: 0.6875rem;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.source svg {
+  display: inline-block;
+  margin-left: 0.3em;
+  vertical-align: -0.2em;
+}
+
+.start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: clamp(1.5rem, 1rem + 2.5vw, 3rem);
+}
+
+.startActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  margin-top: 0.5rem;
+}
