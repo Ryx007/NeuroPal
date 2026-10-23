@@ -175,7 +175,7 @@ function ToastCard({ toast, onDone }) {
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 14,
               }}
             >
@@ -186,7 +186,7 @@ function ToastCard({ toast, onDone }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 12,
                 marginTop: 2,
                 lineHeight: 17,

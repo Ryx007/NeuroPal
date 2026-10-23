@@ -17,15 +17,20 @@ import { clearSession } from "../store/ApiLink";
 import { describeNetworkError, USE_MOCK } from "../services/network";
 import { hydrateUser, updateLogin } from "../store/slices/authSlice";
 import { selectOnboardingCompleted } from "../store/selectors";
-import { usePalette } from "../theme/ThemeProvider";
+import { usePalette, useTheme } from "../theme/ThemeProvider";
+import { Pal } from "../components/pal/Pal";
+import { SignalBackdrop } from "../components/signal/Backdrop";
 import { EmergencyScreen } from "../screens/EmergencyScreen";
+import { HomeArrangeScreen } from "../screens/HomeArrangeScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LibraryScreen } from "../screens/LibraryScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
+import { PalBuilderScreen } from "../screens/PalBuilderScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReaderScreen } from "../screens/ReaderScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { StudioScreen } from "../screens/StudioScreen";
 import { ToolboxScreen } from "../screens/ToolboxScreen";
 import { VisualizerScreen } from "../screens/VisualizerScreen";
 
@@ -42,12 +47,16 @@ const DRAWER_CONFIG = [
   { route: "Viz", label: "Visualizer", icon: "insights", component: VisualizerScreen },
   { route: "Toolbox", label: "Toolbox", icon: "handyman", component: ToolboxScreen },
   { route: "Profile", label: "Profile", icon: "person", component: ProfileScreen },
+  // v2 — skins, Pal, Home layout (docs/PLATFORM-PLAN.md).
+  { route: "Studio", label: "Make it yours", icon: "palette", component: StudioScreen },
   { route: "Settings", label: "Settings", icon: "tune", component: SettingsScreen },
 ];
 
 function AppHeader({ navigation }) {
   const palette = usePalette();
+  const { isSignal } = useTheme();
   const insets = useSafeAreaInsets();
+  const pal = useSelector((s) => s.look.pal);
 
   return (
     <GlassPanel
@@ -80,15 +89,27 @@ function AppHeader({ navigation }) {
         <View style={{ width: 10 }} />
         <Text
           style={{
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 20,
-            color: palette.accent,
-            letterSpacing: -0.5,
+            fontFamily: palette.fonts.display,
+            fontSize: isSignal ? 19 : 20,
+            color: isSignal ? palette.onSurface : palette.accent,
+            letterSpacing: isSignal ? 1.2 : -0.5,
           }}
         >
-          NeuroPal
+          {isSignal ? "NEUROPAL" : "NeuroPal"}
         </Text>
         <View style={{ flex: 1 }} />
+        {isSignal ? (
+          // Signal: your own Pal sits in the header and opens its builder.
+          <Pressable
+            onPress={() => navigation.getParent()?.navigate("PalBuilder")}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={`${pal?.name || "Pal"} — build your Pal`}
+            style={{ width: 44, height: 40, alignItems: "center", justifyContent: "center" }}
+          >
+            <Pal pal={pal} size={46} decorative />
+          </Pressable>
+        ) : (
         <Pressable
           onPress={() => navigation.navigate("Profile")}
           style={{
@@ -111,6 +132,7 @@ function AppHeader({ navigation }) {
             color={palette.onSurfaceVariant}
           />
         </Pressable>
+        )}
       </View>
     </GlassPanel>
   );
@@ -149,7 +171,7 @@ function DrawerContent({ navigation, state }) {
           <View style={{ width: 10 }} />
           <Text
             style={{
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 22,
               color: palette.accent,
               letterSpacing: -0.5,
@@ -198,7 +220,7 @@ function DrawerContent({ navigation, state }) {
                 style={{
                   marginLeft: 14,
                   fontSize: 15,
-                  fontFamily: focused ? "Inter_600SemiBold" : "Inter_500Medium",
+                  fontFamily: focused ? palette.fonts.bodySemi : palette.fonts.bodyMedium,
                   color: focused ? palette.accent : palette.onSurface,
                 }}
               >
@@ -213,7 +235,7 @@ function DrawerContent({ navigation, state }) {
           style={{
             paddingHorizontal: 14,
             color: withAlpha(palette.onSurfaceVariant, 0.6),
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 10,
           }}
         >
@@ -284,6 +306,9 @@ function NavOverlay({ route, navigation, children }) {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* v2 Signal: engineering grid on every screen, the living field on
+          Home only. Renders nothing in Classic. */}
+      <SignalBackdrop field={route.name === "Home"} />
       {children}
       {playing && !isReader && readerDocId ? (
         <Pressable
@@ -310,7 +335,7 @@ function NavOverlay({ route, navigation, children }) {
             style={{
               marginLeft: 8,
               color: palette.accent,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 13,
             }}
           >
@@ -408,6 +433,8 @@ export function AppNavigator() {
         >
           <RootStack.Screen name="Main" component={DrawerChrome} />
           <RootStack.Screen name="Emergency" component={EmergencyScreen} />
+          <RootStack.Screen name="PalBuilder" component={PalBuilderScreen} />
+          <RootStack.Screen name="HomeArrange" component={HomeArrangeScreen} />
         </RootStack.Navigator>
       ) : (
         <RootStack.Navigator

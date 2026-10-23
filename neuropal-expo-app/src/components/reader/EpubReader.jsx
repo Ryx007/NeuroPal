@@ -706,7 +706,7 @@ export function EpubReader({ document: doc }) {
           <Text
             style={{
               color: palette.error,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 14,
               textAlign: "center",
             }}
@@ -721,7 +721,7 @@ export function EpubReader({ document: doc }) {
             style={{
               marginTop: 12,
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
             }}
           >
@@ -826,7 +826,7 @@ export function EpubReader({ document: doc }) {
               style={{
                 marginLeft: 6,
                 color: palette.accent,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 13,
               }}
             >
@@ -880,7 +880,7 @@ export function EpubReader({ document: doc }) {
             style={{
               marginLeft: 6,
               color: palette.accent,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 13,
             }}
           >

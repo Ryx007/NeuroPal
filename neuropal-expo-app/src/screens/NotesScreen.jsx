@@ -109,7 +109,7 @@ function NotesList({ onOpen }) {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_700Bold",
+            fontFamily: palette.fonts.display,
             fontSize: 34,
             letterSpacing: -0.8,
           }}
@@ -119,7 +119,7 @@ function NotesList({ onOpen }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 16,
             marginTop: 4,
           }}
@@ -132,7 +132,7 @@ function NotesList({ onOpen }) {
             style={{
               marginTop: 12,
               color: palette.error,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 13,
             }}
           >
@@ -145,7 +145,7 @@ function NotesList({ onOpen }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 14,
               }}
             >
@@ -174,7 +174,7 @@ function NotesList({ onOpen }) {
                   <Text
                     style={{
                       color: palette.onSurface,
-                      fontFamily: "SpaceGrotesk_600SemiBold",
+                      fontFamily: palette.fonts.displaySemi,
                       fontSize: 16,
                     }}
                   >
@@ -184,7 +184,7 @@ function NotesList({ onOpen }) {
                     numberOfLines={1}
                     style={{
                       color: palette.onSurfaceVariant,
-                      fontFamily: "JetBrainsMono_400Regular",
+                      fontFamily: palette.fonts.mono,
                       fontSize: 11,
                       marginTop: 3,
                     }}
@@ -229,7 +229,7 @@ function NotesList({ onOpen }) {
           style={{
             marginLeft: 8,
             color: palette.onPrimary,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 14,
           }}
         >

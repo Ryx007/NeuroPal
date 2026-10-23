@@ -103,7 +103,7 @@ export function AskSheet({
                   flex: 1,
                   marginLeft: 10,
                   color: palette.onSurface,
-                  fontFamily: "SpaceGrotesk_600SemiBold",
+                  fontFamily: palette.fonts.displaySemi,
                   fontSize: 16,
                 }}
               >
@@ -137,7 +137,7 @@ export function AskSheet({
                   numberOfLines={2}
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: palette.fonts.body,
                     fontSize: 12,
                     lineHeight: 17,
                   }}
@@ -156,7 +156,7 @@ export function AskSheet({
                 <Text
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: palette.fonts.body,
                     fontSize: 13,
                     lineHeight: 19,
                     paddingVertical: 8,
@@ -183,7 +183,7 @@ export function AskSheet({
                     <Text
                       style={{
                         color: palette.onSurface,
-                        fontFamily: "Inter_500Medium",
+                        fontFamily: palette.fonts.bodyMedium,
                         fontSize: 13,
                         lineHeight: 19,
                       }}
@@ -207,7 +207,7 @@ export function AskSheet({
                       selectable
                       style={{
                         color: palette.onSurface,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: palette.fonts.body,
                         fontSize: 14,
                         lineHeight: 21,
                       }}
@@ -236,7 +236,7 @@ export function AskSheet({
                             <Text
                               style={{
                                 color: palette.tertiary,
-                                fontFamily: "JetBrainsMono_400Regular",
+                                fontFamily: palette.fonts.mono,
                                 fontSize: 11,
                               }}
                             >
@@ -263,7 +263,7 @@ export function AskSheet({
                   <Text
                     style={{
                       color: palette.onSurfaceVariant,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: palette.fonts.body,
                       fontSize: 13,
                     }}
                   >
@@ -299,7 +299,7 @@ export function AskSheet({
                     <Text
                       style={{
                         color: palette.onSurfaceVariant,
-                        fontFamily: "Inter_500Medium",
+                        fontFamily: palette.fonts.bodyMedium,
                         fontSize: 12,
                       }}
                     >
@@ -333,7 +333,7 @@ export function AskSheet({
                   borderRadius: 14,
                   backgroundColor: palette.surfaceHigh,
                   color: palette.onSurface,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 14,
                 }}
               />

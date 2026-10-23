@@ -61,7 +61,7 @@ export function EmergencyScreen() {
           <Text
             style={{
               color: "#B1C5FF",
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 14,
             }}
           >
@@ -73,7 +73,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#FF8E8E",
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 2,
           }}
@@ -84,7 +84,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#F2F1F0",
-            fontFamily: "SpaceGrotesk_700Bold",
+            fontFamily: palette.fonts.display,
             fontSize: 36,
             lineHeight: 38,
           }}
@@ -95,7 +95,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#C3C6D6",
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 14,
             lineHeight: 21,
           }}
@@ -133,7 +133,7 @@ export function EmergencyScreen() {
               <Text
                 style={{
                   color: "#F2F1F0",
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: palette.fonts.bodyBold,
                   fontSize: 18,
                 }}
               >
@@ -143,7 +143,7 @@ export function EmergencyScreen() {
               <Text
                 style={{
                   color: "#8DA1B9",
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                 }}
               >
@@ -155,7 +155,7 @@ export function EmergencyScreen() {
           <Text
             style={{
               color: "#C3C6D6",
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 14,
               lineHeight: 21,
             }}
@@ -175,7 +175,7 @@ export function EmergencyScreen() {
           <Text
             style={{
               color: "#D5D9E6",
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
               lineHeight: 20,
               textAlign: "center",

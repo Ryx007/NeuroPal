@@ -952,7 +952,7 @@ function TextReader() {
               style={{
                 marginLeft: 6,
                 color: palette.accent,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 13,
               }}
             >
@@ -1006,7 +1006,7 @@ function TextReader() {
             style={{
               marginLeft: 6,
               color: palette.accent,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 13,
             }}
           >
@@ -1046,6 +1046,7 @@ function TextReader() {
           onWpm={(value) => dispatch(setWpm(value))}
           voice={voice}
           onVoice={(value) => dispatch(setVoice(value))}
+          words={words}
         />
       ) : null}
 
@@ -1143,7 +1144,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 16,
             }}
           >
@@ -1169,7 +1170,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
                 borderRadius: 12,
                 backgroundColor: palette.surfaceHigh,
                 color: palette.onSurface,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 16,
               }}
             />
@@ -1193,7 +1194,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -1293,7 +1294,7 @@ function ReaderBody({
               accessibilityRole="alert"
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 15,
                 lineHeight: 22,
               }}
@@ -1319,7 +1320,7 @@ function ReaderBody({
                 <Text
                   style={{
                     color: palette.accent,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 14,
                   }}
                 >
@@ -1346,7 +1347,7 @@ function ReaderBody({
                 <Text
                   style={{
                     color: palette.error,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 14,
                   }}
                 >
@@ -1362,7 +1363,7 @@ function ReaderBody({
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_700Bold",
+                fontFamily: palette.fonts.display,
                 fontSize: 21,
                 marginTop: 8,
                 marginBottom: 16,
@@ -1634,7 +1635,7 @@ function MarginNote({ note }) {
         <Text
           style={{
             color: palette.accent,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 2,
           }}
@@ -1646,7 +1647,7 @@ function MarginNote({ note }) {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 14,
         }}
       >
@@ -1656,7 +1657,7 @@ function MarginNote({ note }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 13,
           lineHeight: 20,
         }}
@@ -1685,7 +1686,7 @@ function MarginNote({ note }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 10,
                 }}
               >
@@ -1755,7 +1756,7 @@ function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChang
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 10,
               marginTop: 4,
             }}

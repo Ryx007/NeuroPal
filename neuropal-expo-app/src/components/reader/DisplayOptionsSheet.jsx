@@ -71,7 +71,7 @@ export function DisplayOptionsSheet({ visible, onClose, epub = false }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
               marginBottom: 14,
             }}
@@ -153,7 +153,7 @@ function Row({ label, children }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 10,
           letterSpacing: 1.6,
           marginBottom: 8,
@@ -188,7 +188,7 @@ function Chip({ label, selected, onPress }) {
       <Text
         style={{
           color: selected ? palette.accent : palette.onSurface,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 12,
         }}
       >
@@ -207,7 +207,7 @@ function SliderRow({ label, value, min, max, step, display, onChange }) {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 10,
             letterSpacing: 1.6,
           }}
@@ -217,7 +217,7 @@ function SliderRow({ label, value, min, max, step, display, onChange }) {
         <Text
           style={{
             color: palette.accent,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
           }}
         >

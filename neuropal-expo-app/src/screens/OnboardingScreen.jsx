@@ -80,7 +80,7 @@ export function OnboardingScreen() {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_700Bold",
+            fontFamily: palette.fonts.display,
             fontSize: 24,
           }}
         >
@@ -91,7 +91,7 @@ export function OnboardingScreen() {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
             }}
           >
             Exit
@@ -152,7 +152,7 @@ export function OnboardingScreen() {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 15,
               }}
             >
@@ -174,7 +174,7 @@ export function OnboardingScreen() {
           style={{
             textAlign: "center",
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
           }}
         >
@@ -265,7 +265,7 @@ function PageWrap({ title, subtitle, children }) {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
+          fontFamily: palette.fonts.display,
           fontSize: 30,
           letterSpacing: -0.8,
         }}
@@ -276,7 +276,7 @@ function PageWrap({ title, subtitle, children }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 18,
           lineHeight: 28,
         }}
@@ -343,7 +343,7 @@ function ConditionsPage({ selected, onToggle }) {
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 18,
               }}
             >
@@ -448,7 +448,7 @@ function OptionCard({ selected, title, subtitle, onPress }) {
         <Text
           style={{
             color: selected ? palette.accent : palette.onSurface,
-            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontFamily: palette.fonts.displaySemi,
             fontSize: 16,
           }}
         >
@@ -458,7 +458,7 @@ function OptionCard({ selected, title, subtitle, onPress }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 13,
             lineHeight: 19,
           }}
@@ -512,7 +512,7 @@ function SummaryPage({ conditions, energyPattern, primaryUse }) {
             style={{
               flex: 1,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 15,
               lineHeight: 22,
             }}

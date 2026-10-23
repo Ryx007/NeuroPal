@@ -2,11 +2,12 @@ import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Line, Path } from "react-native-svg";
 
-import { usePalette } from "../../theme/ThemeProvider";
-import { GlassPanel, withAlpha } from "../primitives";
+import { usePalette, useTheme } from "../../theme/ThemeProvider";
+import { GlassPanel, SignalLabel, withAlpha } from "../primitives";
 
 // D10 — the Tidal-style player as ONE component with TWO heights:
 //   • Variation A (default): docked mini-player (mockup.html .player)
@@ -48,8 +49,10 @@ export function TidalPlayer({
   onWpm,
   voice,
   onVoice,
+  words,
 }) {
   const palette = usePalette();
+  const { isSignal } = useTheme();
   const insets = useSafeAreaInsets();
 
   // ---- shared derived values (chapter-scoped) ----
@@ -73,6 +76,40 @@ export function TidalPlayer({
   };
 
   const clampSeek = (value) => onSeek(Math.round(value));
+
+  if (expanded && isSignal) {
+    return (
+      <SignalExpandedPlayer
+        insets={insets}
+        playing={playing}
+        wordIndex={wordIndex}
+        words={words}
+        chapterIndex={chapterIndex}
+        chapterCount={chapterCount}
+        chapterStart={chapterStart}
+        chapterEnd={chapterEnd}
+        chapterWords={chapterWords}
+        inChapter={inChapter}
+        chapterPct={chapterPct}
+        sectionHeading={sectionHeading}
+        docTitle={docTitle}
+        docSubtitle={docSubtitle}
+        speedX={speedX}
+        clock={clock}
+        clampSeek={clampSeek}
+        onCollapse={onCollapse}
+        onAsk={onAsk}
+        onTogglePlay={onTogglePlay}
+        onPrevChapter={onPrevChapter}
+        onNextChapter={onNextChapter}
+        onOpenChapters={onOpenChapters}
+        wpm={wpm}
+        onWpm={onWpm}
+        voice={voice}
+        onVoice={onVoice}
+      />
+    );
+  }
 
   if (expanded) {
     return (
@@ -119,13 +156,16 @@ export function TidalPlayer({
     >
       <GlassPanel radius={26} intensity={55}>
         {/* warm liquid-glass tint (mockup .player.glass = accent/crimson
-            gradient over the dark base) — matches the expanded sibling */}
-        <LinearGradient
-          colors={[withAlpha(palette.accent, 0.1), withAlpha(palette.primaryContainer, 0.18)]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-        />
+            gradient over the dark base) — matches the expanded sibling.
+            Signal keeps its panels flat. */}
+        {!isSignal ? (
+          <LinearGradient
+            colors={[withAlpha(palette.accent, 0.1), withAlpha(palette.primaryContainer, 0.18)]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+        ) : null}
         <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
           {/* grab handle — tap to expand to the full now-playing (B) */}
           <Pressable
@@ -163,7 +203,7 @@ export function TidalPlayer({
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                 }}
               >
@@ -173,7 +213,7 @@ export function TidalPlayer({
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 11,
               }}
             >
@@ -220,29 +260,58 @@ export function TidalPlayer({
             >
               <MaterialIcons name="skip-previous" size={28} color={palette.onSurface} />
             </Pressable>
-            <Pressable
-              onPress={onTogglePlay}
-              accessibilityRole="button"
-              accessibilityLabel={playing ? "Pause" : "Play"}
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 32,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: palette.accent,
-                shadowColor: palette.accent,
-                shadowOpacity: 0.45,
-                shadowRadius: 16,
-                shadowOffset: { width: 0, height: 8 },
-              }}
-            >
-              <MaterialIcons
-                name={playing ? "pause" : "play-arrow"}
-                size={34}
-                color={palette.onPrimary}
-              />
-            </Pressable>
+            {isSignal ? (
+              <Pressable onPress={onTogglePlay} accessibilityRole="button" accessibilityLabel={playing ? "Pause" : "Play"}>
+                {({ pressed }) => {
+                  const sh = Math.max(3, palette.shape.shadow);
+                  const r = Math.min(16, palette.shape.radiusControl);
+                  return (
+                    <View style={{ width: 64, height: 64 }}>
+                      <View style={{ position: "absolute", top: sh, left: sh, width: 64, height: 64, borderRadius: r, backgroundColor: palette.shadowColor }} />
+                      <View
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: r,
+                          borderWidth: 2,
+                          borderColor: palette.shadowColor,
+                          backgroundColor: palette.accentFill,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transform: pressed ? [{ translateX: sh }, { translateY: sh }] : [],
+                        }}
+                      >
+                        <MaterialIcons name={playing ? "pause" : "play-arrow"} size={34} color={palette.accentInk} />
+                      </View>
+                    </View>
+                  );
+                }}
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={onTogglePlay}
+                accessibilityRole="button"
+                accessibilityLabel={playing ? "Pause" : "Play"}
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: palette.accent,
+                  shadowColor: palette.accent,
+                  shadowOpacity: 0.45,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: 8 },
+                }}
+              >
+                <MaterialIcons
+                  name={playing ? "pause" : "play-arrow"}
+                  size={34}
+                  color={palette.onPrimary}
+                />
+              </Pressable>
+            )}
             <Pressable
               onPress={onNextChapter}
               accessibilityRole="button"
@@ -282,7 +351,7 @@ export function TidalPlayer({
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 12,
                 }}
               >
@@ -426,7 +495,7 @@ function ExpandedPlayer({
               />
               <Text
                 style={{
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 10,
                   letterSpacing: 2,
                   color: palette.onSurfaceVariant,
@@ -456,7 +525,7 @@ function ExpandedPlayer({
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "SpaceGrotesk_600SemiBold",
+                  fontFamily: palette.fonts.displaySemi,
                   fontSize: 13,
                 }}
               >
@@ -487,7 +556,7 @@ function ExpandedPlayer({
             >
               <Text
                 style={{
-                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontFamily: palette.fonts.display,
                   fontSize: 72,
                   color: "#fff",
                   textShadowColor: "rgba(0,0,0,0.35)",
@@ -505,7 +574,7 @@ function ExpandedPlayer({
               numberOfLines={2}
               style={{
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_700Bold",
+                fontFamily: palette.fonts.display,
                 fontSize: 19,
                 textAlign: "center",
                 letterSpacing: -0.3,
@@ -518,7 +587,7 @@ function ExpandedPlayer({
                 numberOfLines={1}
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 13,
                   marginTop: 3,
                 }}
@@ -548,7 +617,7 @@ function ExpandedPlayer({
                 numberOfLines={1}
                 style={{
                   color: palette.accent,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                   maxWidth: 260,
                 }}
@@ -578,10 +647,10 @@ function ExpandedPlayer({
               }}
             />
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
-              <Text style={{ color: palette.accent, fontFamily: "JetBrainsMono_400Regular", fontSize: 11 }}>
+              <Text style={{ color: palette.accent, fontFamily: palette.fonts.mono, fontSize: 11 }}>
                 {clock(inChapter)} elapsed
               </Text>
-              <Text style={{ color: palette.onSurfaceVariant, fontFamily: "JetBrainsMono_400Regular", fontSize: 11 }}>
+              <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 11 }}>
                 {clock(chapterWords - inChapter)} left
               </Text>
             </View>
@@ -646,7 +715,7 @@ function ExpandedPlayer({
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <Text
                 style={{
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 10,
                   letterSpacing: 2,
                   textTransform: "uppercase",
@@ -660,7 +729,7 @@ function ExpandedPlayer({
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <Text
                 style={{
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 10,
                   letterSpacing: 2,
                   textTransform: "uppercase",
@@ -699,7 +768,7 @@ function ExpandedPlayer({
                 <Text
                   style={{
                     color: palette.accent,
-                    fontFamily: "JetBrainsMono_400Regular",
+                    fontFamily: palette.fonts.mono,
                     fontSize: 13,
                     minWidth: 96,
                     textAlign: "center",
@@ -763,7 +832,7 @@ function ToneSelector({ value, onVoice, palette }) {
             <Text
               style={{
                 color: on ? palette.accent : palette.onSurfaceVariant,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 12,
               }}
             >
@@ -772,6 +841,310 @@ function ToneSelector({ value, onVoice, palette }) {
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+// ======================= Signal — expanded (S-Reader board) =================
+// Same contract as ExpandedPlayer. The scope draws the chapter as a 3:2
+// Lissajous figure whose bright part grows with progress (no animation of
+// its own — it moves only as you read). "Reading along" shows the current
+// sentence with the spoken word marked.
+
+function readingWindow(words, idx) {
+  if (!Array.isArray(words) || !words.length) return null;
+  const i = Math.max(0, Math.min(words.length - 1, idx || 0));
+  const ends = (w) => /[.!?…]["”’)]*$/.test(w || "");
+  let s = i;
+  while (s > 0 && i - s < 28 && !ends(words[s - 1])) s -= 1;
+  let e = i;
+  while (e < words.length - 1 && e - i < 28 && !ends(words[e])) e += 1;
+  return {
+    before: words.slice(s, i).join(" "),
+    word: words[i] || "",
+    after: words.slice(i + 1, e + 1).join(" "),
+    pos: i - s + 1,
+    len: e - s + 1,
+  };
+}
+
+function lissajousPath(fromT, toT, steps = 160) {
+  const pts = [];
+  for (let k = 0; k <= steps; k += 1) {
+    const t = fromT + ((toT - fromT) * k) / steps;
+    pts.push(`${(150 + 136 * Math.sin(3 * t + 0.6)).toFixed(1)},${(100 + 84 * Math.sin(2 * t)).toFixed(1)}`);
+  }
+  return `M${pts.join(" L")}`;
+}
+
+function BoxButton({ icon, label, onPress, size = 56, iconSize = 28 }) {
+  const palette = usePalette();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => ({
+        width: size,
+        height: size,
+        borderRadius: Math.min(14, palette.shape.radiusControl),
+        borderWidth: 1.5,
+        borderColor: palette.control,
+        backgroundColor: pressed ? withAlpha(palette.accent, 0.14) : withAlpha(palette.surfaceContainer, 0.7),
+        alignItems: "center",
+        justifyContent: "center",
+      })}
+    >
+      <MaterialIcons name={icon} size={iconSize} color={palette.onSurface} />
+    </Pressable>
+  );
+}
+
+function SignalExpandedPlayer({
+  insets,
+  playing,
+  wordIndex,
+  words,
+  chapterIndex,
+  chapterCount,
+  chapterStart,
+  chapterEnd,
+  chapterWords,
+  inChapter,
+  chapterPct,
+  sectionHeading,
+  docTitle,
+  docSubtitle,
+  speedX,
+  clock,
+  clampSeek,
+  onCollapse,
+  onAsk,
+  onTogglePlay,
+  onPrevChapter,
+  onNextChapter,
+  onOpenChapters,
+  wpm,
+  onWpm,
+  voice,
+  onVoice,
+}) {
+  const palette = usePalette();
+  const sh = Math.max(3, palette.shape.shadow);
+  const ctx = readingWindow(words, wordIndex);
+  const heading = sectionHeading && sectionHeading !== docTitle ? sectionHeading : null;
+  const chip = `CH ${chapterIndex + 1}${heading ? ` · ${heading}` : ""}`.toUpperCase();
+  const T = Math.PI * 2;
+  const r = Math.min(14, palette.shape.radiusControl);
+
+  return (
+    <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 50, backgroundColor: palette.surface }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingTop: Math.max(insets.top + 8, 24),
+          paddingBottom: Math.max(insets.bottom + 16, 24),
+          paddingHorizontal: 16,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* top row */}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <BoxButton icon="keyboard-arrow-down" label="Collapse to mini player" onPress={onCollapse} size={46} />
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: playing ? palette.accentFill : palette.outline, marginRight: 8 }} />
+            <SignalLabel>{playing ? "Now playing" : "Paused"}</SignalLabel>
+          </View>
+          <Pressable
+            onPress={onAsk}
+            accessibilityRole="button"
+            accessibilityLabel="Ask about this document"
+            style={({ pressed }) => ({
+              minHeight: 46,
+              paddingHorizontal: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              borderRadius: r,
+              borderWidth: 1.5,
+              borderColor: palette.control,
+              backgroundColor: pressed ? withAlpha(palette.accent, 0.14) : withAlpha(palette.surfaceContainer, 0.7),
+            })}
+          >
+            <MaterialIcons name="auto-awesome" size={16} color={palette.accent} />
+            <Text style={{ marginLeft: 6, color: palette.accent, fontFamily: palette.fonts.bodyBold, fontSize: 15 }}>Ask</Text>
+          </Pressable>
+        </View>
+
+        {/* scope: the chapter as a Lissajous figure, bright up to here */}
+        <GlassPanel style={{ marginTop: 16, padding: 10 }}>
+          <View
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityLabel={`Chapter ${chapterIndex + 1} of ${chapterCount}, ${Math.round(chapterPct * 100)} percent read`}
+            style={{ height: 196, borderRadius: Math.min(10, r), borderWidth: 1, borderColor: palette.line, overflow: "hidden", backgroundColor: withAlpha(palette.surfaceLowest, 0.8) }}
+          >
+            <Svg width="100%" height="100%" viewBox="0 0 300 200" preserveAspectRatio="none">
+              {[50, 100, 150].map((y) => (
+                <Line key={`h${y}`} x1={0} y1={y} x2={300} y2={y} stroke={palette.grid} strokeOpacity={y === 100 ? 0.22 : 0.1} strokeWidth={1} />
+              ))}
+              {[75, 150, 225].map((x) => (
+                <Line key={`v${x}`} x1={x} y1={0} x2={x} y2={200} stroke={palette.grid} strokeOpacity={x === 150 ? 0.22 : 0.1} strokeWidth={1} />
+              ))}
+              <Path d={lissajousPath(0, T)} fill="none" stroke={palette.accentFill} strokeOpacity={0.28} strokeWidth={2} />
+              {chapterPct > 0.004 ? (
+                <Path d={lissajousPath(0, T * chapterPct, Math.max(12, Math.round(160 * chapterPct)))} fill="none" stroke={palette.accentFill} strokeWidth={5} strokeLinecap="round" />
+              ) : null}
+            </Svg>
+            <Text style={{ position: "absolute", top: 8, left: 10, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 11 }}>X:Y 3:2</Text>
+            <Text style={{ position: "absolute", top: 8, right: 10, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 11 }}>
+              {`CH ${chapterIndex + 1}/${chapterCount}`}
+            </Text>
+            <Text style={{ position: "absolute", bottom: 8, left: 10, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 11 }}>
+              {`VOICE ${String(voice || "").toUpperCase()} · ${wpm} WPM`}
+            </Text>
+            <Text style={{ position: "absolute", bottom: 2, right: 10, color: withAlpha(palette.onSurface, 0.22), fontFamily: palette.fonts.display, fontSize: 30 }}>Ψ</Text>
+          </View>
+        </GlassPanel>
+
+        {/* title + meta */}
+        <Text numberOfLines={2} accessibilityRole="header" style={{ marginTop: 18, color: palette.onSurface, fontFamily: palette.fonts.display, fontSize: 28, lineHeight: 31 }}>
+          {docTitle}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
+          <Text numberOfLines={1} style={{ flex: 1, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 12 }}>
+            {docSubtitle || ""}
+          </Text>
+          <Pressable
+            onPress={onOpenChapters}
+            accessibilityRole="button"
+            accessibilityLabel={`Chapter ${chapterIndex + 1} of ${chapterCount}${heading ? `, ${heading}` : ""}. Open contents`}
+            style={{ marginLeft: 10, minHeight: 32, maxWidth: 200, paddingHorizontal: 8, justifyContent: "center", borderWidth: 1.5, borderColor: palette.control }}
+          >
+            <Text numberOfLines={1} style={{ color: palette.onSurface, fontFamily: palette.fonts.label, fontSize: 11, letterSpacing: 1 }}>
+              {chip}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* reading along */}
+        {ctx ? (
+          <GlassPanel style={{ marginTop: 14, padding: 14 }}>
+            <SignalLabel>{`Reading along · word ${ctx.pos} of ${ctx.len}`}</SignalLabel>
+            <Text style={{ marginTop: 8, color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: 17, lineHeight: 26 }}>
+              {ctx.before ? `${ctx.before} ` : ""}
+              <Text style={{ color: palette.accentInk, backgroundColor: palette.accentFill, fontFamily: palette.fonts.bodyBold }}>{` ${ctx.word} `}</Text>
+              {ctx.after ? ` ${ctx.after}` : ""}
+            </Text>
+          </GlassPanel>
+        ) : null}
+
+        {/* scrubber */}
+        <View style={{ marginTop: 16 }}>
+          <Slider
+            value={Math.min(chapterStart + inChapter, Math.max(chapterStart, chapterEnd - 1))}
+            minimumValue={chapterStart}
+            maximumValue={Math.max(chapterStart + 1, chapterEnd - 1)}
+            step={1}
+            onSlidingComplete={clampSeek}
+            minimumTrackTintColor={palette.accentFill}
+            maximumTrackTintColor={palette.outline}
+            thumbTintColor={palette.onSurface}
+            accessibilityLabel="Position in this chapter"
+            accessibilityValue={{ min: 0, max: chapterWords, now: inChapter, text: `${clock(inChapter)} elapsed of this chapter` }}
+          />
+          <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, marginTop: 2 }}>
+            {Array.from({ length: 31 }, (_, k) => (
+              <View key={k} style={{ width: k % 5 === 0 ? 2 : 1, height: k % 5 === 0 ? 10 : 6, backgroundColor: k / 30 <= chapterPct ? palette.accentFill : palette.outline }} />
+            ))}
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+            <Text style={{ color: palette.accent, fontFamily: palette.fonts.label, fontSize: 13 }}>{clock(inChapter)}</Text>
+            <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.label, fontSize: 13 }}>{`−${clock(chapterWords - inChapter)}`}</Text>
+          </View>
+        </View>
+
+        {/* transport */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 26, marginTop: 14 }}>
+          <BoxButton icon="fast-rewind" label="Previous chapter" onPress={onPrevChapter} size={60} />
+          <Pressable onPress={onTogglePlay} accessibilityRole="button" accessibilityLabel={playing ? "Pause" : "Play"}>
+            {({ pressed }) => (
+              <View style={{ width: 88, height: 88 }}>
+                <View style={{ position: "absolute", top: sh, left: sh, width: 88, height: 88, borderRadius: Math.min(18, palette.shape.radiusControl), backgroundColor: palette.shadowColor }} />
+                <View
+                  style={{
+                    width: 88,
+                    height: 88,
+                    borderRadius: Math.min(18, palette.shape.radiusControl),
+                    borderWidth: 2,
+                    borderColor: palette.shadowColor,
+                    backgroundColor: palette.accentFill,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transform: pressed ? [{ translateX: sh }, { translateY: sh }] : [],
+                  }}
+                >
+                  <MaterialIcons name={playing ? "pause" : "play-arrow"} size={44} color={palette.accentInk} />
+                </View>
+              </View>
+            )}
+          </Pressable>
+          <BoxButton icon="fast-forward" label="Next chapter" onPress={onNextChapter} size={60} />
+        </View>
+
+        {/* reading speed */}
+        <GlassPanel style={{ marginTop: 20, padding: 14 }}>
+          <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+            <SignalLabel style={{ flex: 1 }}>Reading speed</SignalLabel>
+            <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.display, fontSize: 18 }}>{wpm}</Text>
+            <Text style={{ marginLeft: 6, color: palette.onSurfaceVariant, fontFamily: palette.fonts.mono, fontSize: 12 }}>{`WPM · ${speedX}×`}</Text>
+          </View>
+          <Slider
+            value={wpm}
+            minimumValue={120}
+            maximumValue={950}
+            step={10}
+            onSlidingComplete={(v) => onWpm(Math.round(v))}
+            minimumTrackTintColor={palette.accentFill}
+            maximumTrackTintColor={palette.outline}
+            thumbTintColor={palette.accentFill}
+            accessibilityLabel="Reading speed"
+            accessibilityValue={{ min: 120, max: 950, now: wpm, text: `${wpm} words per minute` }}
+            style={{ marginTop: 6, height: 40 }}
+          />
+        </GlassPanel>
+
+        {/* voice */}
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 16 }}>
+          <SignalLabel style={{ width: 64 }}>Voice</SignalLabel>
+          <View accessibilityRole="radiogroup" accessibilityLabel="Voice tone" style={{ flex: 1, flexDirection: "row", gap: 6, padding: 4, borderRadius: r, borderWidth: 1.5, borderColor: palette.control }}>
+            {TONES.map((item) => {
+              const on = item === voice;
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() => onVoice(item)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={`Tone ${item}`}
+                  style={{
+                    flex: 1,
+                    minHeight: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: Math.max(2, r - 4),
+                    borderWidth: on ? 1.5 : 0,
+                    borderColor: palette.shadowColor,
+                    backgroundColor: on ? palette.accentFill : "transparent",
+                  }}
+                >
+                  <Text style={{ color: on ? palette.accentInk : palette.onSurface, fontFamily: palette.fonts.bodyBold, fontSize: 14 }}>
+                    {item[0].toUpperCase() + item.slice(1)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }

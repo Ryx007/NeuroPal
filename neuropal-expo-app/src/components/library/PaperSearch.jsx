@@ -98,7 +98,7 @@ export function PaperSearch({ onImported }) {
           style={{
             flex: 1,
             color: palette.onSurface,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 14,
           }}
         >
@@ -129,7 +129,7 @@ export function PaperSearch({ onImported }) {
                 borderRadius: 12,
                 backgroundColor: palette.surfaceHigh,
                 color: palette.onSurface,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 14,
               }}
             />
@@ -182,7 +182,7 @@ export function PaperSearch({ onImported }) {
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: palette.fonts.bodyMedium,
                       fontSize: 12,
                     }}
                   >
@@ -198,7 +198,7 @@ export function PaperSearch({ onImported }) {
               key={w}
               style={{
                 color: palette.warn,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 12,
                 marginTop: 10,
               }}
@@ -211,7 +211,7 @@ export function PaperSearch({ onImported }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 13,
                 marginTop: 14,
               }}
@@ -261,7 +261,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
         <Text
           style={{
             color: sourceTint,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 1.2,
           }}
@@ -273,7 +273,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
         numberOfLines={2}
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_600SemiBold",
+          fontFamily: palette.fonts.displaySemi,
           fontSize: 14,
           marginTop: 4,
         }}
@@ -285,7 +285,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
           numberOfLines={2}
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
             marginTop: 4,
           }}
@@ -298,7 +298,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
           numberOfLines={3}
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 12,
             lineHeight: 17,
             marginTop: 6,
@@ -336,7 +336,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
             <Text
               style={{
                 color: palette.accent,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 13,
               }}
             >
@@ -347,7 +347,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 12,
               alignSelf: "center",
             }}
@@ -378,7 +378,7 @@ function PaperRow({ paper, importing, anyImporting, onImport }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
               }}
             >

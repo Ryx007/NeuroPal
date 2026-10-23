@@ -72,7 +72,7 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
             }}
           >
@@ -125,7 +125,7 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
                 borderRadius: 12,
                 backgroundColor: palette.surfaceHigh,
                 color: palette.onSurface,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 15,
                 borderWidth: 1,
                 borderColor: hexValid
@@ -139,7 +139,7 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
               accessibilityRole="alert"
               style={{
                 color: palette.error,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 12,
                 marginTop: 6,
               }}
@@ -164,7 +164,7 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -188,7 +188,7 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
