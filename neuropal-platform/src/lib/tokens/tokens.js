@@ -270,6 +270,73 @@ export const PAL_DEFAULT = {
   extra: "Headphones", talk: "Gentle", voice: "Soft", people: true,
 };
 
+// Pal as an assistant (the buddy sheet): what Pal says, per talk style.
+// Short, kind, plain, second person, no shame. The overwhelmed greeting is
+// the same in every style: no jokes for someone in red. `about` describes
+// the style to the chat model. Read through palSay() (falls back to Gentle).
+export const PAL_LINES = {
+  Gentle: {
+    about: "warm, unhurried and reassuring",
+    helloOkay: "Hi. What would help right now?",
+    helloOff: "A bit off is okay. Let’s keep things small.",
+    helloOver: "I’m here. Nothing is needed right now.",
+    helloUnset: "Hi. I’m here when you need me.",
+    now: "Here’s one thing you could do.",
+    focus: "How about 25 minutes on {task}?",
+    ack: "Nice. I’ll be here.",
+    breakdown: "Tell me the task. I’ll make the first step tiny.",
+    dump: "Put it all here. Sort it later, or never.",
+    dumpEmpty: "Nothing here yet. Anything goes, big or small.",
+    sit: "I’ll sit with you while you work. Pick a length.",
+    sitStart: "I’m right here. Take your time.",
+    sitCheck: "Still with it? Either answer is fine.",
+    sitEnd: "Nice. Want to note what you did?",
+    talk: "Short chats work best. What’s on your mind?",
+    talkOffline: "I can’t reach the server, so chat is off for now. The rest of this sheet works offline.",
+    talkError: "I couldn’t answer just now. Try again in a bit; the rest of this sheet still works.",
+  },
+  Direct: {
+    about: "short, concrete and to the point",
+    helloOkay: "What do you need?",
+    helloOff: "Bit off. Small steps today.",
+    helloOver: "I’m here. Nothing is needed right now.",
+    helloUnset: "Here when you need me.",
+    now: "Do this next.",
+    focus: "25 minutes on {task}. Go?",
+    ack: "Good. I’ll be here.",
+    breakdown: "Name the task. I’ll split it into steps.",
+    dump: "Dump it here. Sort it later.",
+    dumpEmpty: "Empty. Add anything.",
+    sit: "Pick a length. I’ll stay.",
+    sitStart: "Timer’s on. I’m here.",
+    sitCheck: "Halfway. Still with it? Either answer is fine.",
+    sitEnd: "Done. Want to note what you did?",
+    talk: "Keep it short. What’s up?",
+    talkOffline: "No server connection, so no chat right now. Everything else here works offline.",
+    talkError: "No answer this time. Try again later; everything else here works.",
+  },
+  Nerdy: {
+    about: "playful, with light science and physics metaphors, but still plain",
+    helloOkay: "Ready for an experiment? What would help right now?",
+    helloOff: "Low-energy state. Let’s keep the steps small.",
+    helloOver: "I’m here. Nothing is needed right now.",
+    helloUnset: "Hello. Standing by when you need me.",
+    now: "Next experiment: one small thing.",
+    focus: "A 25-minute experiment on {task}?",
+    ack: "Nice. I’ll keep the lab warm.",
+    breakdown: "Give me the task. I’ll split it into tiny, testable steps.",
+    dump: "Offload your working memory here. Sort it later, or never.",
+    dumpEmpty: "Empty buffer. Anything goes.",
+    sit: "I’ll be your lab partner. Pick a length.",
+    sitStart: "Clock’s running. I’m right here.",
+    sitCheck: "Halfway point. Still with it? Either answer is fine.",
+    sitEnd: "Nice. Want to log what you did?",
+    talk: "Short chats work best. What’s on your mind?",
+    talkOffline: "No signal to the server, so chat is paused. Everything else here works offline.",
+    talkError: "That experiment failed. Try again in a bit; the other tools still work.",
+  },
+};
+
 // ----------------------------------------------------------------- Home ----
 // Tiles the Home screen knows how to render, in default order. `hidden`
 // tiles stay in the arranger list so they can be brought back.

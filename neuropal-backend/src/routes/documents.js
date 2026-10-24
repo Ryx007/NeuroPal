@@ -5,9 +5,12 @@ const multer = require('multer');
 
 const { Document, DocumentChunk, ReadingSession } = require('../models');
 const requireAuth = require('../middleware/auth');
+const { requireDocAccess } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { issueDocTicket } = require('../services/docTicket');
 const { ingestDocument, deleteDocumentChunks } = require('../services/ingestPipeline');
-const { buildEpubManifest, readEpubEntry } = require('../services/epubServe');
+const { ensureEpub, resolveEntry, removeUnpacked } = require('../services/epubStore');
+const { CONTENT_TYPES } = require('../services/epubServe');
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
 
@@ -262,7 +265,7 @@ async function findEpubDoc(req, res) {
         userId: req.userId,
         deletedAt: null,
     })
-        .select('title type file')
+        .select('title type file epub')
         .lean();
     if (!doc) {
         res.status(404).json({ error: 'document not found' });
@@ -285,9 +288,9 @@ router.get(
     asyncHandler(async (req, res) => {
         const doc = await findEpubDoc(req, res);
         if (!doc) return;
-        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
         try {
-            const manifest = await buildEpubManifest(String(doc._id), () => fs.readFile(absPath));
+            // unpacked once in a child process; the API never opens the zip
+            const { manifest } = await ensureEpub(doc);
             res.json({ id: doc._id, title: doc.title, ...manifest });
         } catch (err) {
             if (err.code === 'ENOENT') {
@@ -298,33 +301,64 @@ router.get(
     }),
 );
 
+// GET /api/documents/:id/ticket — a 12-hour read pass for THIS document,
+// for the requests that can't send an Authorization header (the EPUB
+// WebView's relative subresources, page images). See services/docTicket.js.
+// LOCAL_MODE has no tokens at all, so it returns ticket: null and clients
+// keep using the plain URLs.
 router.get(
-    '/:id/epub/*',
+    '/:id/ticket',
     requireAuth,
     asyncHandler(async (req, res) => {
-        const doc = await findEpubDoc(req, res);
-        if (!doc) return;
-        const absPath = path.resolve(STORAGE_ROOT, doc.file.relativePath);
-        try {
-            const found = await readEpubEntry(
-                String(doc._id),
-                () => fs.readFile(absPath),
-                req.params[0] || '',
-            );
-            if (!found) return res.status(404).json({ error: 'entry not found in EPUB' });
-            res.set('Content-Type', found.contentType);
-            // chapter assets are immutable for a given upload — let the
-            // WebView cache them instead of re-fetching per chapter turn
-            res.set('Cache-Control', 'private, max-age=86400');
-            res.send(found.data);
-        } catch (err) {
-            if (err.code === 'ENOENT') {
-                return res.status(404).json({ error: 'file not on disk' });
-            }
-            throw err;
-        }
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        })
+            .select('_id')
+            .lean();
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+        if (process.env.LOCAL_MODE === 'true') return res.json({ ticket: null, expiresAt: null });
+        res.json(issueDocTicket(req.user, doc._id));
     }),
 );
+
+const serveEpubEntry = asyncHandler(async (req, res) => {
+    const doc = await findEpubDoc(req, res);
+    if (!doc) return;
+    let dir;
+    try {
+        ({ dir } = await ensureEpub(doc));
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return res.status(404).json({ error: 'file not on disk' });
+        }
+        throw err;
+    }
+    const abs = await resolveEntry(dir, req.params[0] || '');
+    if (!abs) return res.status(404).json({ error: 'entry not found in EPUB' });
+    const ext = path.extname(abs).toLowerCase();
+    res.set('Content-Type', CONTENT_TYPES[ext] || 'application/octet-stream');
+    // chapter assets are immutable for a given upload — let the WebView
+    // cache them instead of re-fetching per chapter turn
+    res.set('Cache-Control', 'private, max-age=86400');
+    // A book's own HTML/SVG opened directly on the API's address must not
+    // run scripts there (no phishing pages on api.ryx007.work). The reader
+    // never loads entries as pages — it injects the chapter text — so this
+    // costs it nothing.
+    res.set('Content-Security-Policy', 'sandbox');
+    // The web reader shows chapters in a sandboxed (opaque-origin) frame,
+    // whose font requests send `Origin: null`. Entries are authorised by
+    // session or ticket, never cookies, so any origin may read them.
+    res.set('Access-Control-Allow-Origin', '*');
+    res.sendFile(abs, { dotfiles: 'deny' });
+});
+
+// Ticket in the PATH, so the publisher's relative hrefs resolve inside it.
+// Must be registered before the plain route, which would otherwise swallow
+// "t/<ticket>/..." as an entry name.
+router.get('/:id/epub/t/:ticket/*', requireDocAccess, serveEpubEntry);
+router.get('/:id/epub/*', requireAuth, serveEpubEntry);
 
 // ---------------------------------------------------------------------------
 // PATCH /api/documents/:id
@@ -444,7 +478,7 @@ const PAGE_RENDER_DPI = 150;
 
 router.get(
     '/:id/page/:n',
-    requireAuth,
+    requireDocAccess,
     asyncHandler(async (req, res) => {
         const doc = await Document.findOne({
             _id: req.params.id,
@@ -475,8 +509,13 @@ router.get(
             const { execFile } = require('child_process');
             const { promisify } = require('util');
             const prefix = path.join(cacheDir, `render-${n}`);
+            const { resolveBin } = require('../services/ocr');
+            const pdftoppm = await resolveBin('pdftoppm');
+            if (!pdftoppm) {
+                return res.status(503).json({ error: 'page rendering needs poppler (pdftoppm) on the server' });
+            }
             await promisify(execFile)(
-                '/opt/homebrew/bin/pdftoppm',
+                pdftoppm,
                 ['-f', String(n), '-l', String(n), '-r', String(PAGE_RENDER_DPI), '-jpeg', '-jpegopt', 'quality=80', absPdf, prefix],
                 { timeout: 60000 },
             );
@@ -488,7 +527,9 @@ router.get(
         }
 
         res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+        // private: these are the user's own pages — no shared cache (e.g. the
+        // Cloudflare edge) may keep a copy.
+        res.setHeader('Cache-Control', 'private, max-age=86400');
         res.sendFile(cached);
     }),
 );
@@ -611,6 +652,7 @@ router.post(
         doc.ingestStage = undefined;
         doc.ingestStartedAt = undefined;
         doc.ingestFinishedAt = undefined;
+        doc.ingestAttempts = 0; // a manual retry gets fresh resume attempts
         await doc.save();
 
         ingestDocument(doc._id, { forceMath }).catch((err) => {
@@ -629,19 +671,21 @@ router.post(
 // GPU). Returns immediately with the queue size; progress is visible per-doc
 // in the library like any other ingest.
 // ---------------------------------------------------------------------------
-let reingestAllRunning = false;
+// One run per user at a time (a shared server has many users).
+const reingestAllRunning = new Set();
 router.post(
     '/reingest-all',
     requireAuth,
     asyncHandler(async (req, res) => {
-        if (reingestAllRunning) {
+        const who = String(req.userId);
+        if (reingestAllRunning.has(who)) {
             return res.status(409).json({ error: 'a reingest-all run is already in progress' });
         }
         const docs = await Document.find({ userId: req.userId, deletedAt: null })
             .select('_id status')
             .sort({ createdAt: 1 })
             .lean();
-        reingestAllRunning = true;
+        reingestAllRunning.add(who);
         (async () => {
             try {
                 for (const d of docs) {
@@ -649,7 +693,7 @@ router.post(
                     await Document.updateOne(
                         { _id: d._id },
                         {
-                            $set: { status: 'pending', progress: 0 },
+                            $set: { status: 'pending', progress: 0, ingestAttempts: 0 },
                             $unset: { ingestError: 1, ingestStage: 1, ingestStartedAt: 1, ingestFinishedAt: 1 },
                         },
                     );
@@ -661,7 +705,7 @@ router.post(
                 // eslint-disable-next-line no-console
                 console.error('[reingest-all] stopped:', err);
             } finally {
-                reingestAllRunning = false;
+                reingestAllRunning.delete(who);
             }
         })();
         res.json({ ok: true, queued: docs.length });
@@ -693,6 +737,9 @@ router.delete(
 
         doc.deletedAt = new Date();
         await doc.save();
+        // the unpacked EPUB is derived data — gone now; the original file
+        // stays for the 30-day restore window
+        if (doc.type === 'epub') await removeUnpacked(doc._id);
 
         res.json({ ok: true });
     }),

@@ -19,23 +19,32 @@ const execFileP = promisify(execFile);
 const OCR_DPI = 200;
 const CONCURRENCY = 3;
 
-// Resolve binaries against PATH but fall back to the Homebrew location —
-// pm2's resurrected environment doesn't always carry the interactive PATH.
-const BREW_BIN = '/opt/homebrew/bin';
+// Resolve binaries against PATH, then the usual install locations — pm2's
+// resurrected environment doesn't always carry the interactive PATH.
+// (Looking for the file, not running `<bin> --version`: poppler's tools have
+// no --version flag and exit 1, which made every Linux host look tool-less.)
+const EXTRA_BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
+const _resolved = new Map();
 
 async function resolveBin(name) {
-    try {
-        await execFileP(name, ['--version'], { timeout: 5000 });
-        return name;
-    } catch (e) {
-        const brewPath = path.join(BREW_BIN, name);
+    if (_resolved.has(name)) return _resolved.get(name);
+    const dirs = [
+        ...String(process.env.PATH || '').split(path.delimiter).filter(Boolean),
+        ...EXTRA_BIN_DIRS,
+    ];
+    let found = null;
+    for (const dir of dirs) {
+        const candidate = path.join(dir, name);
         try {
-            await fs.access(brewPath);
-            return brewPath;
-        } catch (e2) {
-            return null;
+            await fs.access(candidate, require('fs').constants.X_OK);
+            found = candidate;
+            break;
+        } catch (e) {
+            // not here
         }
     }
+    _resolved.set(name, found);
+    return found;
 }
 
 let _bins; // cached {pdftoppm, tesseract} or null
@@ -111,4 +120,4 @@ async function ocrPdf(absPath, { onProgress } = {}) {
     }
 }
 
-module.exports = { ocrPdf, isOcrAvailable };
+module.exports = { ocrPdf, isOcrAvailable, resolveBin };

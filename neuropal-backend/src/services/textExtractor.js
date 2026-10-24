@@ -242,6 +242,9 @@ async function extractText(filePath, docType, opts = {}) {
     }
 
     if (docType === 'docx') {
+        // check the zip's declared sizes before mammoth inflates anything
+        const AdmZip = require('adm-zip');
+        require('./zipBudget').assertZipBudget(new AdmZip(buf), 'This document');
         const mammoth = require('mammoth');
         const { value } = await mammoth.extractRawText({ buffer: buf });
         const text = (value || '').trim();
@@ -390,6 +393,7 @@ function cleanPdfPages(pages) {
 function extractEpub(buf) {
     const AdmZip = require('adm-zip'); // lazy — only loaded for EPUB uploads
     const zip = new AdmZip(buf);
+    require('./zipBudget').assertZipBudget(zip, 'This book');
     const readEntry = (name) => {
         const clean = name.replace(/^\/+/, '');
         const entry = zip.getEntry(clean);
@@ -408,14 +412,14 @@ function extractEpub(buf) {
         : '';
 
     const manifest = {};
-    for (const m of opf.matchAll(/<item\b[^>]*>/g)) {
+    for (const m of opf.matchAll(/<item\b[^<>]*>/g)) {
         const tag = m[0];
         const id = (tag.match(/\bid=["']([^"']+)["']/) || [])[1];
         const href = (tag.match(/\bhref=["']([^"']+)["']/) || [])[1];
         if (id && href) manifest[id] = href;
     }
 
-    const spineIds = [...opf.matchAll(/<itemref\b[^>]*\bidref=["']([^"']+)["']/g)].map(
+    const spineIds = [...opf.matchAll(/<itemref\b[^<>]*\bidref=["']([^"']+)["']/g)].map(
         (m) => m[1],
     );
 
@@ -520,7 +524,7 @@ function epubNavTitles(opf, opfDir, readEntry) {
 
     // EPUB3 nav document — scope to the epub:type="toc" <nav> when present
     // (landmarks/page-list navs would otherwise pollute the chapter list)
-    const navHref = (opf.match(/<item\b[^>]*properties=["'][^"']*\bnav\b[^"']*["'][^>]*>/) || [])[0]
+    const navHref = (opf.match(/<item\b[^<>]*properties=["'][^"'<>]*\bnav\b[^"'<>]*["'][^<>]*>/) || [])[0]
         ?.match(/\bhref=["']([^"']+)["']/)?.[1];
     if (navHref) {
         const navPath = resolveZipPath(opfDir, navHref);
@@ -528,8 +532,8 @@ function epubNavTitles(opf, opfDir, readEntry) {
         if (nav) {
             const navDir = dirOf(navPath);
             const tocScope =
-                (nav.match(/<nav\b[^>]*epub:type=["']toc["'][\s\S]*?<\/nav>/) || [])[0] || nav;
-            for (const m of tocScope.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/g)) {
+                (nav.match(/<nav\b[^<>]*epub:type=["']toc["'][\s\S]{0,2000000}?<\/nav>/) || [])[0] || nav;
+            for (const m of tocScope.matchAll(/<a\b[^<>]*href=["']([^"'<>]+)["'][^<>]*>([\s\S]{0,4000}?)<\/a>/g)) {
                 put(navDir, m[1], m[2].replace(/<[^>]+>/g, ' '));
             }
             if (titles.size > 0) return { titles, byBase };
@@ -537,14 +541,14 @@ function epubNavTitles(opf, opfDir, readEntry) {
     }
 
     // EPUB2 ncx
-    const ncxHref = (opf.match(/<item\b[^>]*media-type=["']application\/x-dtbncx\+xml["'][^>]*>/) || [])[0]
+    const ncxHref = (opf.match(/<item\b[^<>]*media-type=["']application\/x-dtbncx\+xml["'][^<>]*>/) || [])[0]
         ?.match(/\bhref=["']([^"']+)["']/)?.[1];
     if (ncxHref) {
         const ncxPath = resolveZipPath(opfDir, ncxHref);
         const ncx = readEntry(ncxPath);
         if (ncx) {
             const ncxDir = dirOf(ncxPath);
-            for (const m of ncx.matchAll(/<navPoint[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<content[^>]*src=["']([^"']+)["']/g)) {
+            for (const m of ncx.matchAll(/<navPoint\b[^<>]*>[\s\S]{0,4000}?<text>([\s\S]{0,4000}?)<\/text>[\s\S]{0,4000}?<content\b[^<>]*src=["']([^"'<>]+)["']/g)) {
                 put(ncxDir, m[2], m[1]);
             }
         }
@@ -563,14 +567,14 @@ function firstLineTitle(text) {
 
 function htmlToText(html) {
     let s = String(html);
-    s = s.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ');
-    const body = s.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
+    s = s.replace(/<(script|style)\b[^<>]*>[\s\S]{0,1000000}?<\/\1>/gi, ' ');
+    const body = s.match(/<body\b[^<>]*>([\s\S]*)<\/body>/i);
     if (body) s = body[1];
     // Issue 1(B): equations embedded as images/MathML must survive as
     // PLACEHOLDER TOKENS, not vanish — publisher math EPUBs put every
     // formula in an <img alt="..."> (or <math>). Alt text when present,
     // else a bare "equation" marker; the reader/RAG treat it as one unit.
-    s = s.replace(/<img\b[^>]*>/gi, (tag) => {
+    s = s.replace(/<img\b[^<>]*>/gi, (tag) => {
         const alt = ((tag.match(/\balt=["']([^"']*)["']/i) || [])[1] || '').trim();
         const cls = (tag.match(/\bclass=["']([^"']*)["']/i) || [])[1] || '';
         // Publisher EPUBs (verified: Griffiths) ship alt="image" on EVERY
@@ -580,10 +584,10 @@ function htmlToText(html) {
         if (/math/i.test(cls)) return ` [${genericAlt ? 'equation' : alt}] `;
         return ` [${genericAlt ? 'image' : alt}] `;
     });
-    s = s.replace(/<math\b[\s\S]*?<\/math>/gi, ' [equation] ');
+    s = s.replace(/<math\b[^<>]*>[\s\S]{0,200000}?<\/math>/gi, ' [equation] ');
     // Closing block tags end a paragraph; line-level tags become newlines.
     s = s.replace(/<\/(p|div|h[1-6]|li|tr|blockquote|section|article|figcaption|dt|dd)>/gi, '\n\n');
-    s = s.replace(/<(br|hr)\b[^>]*\/?>/gi, '\n');
+    s = s.replace(/<(br|hr)\b[^<>]*\/?>/gi, '\n');
     // table cells separate with a space (they'd glue once tags strip clean)
     s = s.replace(/<\/(td|th)>/gi, ' ');
     // Issue 1(B): INLINE tags (<em>, <i>, <b>, <span>, <sub>…) must not
@@ -663,6 +667,7 @@ function extractPptx(buf) {
     const { XMLParser } = require('fast-xml-parser');
 
     const zip = new AdmZip(buf);
+    require('./zipBudget').assertZipBudget(zip, 'This presentation');
     const slideEntries = zip
         .getEntries()
         .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))

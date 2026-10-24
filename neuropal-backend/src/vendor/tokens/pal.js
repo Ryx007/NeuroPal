@@ -1,7 +1,7 @@
 // GENERATED from packages/tokens/src — do not edit here.
 // Change packages/tokens, then run: node packages/tokens/scripts/sync.js
 import { contrastRatio, hexToRgb } from "./color.js";
-import { PAL_DEFAULT, PAL_OPTIONS } from "./tokens.js";
+import { PAL_DEFAULT, PAL_LINES, PAL_OPTIONS } from "./tokens.js";
 
 // Own keys only: a synced value like "constructor" or "__proto__" must fall
 // back to the default, never resolve to an inherited Object member.
@@ -28,6 +28,17 @@ export function normalizePal(input = {}) {
 export function palLine(pal, task = "the CPI notes") {
   const p = normalizePal(pal);
   return PAL_OPTIONS.talk[p.talk].replace("{task}", task);
+}
+
+// One of Pal's assistant lines (PAL_LINES) in the user's talk style. A key a
+// style doesn't define falls back to Gentle; unknown keys give "". `vars`
+// fill {placeholders}; a placeholder without a value stays as written.
+export function palSay(pal, key, vars = {}) {
+  const p = normalizePal(pal);
+  const style = own(PAL_LINES, p.talk) ? PAL_LINES[p.talk] : PAL_LINES.Gentle;
+  const line = own(style, key) ? style[key] : own(PAL_LINES.Gentle, key) ? PAL_LINES.Gentle[key] : "";
+  const v = vars && typeof vars === "object" ? vars : {};
+  return line.replace(/\{(\w+)\}/g, (m, k) => (own(v, k) ? String(v[k]) : m));
 }
 
 // Face ink (eyes/mouth) that reads on the chosen body colour.

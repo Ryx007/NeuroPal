@@ -69,8 +69,23 @@ call (Gemini free tier) for reasoning.
 ## 4. Backend API contract (all under `/api`, port 4000)
 
 Auth: `LOCAL_MODE=true` → every request is the fixed local user
-(`local@neuropal.app`); no token needed. JWT path intact for
-`LOCAL_MODE=false` (`Authorization: Bearer <jwt>` or `x-session`).
+(`local@neuropal.app`); no token needed. `LOCAL_MODE=false` (the public
+VPS, `deploy/vps/`, 2026-10-24) → `Authorization: Bearer <jwt>` (or
+`x-session`) on every route. Session JWT claims `{sub, v, at}`: `v` =
+User.tokenVersion (bumped by logout-all / password change → every older
+token 401s), `at` = the original sign-in (refreshes stop 90 days after it).
+Tokens last 30 days and `/auth/me` swaps a day-old one for a fresh one. A
+JWT with any `scope` claim is never accepted as a session (that's a
+document ticket). The server refuses to start with
+`PUBLIC_DEPLOYMENT=true` + `LOCAL_MODE=true`, or a weak `JWT_SECRET`.
+Passwords: scrypt (Node built-in, thread pool, concurrency-gated —
+`services/passwords.js`); old bcrypt hashes still verify and are upgraded
+on login. Login/register: rate-limited per network (/64 for IPv6, behind
+Cloudflare `CF-Connecting-IP`), 8 attempts per account per 15 min counted
+BEFORE the check. AI routes spend a per-user daily budget
+(`services/aiBudget.js`, `AI_DAILY_LIMIT_PER_USER`, optional
+`AI_DAILY_LIMIT_TOTAL`); a public server ignores a request's `provider`
+(allowlist in `aiProvider.activeProvider`).
 
 | Endpoint | In | Out (essentials) |
 |---|---|---|
@@ -78,7 +93,11 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `GET /api/auth/me` | — | public user `{id, email, name, tweaks…, appearance}` (added 2026-07-07; client boot probe; `appearance` since v2) |
 | `GET /api/me/appearance` | — | v2 (2026-10-23): `{appearance}` — the shared look object (skin, Classic theme/accent, Signal settings, Pal, Home layout; shape in `docs/PLATFORM-PLAN.md` §3.2); `null` when never saved |
 | `PUT /api/me/appearance` | `{appearance}` | v2: normalised by `packages/tokens` (vendored at `src/vendor/tokens/`, ESM, loaded by dynamic import) → `{appearance}`. **Last write wins by `updatedAt`:** an incoming copy OLDER than the stored one gets **409 `{error:'stale appearance', appearance:<stored>}`** and the client adopts it. Non-object body → 422. Tests: `test/me.appearance.test.js` (in-memory Mongo) |
-| `POST /api/auth/register` / `login` | `{email,password[,name]}` | `{token, user}` |
+| `GET /api/auth/config` | — (public) | `{localMode, signup:'invite'\|'open'\|'closed'}` — the sign-in screen asks before showing fields |
+| `POST /api/auth/register` | `{email,password[,name,inviteCode]}` | 201 `{token, user}`; 403 wrong/missing invite (`SIGNUP_MODE=invite` + `SIGNUP_INVITE_CODE`, the default; `open` is refused on a PUBLIC_DEPLOYMENT); 409 taken; 429 rate-limited |
+| `POST /api/auth/login` | `{email,password}` | `{token, user}`; 401 wrong; 429 `{error, retryAfterSec}` + Retry-After |
+| `POST /api/auth/logout-all` | — | ends every session of the account (tokenVersion++) |
+| `POST /api/auth/password` | `{currentPassword,newPassword}` | `{token}` — and every other session ends |
 | `POST /api/documents/upload` | multipart field `file` (+`title`,`subtitle`) | 201 Document (status `pending`; ingest is fire-and-forget) |
 | `GET /api/documents` | `?type=&status=&q=` all optional (P4; `status=processing` = the 4 in-flight states; `q` = escaped title/subtitle substring; bad values → 400) | Document[] (newest first, soft-deleted excluded) — each doc carries `readingProgress` 0..1 + `lastReadAt` joined from ReadingSession (real reading state; `progress` remains INGEST progress) |
 | `GET /api/documents/:id` | — | Document — poll this or the list for `status`/`progress` |
@@ -95,17 +114,18 @@ Auth: `LOCAL_MODE=true` → every request is the fixed local user
 | `POST /api/documents/:id/explain` | `{passage, depth[,provider]}` | same envelope; retrieval-grounded on the passage |
 | `POST /api/documents/:id/flashcards` | `{count≤40[,provider]}` | `{cards:[{front,back}], …}` — schema-enforced structured output (`aiProvider.generateStructured`), NOT marker parsing (models won't hold a text format) |
 | `PATCH /api/documents/:id` | `{title?,subtitle?}` | rename (library long-press UI) |
-| `GET /api/documents/:id/page/:n` | — | rendered PDF page JPEG (reader "Original pages" view), disk-cached; works for `pdf` and `arxiv` types |
+| `GET /api/documents/:id/ticket` | — | `{ticket, expiresAt}` — 12 h read pass for ONE document (JWT `{sub,v,doc,scope:'doc'}`), for requests that can't send a header; `{ticket:null}` in LOCAL_MODE |
+| `GET /api/documents/:id/page/:n` | `?t=<ticket>` optional | rendered PDF page JPEG (reader "Original pages" view), disk-cached, `Cache-Control: private`; works for `pdf` and `arxiv` types. pdftoppm found via PATH (Linux + Homebrew) |
 | `GET /api/documents/:id/annotations` | — | Annotation[] (highlights + bookmarks, word-index anchored) |
 | `POST /api/documents/:id/annotations` | `{kind:'highlight'\|'bookmark', wordStart, wordEnd[,color,excerpt,note,page]}` | 201 Annotation |
 | `PATCH /api/annotations/:id` | `{color?,note?}` | updated Annotation |
 | `DELETE /api/annotations/:id` | — | soft-delete |
 | `GET /api/documents/:id/epub-manifest` | — | Issue 1 (2026-07-19): `{id,title,spine:[{index,href}],toc,pageList}` — spine in reading order (linear=no skipped), `toc` = NESTED tree `[{title,href,anchor,children[]}]` from the EPUB3 nav doc (`epub:type="toc"`) with toc.ncx fallback, `pageList` = REAL print pages `[{page,href,anchor}]` from `epub:type="page-list"` (empty when the book ships none — never fabricated). EPUB docs only (400 otherwise); works the moment the file is on disk (reading never waits for ingest) |
-| `GET /api/documents/:id/epub/<path>` | — | any zip entry (chapter XHTML, publisher css, images, fonts) with correct content-type + 24h private cache. Path-traversal-safe: entries are looked up as ZIP KEYS (never filesystem), `..` rejected. The reader's `<base>` tag points here so publisher-relative hrefs resolve |
+| `GET /api/documents/:id/epub/<path>` and `…/epub/t/<ticket>/<path>` | — | one file of the book (chapter XHTML, css, images, fonts), correct content-type, 24 h private cache, `CSP: sandbox`, `ACAO: *`. Since 2026-10-24 the EPUB is unpacked ONCE in a child process (`services/epubStore.js` → `epubUnpack.js`, zip budget: ≤ 10 000 entries, ≤ 64 MB each, ≤ 1 GB total) into `STORAGE_ROOT/epub/<docId>/` and served with sendFile — the API process never opens the zip. The ticket sits in the PATH so the reader's `<base>` makes every relative href inherit it |
 | `GET /api/documents/:id/raw` | — | `{id,title,type,text}` — verbatim on-disk source; **md/txt only** (400 otherwise) |
 | `PUT /api/documents/:id/raw` | `{text}` | overwrites the file, wipes chunks, reingests ("edit on the fly") |
 | `GET /api/search/papers` | `?q=…&source=arxiv\|scholar\|all` | `{query, results:[{source,id,title,authors,year,venue,abstract,pdfUrl,url,citationCount}], warnings}` — arXiv Atom API + Semantic Scholar (OpenAlex auto-fallback when S2 rate-limits; optional `SEMANTIC_SCHOLAR_API_KEY` in .env) |
-| `POST /api/search/papers/import` | `{title, pdfUrl(https)[,source,authors,year,id]}` | 201 Document — backend downloads the PDF (rejects non-PDF bodies) and ingests |
+| `POST /api/search/papers/import` | `{title, pdfUrl(https)[,source,authors,year,id]}` | 201 Document — downloads through `services/safeFetch.js` (public addresses only, DNS-pinned, every redirect re-checked, streamed to disk ≤ 150 MB, generic errors), rejects non-PDF bodies, ingests |
 | `POST /api/viz/spec` | `{prompt[,provider,force]}` | P5: `{template:'<id>'}` when the prompt matches a VERIFIED client template (the LLM is never allowed to re-derive physics we ship correct: HOM, double-slit, wells/tunnelling, Mach–Zehnder, hydrogen (2D+3D), Bloch, pendulum, standing waves, Lissajous — `force:true` bypasses); else `{title,blurb,sliders,drawJs,model,provider}` — LLM-written canvas sim, hard-validated via `utils/vizSpec.js` (bad spec → 502), ALWAYS labelled "AI-generated — unverified physics" in the UI |
 | `GET/POST /api/simulations`, `DELETE /:id` | POST: `{title, kind:'template'\|'ai', templateId?/spec?}` | P5 saved sims (model `SavedSimulation`, soft-delete). The SPEC is persisted, never a render — saved sims re-open live and sync across devices; 'ai' specs re-run the same validator before persisting |
 | `GET/POST /api/notes`, `PUT/DELETE /:id` | GET: `?documentId=` optional. POST/PUT: `{kind:'typed'\|'ink'\|'canvas', title, contentMarkdown?, strokes?, blocks?, documentId?, anchor?{wordStart,wordEnd,page}}` | P6 notes + Issue 2 (2026-07-19) unified canvas. `'canvas'` = ONE surface: `blocks` (positioned text boxes `[{id,type:'text',x,y,w,content:<Markdown>}]`, `w:-1` = stretch to right margin, numeric x/y/w validated server-side) + `strokes` (`[{points:[[x,y]…],color,width}]`) together. Legacy typed/ink open losslessly in the unified editor and upgrade on first save — the ONLY kind change the PUT permits is `→ 'canvas'` (typed's `contentMarkdown` field is kept alongside the migrated block). `anchor` pins a note to a reader position |

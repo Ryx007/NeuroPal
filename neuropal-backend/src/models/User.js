@@ -107,6 +107,10 @@ const UserSchema = new Schema(
         },
         // Argon2id hash. Never store plaintext, never log this field.
         passwordHash: { type: String, required: true, select: false },
+        // Bumped by "sign out everywhere" and by a password change: every
+        // session token carries the version it was issued under (claim `v`),
+        // and a mismatch is a 401.
+        tokenVersion: { type: Number, default: 0 },
 
         // Display
         name: { type: String, trim: true, maxlength: 80 },

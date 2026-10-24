@@ -111,7 +111,9 @@ async function listTexFiles(dir) {
         for (const entry of await fs.readdir(d, { withFileTypes: true })) {
             const full = path.join(d, entry.name);
             if (entry.isDirectory()) await walk(full);
-            else if (entry.name.toLowerCase().endsWith('.tex')) out.push(full);
+            // regular files only: a symlink in the tarball (e.g. to
+            // /proc/self/environ) must never be read as the main .tex
+            else if (entry.isFile() && entry.name.toLowerCase().endsWith('.tex')) out.push(full);
         }
     };
     await walk(dir);

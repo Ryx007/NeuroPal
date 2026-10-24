@@ -59,3 +59,7 @@ neuropal-expo-app/ios/
 
 # Kotlin compiler session files written during Android builds
 .kotlin/
+
+# ── VPS deploy: made on the server, never committed ──
+deploy/vps/backups/
+deploy/vps/cloudflared/

@@ -3,6 +3,7 @@ const { Router } = require('express');
 const { Document, DocumentChunk, ChatMessage } = require('../models');
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { spendAiBudget } = require('../services/aiBudget');
 const { getQdrant } = require('../db/qdrant');
 const { embedText, getModelName } = require('../services/embedder');
 const { generateAnswer, generateStructured, activeProvider } = require('../services/aiProvider');
@@ -222,6 +223,7 @@ router.post(
         const depthSpec = DEPTHS[depth] || DEPTHS.intuitive;
 
         const chunks = await sampleChunks(doc._id, budgetFor(provider));
+        if (!spendAiBudget(req, res)) return;
         const result = await generateAnswer({
             question: `Summarize this document. Produce ${depthSpec}. Use Markdown headers and bullet lists.`,
             contextChunks: chunks,
@@ -253,6 +255,7 @@ router.post(
         const n = Math.max(1, Math.min(25, parseInt(count, 10) || 10));
 
         const chunks = await sampleChunks(doc._id, budgetFor(provider));
+        if (!spendAiBudget(req, res)) return;
         const result = await generateAnswer({
             question:
                 `Create ${n} practice questions for ACTIVE RECALL from this document ` +
@@ -288,6 +291,7 @@ router.post(
         const { provider } = req.body || {};
 
         const chunks = await sampleChunks(doc._id, budgetFor(provider));
+        if (!spendAiBudget(req, res)) return;
         const result = await generateAnswer({
             question:
                 'Produce a one-page exam cheatsheet from this document as dense, structured Markdown: ' +
@@ -325,6 +329,7 @@ router.post(
         const n = Math.max(3, Math.min(40, parseInt(count, 10) || 15));
 
         const chunks = await sampleChunks(doc._id, budgetFor(provider));
+        if (!spendAiBudget(req, res)) return;
         const result = await generateStructured({
             task:
                 `Create ${n} flashcards for spaced-repetition revision of this document. ` +
@@ -408,6 +413,7 @@ router.post(
             comprehensive: 'thoroughly, including the underlying assumptions and how it connects to the rest of the document',
         };
 
+        if (!spendAiBudget(req, res)) return;
         const result = await generateAnswer({
             question:
                 `Explain this passage ${DEPTHS[depth] || DEPTHS.intuitive}:\n\n"${passage.trim().slice(0, 2000)}"`,

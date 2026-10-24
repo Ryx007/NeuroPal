@@ -8,6 +8,7 @@ const { Document } = require('../models');
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const { ingestDocument } = require('../services/ingestPipeline');
+const { downloadPublicHttps } = require('../services/safeFetch');
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
 
@@ -24,7 +25,7 @@ const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
 // pdfUrl===null means "no open-access PDF" — the client shows the result
 // but disables one-tap import for it.
 
-const ARXIV_API = 'http://export.arxiv.org/api/query';
+const ARXIV_API = 'https://export.arxiv.org/api/query';
 const S2_API = 'https://api.semanticscholar.org/graph/v1/paper/search';
 const RESULTS_PER_SOURCE = 15;
 
@@ -243,35 +244,42 @@ router.post(
             }
         }
 
-        let response;
-        try {
-            response = await axios.get(pdfUrl, {
-                responseType: 'arraybuffer',
-                timeout: 120000,
-                maxContentLength: IMPORT_MAX_BYTES,
-                maxRedirects: 5,
-            });
-        } catch (err) {
-            return res.status(502).json({
-                error: `could not download the PDF: ${err.message}`,
-            });
-        }
-
-        const buf = Buffer.from(response.data);
-        // Publishers sometimes serve an HTML interstitial at the "pdf" URL.
-        if (buf.slice(0, 5).toString('latin1') !== '%PDF-') {
-            return res.status(502).json({
-                error: 'the link did not return a PDF (probably a paywall or landing page) — open the paper page instead',
-            });
-        }
-
+        // Straight to disk through the SSRF-safe downloader (services/
+        // safeFetch.js): public https addresses only, every redirect checked,
+        // size-capped, and errors that don't describe the server's network.
         const dir = path.resolve(STORAGE_ROOT, 'documents', String(req.userId));
         await fs.mkdir(dir, { recursive: true });
         const safe = String(id || title)
             .replace(/[^A-Za-z0-9._-]/g, '_')
             .slice(0, 120);
         const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}.pdf`;
-        await fs.writeFile(path.join(dir, filename), buf);
+        const dest = path.join(dir, filename);
+        let downloaded;
+        try {
+            downloaded = await downloadPublicHttps(pdfUrl, { destPath: dest, maxBytes: IMPORT_MAX_BYTES, timeoutMs: 90000 });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('[paper-import] download failed:', err.message);
+            return res.status(502).json({
+                error: `could not download the PDF${err.expose ? ` — ${err.message}` : ''}`,
+            });
+        }
+
+        // Publishers sometimes serve an HTML interstitial at the "pdf" URL.
+        const head = Buffer.alloc(5);
+        const fh = await fs.open(dest, 'r');
+        try {
+            await fh.read(head, 0, 5, 0);
+        } finally {
+            await fh.close();
+        }
+        if (head.toString('latin1') !== '%PDF-') {
+            await fs.unlink(dest).catch(() => {});
+            return res.status(502).json({
+                error: 'the link did not return a PDF (probably a paywall or landing page) — open the paper page instead',
+            });
+        }
+        const buf = { length: downloaded.bytes };
 
         const doc = await Document.create({
             userId: req.userId,

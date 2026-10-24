@@ -2,6 +2,7 @@ const { Router } = require('express');
 
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { spendAiBudget } = require('../services/aiBudget');
 const { generateStructured } = require('../services/aiProvider');
 
 // AI-generated physics visualizations. The client's built-in templates are
@@ -114,6 +115,7 @@ router.post(
             return res.json({ template });
         }
 
+        if (!spendAiBudget(req, res)) return;
         const { data, model, provider } = await generateStructured({
             task:
                 `Create an interactive canvas visualization of: ${prompt}\n` +
