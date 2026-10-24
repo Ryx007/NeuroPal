@@ -14,9 +14,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:neuropal/app.dart';
+import 'package:neuropal/data/session_store.dart';
 import 'package:neuropal/reader/reader_controller.dart';
 import 'package:neuropal/services.dart';
+import 'package:neuropal/widgets/np_buttons.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +43,8 @@ Future<AppServices> boot(
   WidgetTester tester,
   Map<String, Object> prefs, {
   bool online = false,
+  http.Client? client,
+  SessionStore? sessions,
 }) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures(disableAnimations: true);
@@ -53,7 +58,7 @@ Future<AppServices> boot(
   final services = AppServices(
     prefs: await SharedPreferences.getInstance(),
     engine: FakeSpeechEngine(),
-    httpClient: online
+    httpClient: client ?? (online
         ? fakeBackend(
             routes: {
               'POST /api/documents/a/query': (_) => jsonResponse({
@@ -117,7 +122,8 @@ Future<AppServices> boot(
               ]),
             },
           )
-        : offlineBackend(),
+        : offlineBackend()),
+    sessions: sessions,
   );
   await tester.pumpWidget(NeuroPalApp(services: services));
   await tester.pumpAndSettle();
@@ -235,6 +241,72 @@ void main() {
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).first, const Offset(0, -700));
     await shot(tester, 'settings-classic-2');
+  });
+
+  // ---- sign-in (a server with accounts, no session) -----------------------
+  for (final (name, look) in [('classic', null), ('signal', signal)]) {
+    testWidgets('sign-in-$name', (tester) async {
+      await boot(
+        tester,
+        {'np.appearance': ?look},
+        client: FakeAccountsServer().client(),
+      );
+      await shot(tester, 'sign-in-$name');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Email'),
+        'ryx@example.com',
+      );
+      await tester.enterText(find.widgetWithText(TextField, 'Password'), 'x');
+      await tester.tap(find.widgetWithText(NpButton, 'Sign in'));
+      await shot(tester, 'sign-in-error-$name');
+      await tester.tap(find.widgetWithText(NpButton, 'Create an account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(NpButton, 'Create account'));
+      await shot(tester, 'sign-in-create-$name');
+    });
+  }
+
+  for (final (name, look) in [('classic', null), ('signal', signal)]) {
+    testWidgets('settings-account-$name', (tester) async {
+      final server = FakeAccountsServer(
+        routes: {'GET /api/documents': (_) => jsonResponse([])},
+      );
+      await boot(
+        tester,
+        {'np.appearance': ?look},
+        client: server.client(),
+        sessions: SessionStore.memory({
+          cloudBase: server.issue('ryx@example.com'),
+        }),
+      );
+      await tester.tap(find.byIcon(Icons.menu_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Sign out'),
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.drag(find.byType(ListView).first, const Offset(0, -200));
+      await shot(tester, 'settings-account-$name');
+    });
+  }
+
+  testWidgets('bigtext-sign-in-signal', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await boot(
+      tester,
+      {'np.appearance': signal},
+      client: FakeAccountsServer().client(),
+    );
+    await shot(tester, 'bigtext-sign-in-signal');
   });
 
   testWidgets('reader-collapsed-and-sheets-signal', (tester) async {

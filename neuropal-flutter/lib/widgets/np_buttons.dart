@@ -18,6 +18,7 @@ class NpButton extends StatelessWidget {
     this.kind = NpButtonKind.primary,
     this.semanticLabel,
     this.expand = false,
+    this.minHeight,
   });
 
   final String label;
@@ -29,18 +30,23 @@ class NpButton extends StatelessWidget {
   /// Fill the available width.
   final bool expand;
 
+  /// Overrides the default height (primary 48, ghost 44), e.g. 48 for
+  /// ghost buttons on screens that use 48 dp targets throughout.
+  final double? minHeight;
+
   @override
   Widget build(BuildContext context) {
     final s = NpStyle.of(context);
     final primary = kind == NpButtonKind.primary;
     final radius = s.isSignal ? s.radiusMedium : s.radiusControl;
     final fg = primary ? s.accentInk : s.text;
+    final height = minHeight ?? (primary ? 48.0 : 44.0);
 
     return NpPressable(
       onTap: onPressed,
       semanticLabel: semanticLabel,
       focusRadius: radius.clamp(0, 24),
-      minSize: Size(44, primary ? 48 : 44),
+      minSize: Size(44, height),
       builder: (context, pressed, focused) {
         final content = Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -84,7 +90,7 @@ class NpButton extends StatelessWidget {
         );
 
         Widget button = ConstrainedBox(
-          constraints: BoxConstraints(minHeight: primary ? 48 : 44),
+          constraints: BoxConstraints(minHeight: height),
           child: DecoratedBox(decoration: decoration, child: content),
         );
 

@@ -1,5 +1,6 @@
 // Settings → Backend connection: which addresses are tried, which one is
-// in use, why the others failed, and a custom address field.
+// in use, why the others failed, and a custom address field. The sign-in
+// screen shows the same body in a sheet ("Change server").
 
 import 'dart:async';
 
@@ -12,14 +13,27 @@ import '../widgets/np_buttons.dart';
 import '../widgets/np_text.dart';
 import 'settings_section.dart';
 
-class BackendSection extends StatefulWidget {
+class BackendSection extends StatelessWidget {
   const BackendSection({super.key});
 
   @override
-  State<BackendSection> createState() => _BackendSectionState();
+  Widget build(BuildContext context) {
+    return const SettingsSection(
+      title: 'Backend connection',
+      children: [BackendConnectionBody()],
+    );
+  }
 }
 
-class _BackendSectionState extends State<BackendSection> {
+/// The section's content without its panel and title.
+class BackendConnectionBody extends StatefulWidget {
+  const BackendConnectionBody({super.key});
+
+  @override
+  State<BackendConnectionBody> createState() => _BackendConnectionBodyState();
+}
+
+class _BackendConnectionBodyState extends State<BackendConnectionBody> {
   late final TextEditingController _address = TextEditingController(
     text: context.read<Backend>().customAddress ?? '',
   );
@@ -57,8 +71,8 @@ class _BackendSectionState extends State<BackendSection> {
         status = 'Offline — no address answered';
     }
 
-    return SettingsSection(
-      title: 'Backend connection',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Semantics(
           liveRegion: true,
@@ -86,7 +100,8 @@ class _BackendSectionState extends State<BackendSection> {
           ),
         const SizedBox(height: 6),
         Text(
-          'Tried in this order; the first one that answers is used.',
+          'Tried in this order; the first one that answers is used. Each '
+          'server has its own sign-in.',
           style: s.fonts.body(13, s.textFaint),
         ),
         const SizedBox(height: 14),

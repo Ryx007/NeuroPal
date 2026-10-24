@@ -14,10 +14,13 @@ dependencies:
 
   # State: ChangeNotifier + provider only (see README "Code style").
   provider: ^6.1.5+1
-  # Backend calls (plain HTTP over Tailscale/LAN).
+  # Backend calls (HTTPS to the cloud server, plain HTTP over Tailscale/LAN).
   http: ^1.6.0
   # Settings + the appearance object, persisted on the device.
   shared_preferences: ^2.5.6
+  # Sign-in sessions (one token per server): Android Keystore-backed
+  # encryption / iOS Keychain, never plain shared_preferences.
+  flutter_secure_storage: ^11.2.0
   # On-device text-to-speech (Android TextToSpeech / iOS AVSpeechSynthesizer).
   flutter_tts: ^4.2.5
   # Renders the Markdown answers from the Ask sheet.

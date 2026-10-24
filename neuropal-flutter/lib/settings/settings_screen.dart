@@ -1,10 +1,11 @@
-// Settings: where the backend is, the demo library switch, and the look
-// (Classic theme × accent, or a Signal preset). Appearance changes apply
-// instantly and are saved as the shared appearance object.
+// Settings: where the backend is, the demo library switch, the look
+// (Classic theme × accent, or a Signal preset) and the account. Appearance
+// changes apply instantly and are saved as the shared appearance object.
 //
-// The two bigger sections live in their own files:
+// The bigger sections live in their own files:
 //   backend_section.dart     — backend address + live connection status
 //   appearance_section.dart  — skin, Classic theme × accent, Signal presets
+//   account_section.dart     — who is signed in + Sign out
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,7 @@ import '../theme/np_style.dart';
 import '../widgets/np_buttons.dart';
 import '../widgets/np_scaffold.dart';
 import '../widgets/now_playing_bar.dart';
+import 'account_section.dart';
 import 'appearance_section.dart';
 import 'backend_section.dart';
 import 'settings_section.dart';
@@ -36,6 +38,8 @@ class SettingsScreen extends StatelessWidget {
           _DemoSection(),
           SizedBox(height: 14),
           AppearanceSection(),
+          SizedBox(height: 14),
+          AccountSection(),
           SizedBox(height: 14),
           _AboutSection(),
         ],

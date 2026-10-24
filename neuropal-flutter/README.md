@@ -11,7 +11,10 @@ It installs **next to** the Expo app: application id / bundle id
 
 ## Run it
 
-Requirements: Flutter **3.47.7 stable** (Dart 3.13.5), JDK 17, Android SDK 36.
+Requirements: Flutter **3.47.7 stable** (Dart 3.13.5), JDK 17, Android SDK 36
+with NDK 28.2 and CMake 3.22.1 (`flutter_secure_storage` brings in
+`path_provider_android`, whose `jni` dependency compiles a small native
+library).
 
 ```sh
 cd neuropal-flutter
@@ -23,12 +26,42 @@ The app looks for the backend (BRAIN.md §4) in this order and uses the
 **first that answers** `GET /healthz`:
 
 1. the custom address typed in **Settings → Backend connection**,
-2. Tailscale: `http://ryx-mac-mini.tail73ed8.ts.net:4000`,
-3. home Wi-Fi: `http://192.168.3.169:4000`.
+2. Cloud: `https://api.ryx007.work` (sign-in required),
+3. Tailscale: `http://ryx-mac-mini.tail73ed8.ts.net:4000`,
+4. home Wi-Fi: `http://192.168.3.169:4000`.
 
 If none answers, the Library says so (with each reason) and offers Retry —
 it never shows fake data. To try the app without a backend, turn on
 **Settings → Demo library (offline)**: two short physics samples, bundled.
+
+## Sign-in
+
+Rules (server side: `neuropal-backend/src/routes/auth.js`; app side:
+`lib/auth/auth_controller.dart`):
+
+- `GET /api/auth/config` → `localMode: true` (the Mac mini's single-user
+  mode): **no sign-in, ever**. Otherwise the server needs a session.
+- No session saved for that server → the **sign-in screen replaces the
+  app** (no drawer, no Back into the Library). It signs in, or creates an
+  account (name + invite code when the server's `signup` is `invite`; no
+  code when `open`; no option when `closed`).
+- A saved session is checked with `GET /api/auth/me`; a refreshed `token`
+  in the answer is saved (sessions slide, 30 days). Every request carries
+  `Authorization: Bearer <token>`.
+- **401 from any data request → back to sign-in** ("Your session ended"),
+  and nothing of the session stays: the reader closes, the Library and Ask
+  threads are cleared. A wrong password (401 from `/api/auth/login`) is
+  just a message on the form.
+- **No answer is not a no**: if the server can't be reached, a saved session
+  stays and the app opens offline, as before. Only a 401 ends a session.
+- **One session per server**, in secure storage (`flutter_secure_storage`:
+  Android Keystore-backed encryption; iOS Keychain, this device only).
+  A token is only ever sent to the server that issued it — never over
+  plain HTTP to the Mac. Switching the address switches sessions.
+- **Settings → Account → Sign out** forgets this server's session on the
+  phone (JWTs can't be revoked server-side; this one is simply gone).
+- The sign-in screen can open **Change server** (the Settings connection
+  panel, in a sheet) and the **demo library**, which never needs a server.
 
 ## Build
 
@@ -41,10 +74,15 @@ flutter build apk --release --target-platform android-arm64
 flutter build ios --release
 ```
 
-Cleartext HTTP is allowed on purpose (the backend is plain HTTP on the
-owner's own machines): `android/app/src/main/res/xml/network_security_config.xml`
-and `NSAppTransportSecurity` in `ios/Runner/Info.plist`. Revisit both before
+Cleartext HTTP is allowed on purpose (the cloud server is HTTPS, but the
+Mac mini fallbacks are plain HTTP on the owner's own machines):
+`android/app/src/main/res/xml/network_security_config.xml` and
+`NSAppTransportSecurity` in `ios/Runner/Info.plist`. Revisit both before
 any store release.
+
+Android Auto Backup is still on (it keeps the look and reader settings). A
+backed-up secure-storage file can't be decrypted on another phone, so the
+plugin drops it there (its default `resetOnError`) and you sign in again.
 
 ## Design tokens (never edit the generated files)
 
@@ -73,11 +111,12 @@ the Dart port, never the fixtures.
 ```
 lib/
 ├── main.dart               start-up: preferences, services, font licences
-├── app.dart                providers + MaterialApp (theme from the appearance)
+├── app.dart                providers + MaterialApp (theme), the sign-in gate
 ├── app_routes.dart         Library (root) · Reader · Settings, drawer rule
-├── services.dart           the long-lived objects (backend, settings, TTS…)
+├── services.dart           the long-lived objects (backend, sign-in, TTS…)
 ├── theme/                  tokens → palette → NpStyle (colours, shapes, fonts)
-├── data/                   backend connection, models, document sources
+├── auth/                   sign-in rules (controller) + sign-in screen
+├── data/                   backend connection, sessions, models, sources
 ├── library/                Library screen + controller
 ├── reader/                 tokenizer, TTS player, reader screen + player
 ├── ask/                    Ask sheet + controller
@@ -132,11 +171,16 @@ flutter test
 Covers: token parity with the JS, the tokenizer (equations, word indexes,
 chapters), TTS chunking and the player (range sync, stale events, the
 estimator), backend address selection and errors, appearance persistence,
-and end-to-end widget tests in demo, offline and real (mocked) modes.
+sign-in (per-server Bearer header, 401 handling, refreshed tokens, LOCAL_MODE,
+offline with a saved session, invite codes, rate limits, secure storage),
+and end-to-end widget tests in demo, offline, real (mocked) and signed-in
+modes — including 48 dp targets, labels and contrast on the sign-in screen.
+`test/helpers/fakes.dart` has a LOCAL_MODE fake server (`fakeBackend`) and
+one with accounts (`FakeAccountsServer`).
 
 **Screenshots without a phone.** `flutter test tool/screenshots_test.dart`
-renders the Library, Reader, Ask, Settings and drawer in Classic and Signal
-(also at 200 % text size) with the real fonts, to `build/screenshots/*.png`.
+renders the Library, Reader, Ask, Settings, drawer and sign-in in Classic and
+Signal (also at 200 % text size) with the real fonts, to `build/screenshots/*.png`.
 It lives in `tool/`, so the normal `flutter test` run never executes it.
 
 ## M1 and M2
@@ -147,7 +191,8 @@ It lives in `tool/`, so the normal `flutter test` run never executes it.
 | Reader | karaoke TTS, WPM / tone / voice, tap to seek, chapters on the scrubber, text settings | EPUB publisher view, original PDF pages, real math typesetting, highlights & bookmarks |
 | Ask | grounded answers with citations | chat history, study tools (summaries, quizzes, flashcards) |
 | Look | Classic theme × accent, Signal presets, grid / grain / scanlines | "Make it yours" studio (fine-tune, Ask Pal, saved looks), animated Chladni / interference fields |
-| Sync | appearance saved on the device, best-effort `PUT /api/me/appearance` | read it back from the backend; Pal, Home |
+| Sync | appearance saved on the device, best-effort `PUT /api/me/appearance` (signed in) | read it back from the backend; Pal, Home |
+| Account | sign in, create an account (invite code), sign out; one secure session per server | account settings (name, password) |
 
 Known M1 limitations:
 

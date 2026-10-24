@@ -180,6 +180,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Backend connection'), findsOneWidget);
 
+    // (Three server rows push the skin picker below the fold.)
+    await tester.scrollUntilVisible(
+      find.text('Signal').first,
+      200,
+      scrollable: mainList(),
+    );
+    await tester.pump(); // lay out the scrolled list before tapping
     await tester.tap(find.text('Signal').first);
     await tester.pumpAndSettle();
     expect(styleOf(tester).isSignal, isTrue);

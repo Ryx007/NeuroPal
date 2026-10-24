@@ -1,12 +1,20 @@
-// The connection to the NeuroPal backend (Node/Express on the Mac mini).
+// The connection to the NeuroPal backend (Node/Express).
 //
 // HOW THE ADDRESS IS CHOSEN (same rules as the Expo app, BRAIN §5):
 //   1. the user's override from Settings (if any),
-//   2. Tailscale MagicDNS — works at home AND away,
-//   3. the Mac mini's LAN IP — home Wi-Fi with Tailscale off.
+//   2. the cloud server (https://api.ryx007.work) — anywhere with internet,
+//      sign-in required,
+//   3. Tailscale MagicDNS — the Mac mini, at home AND away,
+//   4. the Mac mini's LAN IP — home Wi-Fi with Tailscale off.
 // We probe GET /healthz on all of them and use the FIRST REACHABLE one in
 // that order — never the fastest, or the phone would pin itself to an
 // address that dies as soon as it leaves home.
+//
+// SIGN-IN: every request carries `Authorization: Bearer <token>` with the
+// session saved for THAT server (session_store.dart) — a token never goes
+// to another address. A 401 from a data route is reported through
+// [Backend.onUnauthorized] (lib/auth/auth_controller.dart listens). A
+// single-user LOCAL_MODE server (the Mac mini) simply needs no token.
 //
 // FAILURES ARE VISIBLE: when nothing answers, `state` becomes offline and
 // the screens show a banner with Retry. Nothing is ever faked here; demo
@@ -14,11 +22,13 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show SocketException;
+import 'dart:io' show SocketException, TlsException;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'session_store.dart';
 
 class BackendCandidate {
   const BackendCandidate(this.label, this.base);
@@ -31,6 +41,7 @@ class BackendCandidate {
 }
 
 const List<BackendCandidate> kDefaultBackends = [
+  BackendCandidate('Cloud', 'https://api.ryx007.work'),
   BackendCandidate('Tailscale', 'http://ryx-mac-mini.tail73ed8.ts.net:4000'),
   BackendCandidate('Home Wi-Fi', 'http://192.168.3.169:4000'),
 ];
@@ -57,11 +68,19 @@ enum BackendState { checking, online, offline }
 /// Any failed backend call. [unreachable] = no response at all (network),
 /// as opposed to the backend answering with an error.
 class ApiException implements Exception {
-  const ApiException(this.message, {this.status, this.unreachable = false});
+  const ApiException(
+    this.message, {
+    this.status,
+    this.unreachable = false,
+    this.retryAfterSec,
+  });
 
   final String message;
   final int? status;
   final bool unreachable;
+
+  /// From a 429 answer: seconds until the server takes another try.
+  final int? retryAfterSec;
 
   @override
   String toString() => message;
@@ -73,7 +92,9 @@ class Backend extends ChangeNotifier {
     http.Client? client,
     this.defaults = kDefaultBackends,
     this.probeTimeout = const Duration(seconds: 4),
-  }) : _client = client ?? http.Client() {
+    SessionStore? sessions,
+  }) : _client = client ?? http.Client(),
+       sessions = sessions ?? SessionStore.memory() {
     _custom = prefs.getString(_kCustom);
   }
 
@@ -83,6 +104,15 @@ class Backend extends ChangeNotifier {
   final http.Client _client;
   final List<BackendCandidate> defaults;
   final Duration probeTimeout;
+
+  /// The sign-in token saved per server (sent with every request to it).
+  final SessionStore sessions;
+
+  /// Called when a server answers 401 to a data request: the session is
+  /// over, or there never was one. [token] is the one the request carried
+  /// (null = none). The sign-in calls under /api/auth/ report their own
+  /// 401s ("wrong password") to their caller and never come here.
+  void Function(String server, String? token)? onUnauthorized;
 
   String? _custom;
   BackendState _state = BackendState.checking;
@@ -195,13 +225,15 @@ class Backend extends ChangeNotifier {
       return CandidateResult(
         candidate: c,
         reachable: false,
-        error: describeNetworkError(e),
+        error: describeNetworkError(e, host: Uri.tryParse(c.base)?.host),
       );
     }
   }
 
-  /// A short human description of a low-level network error.
-  static String describeNetworkError(Object e) {
+  /// A short human description of a low-level network error. [host] (the
+  /// address tried) picks the hint for a name that can't be found.
+  static String describeNetworkError(Object e, {String? host}) {
+    if (e is TlsException) return 'secure connection failed';
     final text = switch (e) {
       SocketException(:final osError, :final message) =>
         osError?.message ?? message,
@@ -213,7 +245,10 @@ class Backend extends ChangeNotifier {
     if (lower.contains('refused')) return 'connection refused';
     if (lower.contains('failed host lookup') ||
         lower.contains('no address associated')) {
-      return 'name not found (is Tailscale on?)';
+      // Only a Tailscale name needs Tailscale; any other name needs internet.
+      return host == null || host.endsWith('.ts.net')
+          ? 'name not found (is Tailscale on?)'
+          : 'name not found (is the phone online?)';
     }
     if (lower.contains('unreachable')) return 'network unreachable';
     if (lower.contains('timed out')) return 'timed out';
@@ -221,12 +256,20 @@ class Backend extends ChangeNotifier {
   }
 
   // ---- requests ---------------------------------------------------------
+  //
+  // [server] pins a request to that base address (the sign-in calls must
+  // reach the server whose session they are about); without it the
+  // active address is used.
 
-  Future<Object?> getJson(String path, {Duration? timeout}) =>
-      _send('GET', path, timeout: timeout);
+  Future<Object?> getJson(String path, {Duration? timeout, String? server}) =>
+      _send('GET', path, timeout: timeout, server: server);
 
-  Future<Object?> postJson(String path, Object? body, {Duration? timeout}) =>
-      _send('POST', path, body: body, timeout: timeout);
+  Future<Object?> postJson(
+    String path,
+    Object? body, {
+    Duration? timeout,
+    String? server,
+  }) => _send('POST', path, body: body, timeout: timeout, server: server);
 
   Future<Object?> patchJson(String path, Object? body, {Duration? timeout}) =>
       _send('PATCH', path, body: body, timeout: timeout);
@@ -239,15 +282,26 @@ class Backend extends ChangeNotifier {
     String path, {
     Object? body,
     Duration? timeout,
+    String? server,
   }) async {
-    if (_active == null) await probe();
-    final base = _active;
+    final BackendCandidate? base;
+    if (server != null) {
+      base =
+          candidates.where((c) => c.base == server).firstOrNull ??
+          BackendCandidate(server, server);
+    } else {
+      if (_active == null) await probe();
+      base = _active;
+    }
     if (base == null) {
       throw ApiException(offlineMessage(), unreachable: true);
     }
     final limit = timeout ?? const Duration(seconds: 20);
     final request = http.Request(method, Uri.parse('${base.base}$path'))
       ..headers['Accept'] = 'application/json';
+    // This server's own session, never another server's.
+    final token = sessions.tokenFor(base.base);
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
     if (body != null) {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);
@@ -263,7 +317,7 @@ class Backend extends ChangeNotifier {
       unawaited(probe());
       final why = e is TimeoutException
           ? 'timed out after ${limit.inSeconds} s'
-          : describeNetworkError(e);
+          : describeNetworkError(e, host: request.url.host);
       throw ApiException(
         'Couldn’t reach the backend at ${base.label} ($why).',
         unreachable: true,
@@ -289,10 +343,21 @@ class Backend extends ChangeNotifier {
       }
       return decoded;
     }
-    final message = decoded is Map && decoded['error'] is String
-        ? decoded['error'] as String
+    if (res.statusCode == 401 && !path.startsWith('/api/auth/')) {
+      onUnauthorized?.call(base.base, token);
+    }
+    final error = decoded is Map ? decoded : const {};
+    final message = error['error'] is String
+        ? error['error'] as String
         : 'The backend answered HTTP ${res.statusCode}.';
-    throw ApiException(message, status: res.statusCode);
+    final retry = error['retryAfterSec'];
+    throw ApiException(
+      message,
+      status: res.statusCode,
+      retryAfterSec: retry is num
+          ? retry.ceil()
+          : int.tryParse(res.headers['retry-after'] ?? ''),
+    );
   }
 
   /// One sentence for banners: which addresses were tried and why they

@@ -33,6 +33,9 @@ class LibraryController extends ChangeNotifier {
   late bool _wasOnline;
   bool _disposed = false;
 
+  /// Bumped by [clear]: answers to loads started before it are dropped.
+  int _epoch = 0;
+
   List<DocumentSummary> get documents => _docs;
   bool get loading => _loading;
 
@@ -49,6 +52,7 @@ class LibraryController extends ChangeNotifier {
       return;
     }
     _loading = true;
+    final epoch = _epoch;
     if (!quiet) _notify();
     final source = services.source;
     List<DocumentSummary>? docs;
@@ -58,6 +62,8 @@ class LibraryController extends ChangeNotifier {
     } on ApiException catch (e) {
       error = e;
     }
+    // Cleared meanwhile (signed out): this answer belongs to the old session.
+    if (epoch != _epoch) return;
     _loading = false;
     _loadedOnce = true;
     if (source == services.source) {
@@ -79,6 +85,20 @@ class LibraryController extends ChangeNotifier {
   }
 
   bool _reloadPending = false;
+
+  /// Forgets the list (the session ended): the next person to sign in
+  /// never sees it, and the next Library visit loads afresh.
+  void clear() {
+    _epoch++;
+    _poll?.cancel();
+    _poll = null;
+    _docs = const [];
+    _error = null;
+    _loading = false;
+    _loadedOnce = false;
+    _reloadPending = false;
+    _notify();
+  }
 
   void _schedulePoll() {
     final needed =

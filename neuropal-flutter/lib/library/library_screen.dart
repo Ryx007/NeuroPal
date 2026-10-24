@@ -118,8 +118,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ? 'Can’t reach the NeuroPal backend'
                 : 'The library didn’t load',
             message: error.unreachable
-                ? '${backend.offlineMessage()} Check that the Mac mini is '
-                      'on and Tailscale is connected.'
+                ? '${backend.offlineMessage()} Check that the phone is '
+                      'online (for the Mac mini: that it is on and '
+                      'Tailscale is connected).'
                 : error.message,
             actions: [
               NpButton(

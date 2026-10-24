@@ -70,6 +70,12 @@ class AskController extends ChangeNotifier {
     _notify();
   }
 
+  /// Forgets every thread (the session ended).
+  void clear() {
+    _threads.clear();
+    _notify();
+  }
+
   void _notify() {
     if (!_disposed) notifyListeners();
   }
