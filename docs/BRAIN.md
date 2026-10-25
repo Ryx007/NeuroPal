@@ -130,6 +130,13 @@ BEFORE the check. AI routes spend a per-user daily budget
 | `GET/POST /api/simulations`, `DELETE /:id` | POST: `{title, kind:'template'\|'ai', templateId?/spec?}` | P5 saved sims (model `SavedSimulation`, soft-delete). The SPEC is persisted, never a render — saved sims re-open live and sync across devices; 'ai' specs re-run the same validator before persisting |
 | `GET/POST /api/notes`, `PUT/DELETE /:id` | GET: `?documentId=` optional. POST/PUT: `{kind:'typed'\|'ink'\|'canvas', title, contentMarkdown?, strokes?, blocks?, documentId?, anchor?{wordStart,wordEnd,page}}` | P6 notes + Issue 2 (2026-07-19) unified canvas. `'canvas'` = ONE surface: `blocks` (positioned text boxes `[{id,type:'text',x,y,w,content:<Markdown>}]`, `w:-1` = stretch to right margin, numeric x/y/w validated server-side) + `strokes` (`[{points:[[x,y]…],color,width}]`) together. Legacy typed/ink open losslessly in the unified editor and upgrade on first save — the ONLY kind change the PUT permits is `→ 'canvas'` (typed's `contentMarkdown` field is kept alongside the migrated block). `anchor` pins a note to a reader position |
 | `GET /api/ai/provider` | — | active provider + models + localMode |
+| `POST /api/pal/breakdown` | `{task ≤ 500 chars}` | 2026-10-24, Pal assistant: `{steps:[3–7 strings], provider, model}`; 400 missing, 422 too long, 502 model failure/unusable steps, 503 exposed quota error. The app falls back to offline template steps and says so |
+| `POST /api/pal/chat` | `{message ≤ 1000, context?}` | `{reply, crisis, provider?, model?}`. `context` = `{state, localTime "HH:MM", nextAnchor{title,at,inMinutes}, minimumDay[], palName, talkStyle, people}`. Both turns stored in `CompanionMessage` (thread `"pal"`). A crisis-sounding message gets a fixed careful reply and skips the model, the caps and the budget (the app checks first and never sends those) |
+| `DELETE /api/pal/chat` | — | `{deleted}` — "Clear chat" removes the server copy too |
+
+Pal limits: per user 30 chats and 30 breakdowns per hour (`PAL_CHAT_PER_HOUR`,
+`PAL_BREAKDOWN_PER_HOUR`) → 429 `{error, retryAfterSec}`; every model call also
+spends the daily AI budget (`AI_DAILY_LIMIT_PER_USER`, default 150).
 
 Non-`/api` static mounts: `/katex` serves the katex dist from backend
 node_modules (offline LaTeX rendering on LAN devices), `/` = web app,

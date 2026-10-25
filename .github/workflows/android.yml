@@ -41,8 +41,9 @@ jobs:
           cache: npm
           cache-dependency-path: neuropal-expo-app/package-lock.json
       - run: npm ci
-      # The public backend candidates from .env.example (Tailscale name + LAN
-      # fallback) are what the APK should try; no secrets live there.
+      # The public backend address from .env.example (the cloud server,
+      # https://api.ryx007.work) is what the APK should try; no secrets live
+      # there.
       - run: cp .env.example .env
       - run: npx expo prebuild --platform android --no-install
         env:

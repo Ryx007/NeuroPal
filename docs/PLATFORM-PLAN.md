@@ -95,6 +95,10 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · — not planned for that 
 | Focus soundscapes with evidence badges | ⬜ M2 | ⬜ M3 | — |
 | Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + two-source interference |
 | iOS widgets + focus Live Activity (Swift) | — | 🟡 M1: built for the simulator in CI; not run on a device | — |
+| Sign-in to the public server (invite code, sessions, sign out everywhere) | ✅ 0.3.0 (opens offline without a session) | ✅ 0.2.0 (Cloud first) | 🟡 M1 page (/sign-in) |
+| Check-in slider (drag/tap; thirds decide the state; history) | ✅ 0.3.0 | ⬜ (no Home yet) | — |
+| Pal assistant: bubble + sheet (What now?, Break it down, Brain dump, Sit with me, Talk; `/api/pal/*`) | ✅ 0.3.0 | ⬜ | — |
+| Android home-screen widget "Pal" (check-in, next anchor, Ask Pal) | ✅ 0.3.0 (react-native-android-widget; not yet run on a device) | — | — |
 | Modules 1–2 (SCAFFOLD, state system) backend routes | ⬜ M3 | ⬜ M4 | — |
 | Module 7 AI companion | ⬜ M4 | ⬜ M5 | — |
 
