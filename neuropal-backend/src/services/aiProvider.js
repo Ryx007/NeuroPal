@@ -31,8 +31,37 @@ const DEFAULT_SYSTEM = [
     'If the answer is not in the context, return an empty citations array.',
 ].join(' ');
 
+// Which providers a request may pick with `provider`. A public server answers
+// with its configured provider only, so no request can switch it to a paid
+// one; the single-user server lets its owner switch freely.
+// AI_PROVIDERS_ALLOWED (comma-separated) overrides both.
+function allowedProviders(defaultProvider) {
+    const fromEnv = String(process.env.AI_PROVIDERS_ALLOWED || '')
+        .split(',')
+        .map((p) => p.trim().toLowerCase())
+        .filter(Boolean);
+    if (fromEnv.length) return fromEnv;
+    return process.env.LOCAL_MODE === 'true' ? ['gemini', 'ollama', 'anthropic'] : [defaultProvider];
+}
+
 function activeProvider(override) {
-    return String(override || process.env.AI_PROVIDER || 'gemini').toLowerCase();
+    const def = String(process.env.AI_PROVIDER || 'gemini').toLowerCase();
+    const want = override ? String(override).toLowerCase() : def;
+    return allowedProviders(def).includes(want) ? want : def;
+}
+
+// The local chat model is a fallback only where one is installed. The cloud
+// server sets OLLAMA_CHAT_MODEL=off (its Ollama only holds the embedder), and
+// then a used-up Gemini quota is a clear 503, not a 500 from a missing model.
+function localChatEnabled() {
+    return !/^(off|none|disabled)?$/i.test(String(process.env.OLLAMA_CHAT_MODEL ?? 'qwen2.5:7b').trim());
+}
+
+function quotaError() {
+    const e = new Error('The AI service has used up its quota for now — please try again later.');
+    e.status = 503;
+    e.expose = true;
+    return e;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,12 +96,14 @@ async function generateAnswer({
             result = await callGemini(system, userPrompt);
         } catch (err) {
             if (!isQuotaExhausted(err)) throw err;
+            if (!localChatEnabled()) throw quotaError();
             // eslint-disable-next-line no-console
             console.warn('[ai] gemini quota exhausted — falling back to ollama');
             result = await ollamaAnswerResilient(system, userPrompt);
             usedProvider = 'ollama';
         }
     } else if (chosen === 'ollama') {
+        if (!localChatEnabled()) throw quotaError();
         result = await ollamaAnswerResilient(system, userPrompt);
     } else if (chosen === 'anthropic') {
         result = await callAnthropic(system, userPrompt);
@@ -510,6 +541,7 @@ async function generateStructured({
                 '';
         } catch (err) {
             if (!isQuotaExhausted(err)) throw err;
+            if (!localChatEnabled()) throw quotaError();
             // eslint-disable-next-line no-console
             console.warn('[ai] gemini quota exhausted — structured falls back to ollama');
             const r = await callOllama(systemPrompt, userPrompt);
@@ -518,6 +550,7 @@ async function generateStructured({
             usedProvider = 'ollama';
         }
     } else if (chosen === 'ollama') {
+        if (!localChatEnabled()) throw quotaError();
         const r = await callOllama(systemPrompt, userPrompt);
         raw = r.raw;
         model = r.model;

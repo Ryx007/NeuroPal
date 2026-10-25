@@ -4,12 +4,12 @@ import { useDispatch } from "react-redux";
 import {
   Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
+
 import Svg, { Path } from "react-native-svg";
 import Toast from "../toast";
 
@@ -27,6 +27,7 @@ import {
 import { saveNote, updateNoteRemote } from "../../store/slices/notesSlice";
 import { usePalette } from "../../theme/ThemeProvider";
 import { withAlpha } from "../primitives";
+import { KeyboardSafeScrollView } from "../KeyboardSafeScrollView";
 
 // Issue 2 — ONE canvas for typed text and ink (Samsung Notes / GoodNotes
 // style). A note is { blocks:[{id,type:'text',x,y,w,content}], strokes }
@@ -445,7 +446,7 @@ export function CanvasNoteEditor({ note, onBack }) {
           style={{
             flex: 1,
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontFamily: palette.fonts.displaySemi,
             fontSize: 17,
             paddingVertical: 6,
           }}
@@ -461,7 +462,7 @@ export function CanvasNoteEditor({ note, onBack }) {
       </View>
 
       {/* page */}
-      <ScrollView
+      <KeyboardSafeScrollView
         style={{ flex: 1 }}
         scrollEnabled={!scrollLocked}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -532,7 +533,7 @@ export function CanvasNoteEditor({ note, onBack }) {
             />
           ))}
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       {/* toolbar row 1 — modes + undo */}
       <View
@@ -792,7 +793,7 @@ function TextBlock({
           accessibilityLabel="Text box content in Markdown"
           style={{
             color: palette.onSurface,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 14,
             lineHeight: 21,
             padding: 8,
@@ -808,7 +809,7 @@ function TextBlock({
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 13,
                 fontStyle: "italic",
               }}
@@ -874,7 +875,7 @@ function ExportSheet({ onClose, onExport, palette }) {
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 15,
               }}
             >

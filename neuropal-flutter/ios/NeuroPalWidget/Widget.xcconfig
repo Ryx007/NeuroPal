@@ -1,0 +1,8 @@
+// The widget ships inside the app, so it must carry the app's version.
+// Flutter writes FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER here on every
+// `flutter build`/`flutter run`; the optional include keeps a fresh clone
+// (before the first Flutter build) from failing.
+#include? "../Flutter/Generated.xcconfig"
+
+MARKETING_VERSION = $(FLUTTER_BUILD_NAME)
+CURRENT_PROJECT_VERSION = $(FLUTTER_BUILD_NUMBER)

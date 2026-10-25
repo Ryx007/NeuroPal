@@ -1,0 +1,109 @@
+# Fast checks on every push and pull request. Each client gets its own job so
+# one red cross tells you which part broke.
+name: CI
+
+on:
+  push:
+    branches: [main, v2-platform]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tokens:
+    name: Design tokens
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests (Classic parity, Signal contrast, Ask Pal, Home rules)
+        working-directory: packages/tokens
+        run: npm test
+      - name: Generated copies are in sync (Expo, platform, backend, Dart, Swift, CSS)
+        run: node packages/tokens/scripts/sync.js --check
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: neuropal-backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: neuropal-backend/package-lock.json
+      - run: npm ci
+      - name: Tests (in-memory MongoDB)
+        run: npm test
+
+  expo:
+    name: Expo app bundles
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: neuropal-expo-app
+    env:
+      CI: 1
+      EXPO_PUBLIC_USE_MOCK: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: neuropal-expo-app/package-lock.json
+      - run: npm ci
+      - name: Bundle Android
+        run: npx expo export -p android --output-dir "$RUNNER_TEMP/expo-android"
+      - name: Bundle iOS
+        run: npx expo export -p ios --output-dir "$RUNNER_TEMP/expo-ios"
+      - name: Bundle web
+        run: npx expo export -p web --output-dir "$RUNNER_TEMP/expo-web"
+
+  flutter:
+    name: Flutter app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: neuropal-flutter
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Tests (incl. token parity with the JS fixtures)
+        run: flutter test
+
+  platform:
+    name: Web platform (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: neuropal-platform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: neuropal-platform/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Static export
+        run: npm run build

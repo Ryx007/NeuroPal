@@ -1,0 +1,158 @@
+.page {
+  padding-block: clamp(2rem, 1.5rem + 2vw, 3.5rem) clamp(3rem, 2rem + 4vw, 5rem);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 52rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-top: clamp(2.5rem, 2rem + 2vw, 4rem);
+}
+
+.how {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.howItem {
+  display: flex;
+  gap: 0.875rem;
+  padding: 1.125rem;
+}
+
+.howNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+  font-weight: 700;
+}
+
+.howTitle {
+  margin-bottom: 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.lessons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 700px) {
+  .lessons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+}
+
+/* The whole live card is clickable through its heading link. */
+.cardLive {
+  cursor: pointer;
+}
+
+.cardLive:hover {
+  border-color: var(--np-control);
+}
+
+@supports selector(:has(*)) {
+  .cardLive:has(.cardLink:focus-visible) {
+    outline: 3px solid var(--np-accent-text);
+    outline-offset: 2px;
+  }
+}
+
+.cardTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.cardTopic {
+  font-size: 0.8125rem;
+  color: var(--np-on-surface-variant);
+}
+
+.cardTitle {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-variation-settings: "wdth" var(--display-wdth);
+  letter-spacing: var(--display-ls);
+  font-size: 1.5rem;
+  line-height: 1.05;
+}
+
+.cardLink {
+  color: var(--np-on-surface);
+  text-decoration: none;
+}
+
+.cardLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--np-radius);
+}
+
+.cardLink:hover {
+  color: var(--np-on-surface);
+}
+
+.cardLink:focus-visible {
+  outline: 3px solid var(--np-accent-text);
+  outline-offset: 2px;
+}
+
+@supports selector(:has(*)) {
+  .cardLink:focus-visible {
+    outline: none;
+  }
+}
+
+.cardCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  font-weight: 700;
+  color: var(--np-accent-text);
+}
+
+.cardSoon {
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.cardSoonNote {
+  margin-top: auto;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--np-on-surface-variant);
+}

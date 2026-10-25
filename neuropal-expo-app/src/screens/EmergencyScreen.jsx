@@ -41,27 +41,38 @@ export function EmergencyScreen() {
 
   const current = steps[step];
 
+  // Back to wherever the person came from. If there is nothing to go back to
+  // (opened straight from the widget, or the app switched between signed in
+  // and signed out underneath), start the current stack over at its first
+  // screen — Main, Login or Onboarding — so the close button always works.
   function exit() {
     if (navigation.canGoBack()) {
       navigation.goBack();
       return;
     }
-
-    navigation.navigate("Tabs");
+    const names = navigation.getState()?.routeNames || [];
+    const home = names.find((n) => n !== "Emergency");
+    if (home) navigation.reset({ index: 0, routes: [{ name: home }] });
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#11131A" }}>
       <View style={{ flex: 1, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 24 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Pressable onPress={exit} accessibilityLabel="Close emergency protocol">
+          <Pressable
+            onPress={exit}
+            accessibilityRole="button"
+            accessibilityLabel="Close emergency protocol"
+            hitSlop={8}
+            style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center", marginLeft: -11 }}
+          >
             <MaterialIcons name="close" size={22} color="#A9B0C3" />
           </Pressable>
           <View style={{ width: 10 }} />
           <Text
             style={{
               color: "#B1C5FF",
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 14,
             }}
           >
@@ -73,7 +84,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#FF8E8E",
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 2,
           }}
@@ -84,7 +95,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#F2F1F0",
-            fontFamily: "SpaceGrotesk_700Bold",
+            fontFamily: palette.fonts.display,
             fontSize: 36,
             lineHeight: 38,
           }}
@@ -95,7 +106,7 @@ export function EmergencyScreen() {
         <Text
           style={{
             color: "#C3C6D6",
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 14,
             lineHeight: 21,
           }}
@@ -133,7 +144,7 @@ export function EmergencyScreen() {
               <Text
                 style={{
                   color: "#F2F1F0",
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: palette.fonts.bodyBold,
                   fontSize: 18,
                 }}
               >
@@ -143,7 +154,7 @@ export function EmergencyScreen() {
               <Text
                 style={{
                   color: "#8DA1B9",
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                 }}
               >
@@ -155,7 +166,7 @@ export function EmergencyScreen() {
           <Text
             style={{
               color: "#C3C6D6",
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 14,
               lineHeight: 21,
             }}
@@ -175,7 +186,7 @@ export function EmergencyScreen() {
           <Text
             style={{
               color: "#D5D9E6",
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
               lineHeight: 20,
               textAlign: "center",

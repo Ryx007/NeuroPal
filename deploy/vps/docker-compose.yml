@@ -1,0 +1,200 @@
+# NeuroPal on the Contabo VPS — the public backend behind a Cloudflare Tunnel.
+#
+#   https://api.ryx007.work  ──Cloudflare edge──▶  cloudflared ──▶ api:4000
+#
+# NOTHING here publishes a host port: the server keeps its existing
+# nginx/mail/other services untouched, and MongoDB, Qdrant and Ollama are
+# unreachable from the internet. The only way in is the tunnel, which the
+# server dials out to Cloudflare. Two private networks: `edge` (cloudflared ↔
+# api) and `data` (api ↔ databases), so the tunnel container can't reach the
+# databases even if it were compromised.
+#
+# Run from this directory (bootstrap.sh does all of it the first time):
+#   docker compose up -d --build        start / update
+#   docker compose ps                   status
+#   docker compose logs -f api          API logs
+#   docker compose down                 stop (data survives in the volumes)
+#
+# Secrets live in ./.env (made by bootstrap.sh, chmod 600, never committed).
+# The tunnel (profile "tunnel") starts once ./tunnel.sh has configured it;
+# tunnel.sh then sets COMPOSE_PROFILES=tunnel in .env.
+
+name: neuropal-v2
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *restart
+    build:
+      context: ../../neuropal-backend
+    image: neuropal-api:local
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      PUBLIC_DEPLOYMENT: "true"
+      LOCAL_MODE: "false"
+      # least privilege: readWrite on the neuropal db only (mongo-init/)
+      MONGODB_URI: mongodb://${MONGO_APP_USER:-neuropal_app}:${MONGO_APP_PASSWORD:?set in .env}@mongo:27017/neuropal?authSource=neuropal
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDER: ollama
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_EMBED_MODEL: nomic-embed-text
+      EMBEDDING_DIM: "768"
+      # this Ollama holds the embedder only: no local chat-model fallback
+      OLLAMA_CHAT_MODEL: "off"
+      STORAGE_ROOT: /data/storage
+      # Requests only ever arrive through cloudflared, so the edge's
+      # CF-Connecting-IP is the caller (rate limits key on it).
+      TRUST_CLOUDFLARE: "true"
+      TRUST_PROXY: "1"
+      # The Nougat math tier needs the Mac's GPU; PDFs fall back to pdf-parse.
+      MATHSERVE_URL: "off"
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      mongo:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+    networks: [edge, data]
+    mem_limit: 1536m
+
+  mongo:
+    <<: *restart
+    image: mongo:8.0
+    # Cap the cache: the default (half of RAM) would crowd the other
+    # services on a shared VPS.
+    command: ["--wiredTigerCacheSizeGB", "0.5", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-neuropal}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set in .env}
+      MONGO_INITDB_DATABASE: neuropal
+      # read by mongo-init/01-app-user.js on first start
+      MONGO_APP_USER: ${MONGO_APP_USER:-neuropal_app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set in .env}
+    volumes:
+      - mongo:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [data]
+    mem_limit: 1024m
+
+  qdrant:
+    <<: *restart
+    image: qdrant/qdrant:v1.20.0
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?set in .env}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant:/qdrant/storage
+    networks: [data]
+    mem_limit: 768m
+
+  ollama:
+    <<: *restart
+    image: ollama/ollama:0.40.10
+    environment:
+      # keep the embedder warm; one request at a time is plenty here
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama:/root/.ollama
+    networks: [data]
+    mem_limit: 1536m
+
+  # One-shot: makes sure the embedder is present. The vectors are 768-dim
+  # nomic-embed-text; another model would invalidate every stored vector.
+  ollama-pull:
+    image: ollama/ollama:0.40.10
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for i in $$(seq 1 60); do ollama list >/dev/null 2>&1 && break; sleep 2; done
+        for i in 1 2 3 4 5; do ollama pull nomic-embed-text && exit 0; sleep 10; done
+        exit 1
+    restart: "no"
+    networks: [data]
+
+  cloudflared:
+    <<: *restart
+    image: cloudflare/cloudflared:2026.10.3
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on: [api]
+    networks: [edge]
+
+  # Nightly MongoDB dump to ./backups, keeps the newest 14 that succeeded,
+  # plus a weekly copy of the uploaded files (newest 2). Vectors are derived
+  # data (Settings → Reingest all rebuilds them). Copy ./backups off the
+  # server now and then (scripts/pull-backup.sh on the Mac).
+  backup:
+    <<: *restart
+    image: mongo:8.0
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_USER: ${MONGO_ROOT_USER:-neuropal}
+      MONGO_PASSWORD: ${MONGO_ROOT_PASSWORD:?set in .env}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        umask 077
+        # password in a file, not on the command line (visible in `ps`)
+        printf 'password: "%s"\n' "$$MONGO_PASSWORD" > /tmp/dump.yaml
+        while true; do
+          f="/backups/neuropal-$$(date +%F).archive.gz"
+          if mongodump --host mongo --username "$$MONGO_USER" --authenticationDatabase admin \
+               --config=/tmp/dump.yaml --db=neuropal --archive="$$f.part" --gzip --quiet \
+             && mv "$$f.part" "$$f"; then
+            echo "[backup] wrote $$f"
+            # prune only after a good dump: keep the newest 14
+            ls -1t /backups/neuropal-*.archive.gz | tail -n +15 | xargs -r rm -f
+          else
+            rm -f "$$f.part"; echo "[backup] dump FAILED — older backups kept"
+          fi
+          if [ "$$(date +%u)" = "7" ] || ! ls /backups/storage-*.tar.gz >/dev/null 2>&1; then
+            s="/backups/storage-$$(date +%F).tar.gz"
+            # GNU tar exits 1 when a file changes while it's read (an upload
+            # landing mid-copy) — that copy is still good
+            tar --warning=no-file-changed -czf "$$s.part" -C /data storage; rc=$$?
+            if [ "$$rc" -le 1 ] && mv "$$s.part" "$$s"; then
+              echo "[backup] wrote $$s"
+              ls -1t /backups/storage-*.tar.gz | tail -n +3 | xargs -r rm -f
+            else
+              rm -f "$$s.part"; echo "[backup] storage copy FAILED"
+            fi
+          fi
+          sleep 86400
+        done
+    volumes:
+      - ./backups:/backups
+      - storage:/data/storage:ro
+    networks: [data]
+
+networks:
+  edge: {}
+  data: {}
+
+volumes:
+  storage:
+  mongo:
+  qdrant:
+  ollama:

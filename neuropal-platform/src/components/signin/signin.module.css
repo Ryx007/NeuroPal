@@ -1,0 +1,90 @@
+.grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 960px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    align-items: start;
+  }
+
+  .grid > :nth-child(3) {
+    grid-column: 1;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.125rem, 1rem + 1vw, 1.75rem);
+}
+
+.cardTitle {
+  font-size: 1.625rem;
+  line-height: 1.05;
+}
+
+.info p {
+  line-height: 1.55;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.passwordRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.messageSlot:empty {
+  display: none;
+}
+
+.message {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.messageOk {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+}
+
+.messageOk > :first-child {
+  transform: translateY(-1px);
+}
+
+.signedIn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+}
+
+.signedIn p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem;
+}

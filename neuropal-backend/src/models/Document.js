@@ -113,6 +113,11 @@ const DocumentSchema = new Schema(
         ingestStartedAt: { type: Date },
         ingestFinishedAt: { type: Date },
         ingestError: { type: String },
+        // Boot-time resumes of an interrupted ingest (see resumeStuckIngests).
+        ingestAttempts: { type: Number, default: 0 },
+        // EPUB reading layer (services/epubStore.js): the unpacked files'
+        // manifest {v, manifest:{spine,toc,pageList}, files, bytes, unpackedAt}.
+        epub: { type: Schema.Types.Mixed, default: undefined },
         // Issue 1: WHERE the pipeline died — parsing | chunking | embedding |
         // upserting | finalizing. Cleared on success.
         ingestStage: { type: String },

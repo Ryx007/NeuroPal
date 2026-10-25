@@ -61,6 +61,17 @@ function decodeSafe(p) {
     }
 }
 
+// Unzipping is done in this (shared) process, so every entry's DECLARED
+// size is checked before it is inflated — a 0.25 MB file can otherwise
+// declare a 256 MB entry (zip bomb). Real books stay far below these.
+const MAX_ENTRY_BYTES = 64 * 1024 * 1024; // one chapter / image / font
+const MAX_META_BYTES = 1024 * 1024; // container.xml, the OPF, nav, ncx
+
+function entrySize(entry) {
+    const n = Number(entry && entry.header && entry.header.size);
+    return Number.isFinite(n) ? n : Infinity;
+}
+
 async function readEpubEntry(docId, loadBuf, requestPath) {
     const clean = decodeSafe(String(requestPath || '')).replace(/^\/+/, '');
     if (!clean || clean.includes('..')) return null;
@@ -68,6 +79,12 @@ async function readEpubEntry(docId, loadBuf, requestPath) {
     const entry =
         zip.getEntry(clean) || zip.getEntry(String(requestPath || '').replace(/^\/+/, ''));
     if (!entry) return null;
+    if (entrySize(entry) > MAX_ENTRY_BYTES) {
+        const err = new Error('That part of the book is too large to open');
+        err.status = 413;
+        err.expose = true;
+        throw err;
+    }
     const ext = path.extname(clean).toLowerCase();
     return {
         data: entry.getData(),
@@ -111,12 +128,18 @@ function resolveHref(baseDir, href) {
 }
 
 // Recursively parse an <ol> of nav <li>s into a nested TOC tree.
-function parseNavList(html, baseDir) {
+// Regexes here use [^<>]* (a tag can't contain '<'), bounded inner captures
+// and indexOf, so a crafted nav document stays linear instead of
+// backtracking for minutes; nesting deeper than MAX_TOC_DEPTH is dropped.
+const MAX_TOC_DEPTH = 8;
+
+function parseNavList(html, baseDir, level = 0) {
     const items = [];
+    if (level > MAX_TOC_DEPTH) return items;
     // split top-level <li>…</li> by depth counting
     let depth = 0;
     let start = -1;
-    const tagRe = /<\/?li\b[^>]*>/gi;
+    const tagRe = /<\/?li\b[^<>]*>/gi;
     let m;
     while ((m = tagRe.exec(html))) {
         if (m[0][1] !== '/') {
@@ -126,17 +149,17 @@ function parseNavList(html, baseDir) {
             depth -= 1;
             if (depth === 0 && start >= 0) {
                 const inner = html.slice(start, m.index);
-                const aTag = inner.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i);
+                const aTag = inner.match(/<a\b[^<>]*>([\s\S]{0,4000}?)<\/a>/i);
                 const href = aTag ? attr(aTag[0], 'href') : null;
                 const label = aTag
                     ? stripTags(aTag[1])
-                    : stripTags((inner.match(/<span\b[^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '');
-                const sub = inner.match(/<ol\b[^>]*>([\s\S]*)<\/ol>/i);
+                    : stripTags((inner.match(/<span\b[^<>]*>([\s\S]{0,4000}?)<\/span>/i) || [])[1] || '');
+                const sub = innerOf(inner, /<ol\b[^<>]*>/i, '</ol>', true);
                 const node = {
                     title: label || 'Untitled',
                     href: href ? resolveHref(baseDir, href) : null,
                     anchor: href && href.includes('#') ? href.split('#')[1] : null,
-                    children: sub ? parseNavList(sub[1], baseDir) : [],
+                    children: sub ? parseNavList(sub, baseDir, level + 1) : [],
                 };
                 items.push(node);
             }
@@ -145,20 +168,34 @@ function parseNavList(html, baseDir) {
     return items;
 }
 
+// Text between an opening tag (regex) and its closing string, found with
+// indexOf — linear. `last` = up to the LAST closer (nested lists), else the
+// first one after the opener.
+function innerOf(text, openRe, closer, last = false) {
+    const m = openRe.exec(text);
+    if (!m) return null;
+    const from = m.index + m[0].length;
+    // no toLowerCase() on the text: it can change the string's length
+    const variants = [...new Set([closer, closer.toLowerCase(), closer.toUpperCase()])];
+    let end = -1;
+    for (const v of variants) {
+        const i = last ? text.lastIndexOf(v) : text.indexOf(v, from);
+        if (i >= from && (end < 0 || (last ? i > end : i < end))) end = i;
+    }
+    return end >= from ? text.slice(from, end) : null;
+}
+
 function navBlock(navHtml, type) {
     // <nav epub:type="toc"> … </nav> (attribute order/quotes vary)
-    const re = new RegExp(
-        `<nav\\b[^>]*epub:type=["']${type}["'][^>]*>([\\s\\S]*?)<\\/nav>`,
-        'i',
-    );
-    return (navHtml.match(re) || [])[1] || null;
+    return innerOf(navHtml, new RegExp(`<nav\\b[^<>]*epub:type=["']${type}["'][^<>]*>`, 'i'), '</nav>');
 }
 
 async function buildEpubManifest(docId, loadBuf) {
     const zip = await getZip(docId, loadBuf);
     const readText = (p) => {
-        const e = zip.getEntry(String(p).replace(/^\/+/, ''));
-        return e ? zip.readAsText(e) : null;
+        const e = zip.getEntry(String(p || '').replace(/^\/+/, ''));
+        if (!e || entrySize(e) > MAX_META_BYTES) return null;
+        return zip.readAsText(e);
     };
 
     const container = readText('META-INF/container.xml');
@@ -169,7 +206,7 @@ async function buildEpubManifest(docId, loadBuf) {
     const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
 
     const manifest = {}; // id → { href, properties }
-    for (const m of opf.matchAll(/<item\b[^>]*>/g)) {
+    for (const m of opf.matchAll(/<item\b[^<>]*>/g)) {
         const id = attr(m[0], 'id');
         const href = attr(m[0], 'href');
         if (id && href) {
@@ -178,7 +215,7 @@ async function buildEpubManifest(docId, loadBuf) {
     }
 
     const spine = [];
-    for (const m of opf.matchAll(/<itemref\b[^>]*\bidref=["']([^"']+)["'][^>]*>/g)) {
+    for (const m of opf.matchAll(/<itemref\b[^<>]*\bidref=["']([^"']+)["'][^<>]*>/g)) {
         const item = manifest[m[1]];
         if (!item) continue;
         if (/\blinear=["']no["']/.test(m[0])) continue;
@@ -221,11 +258,12 @@ async function buildEpubManifest(docId, loadBuf) {
                 const p = resolveHref(opfDir, ncxItem.href);
                 return p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
             })();
-            const parsePoints = (xml) => {
+            const parsePoints = (xml, level = 0) => {
                 const out = [];
+                if (level > MAX_TOC_DEPTH) return out;
                 let depth = 0;
                 let start = -1;
-                const t = /<\/?navPoint\b[^>]*>/gi;
+                const t = /<\/?navPoint\b[^<>]*>/gi;
                 let mm;
                 while ((mm = t.exec(xml))) {
                     if (mm[0][1] !== '/') {
@@ -236,21 +274,21 @@ async function buildEpubManifest(docId, loadBuf) {
                         if (depth === 0 && start >= 0) {
                             const inner = xml.slice(start, mm.index);
                             const label = stripTags(
-                                (inner.match(/<text>([\s\S]*?)<\/text>/i) || [])[1] || '',
+                                (inner.match(/<text>([\s\S]{0,4000}?)<\/text>/i) || [])[1] || '',
                             );
-                            const src = (inner.match(/<content\b[^>]*\bsrc=["']([^"']+)["']/i) || [])[1];
+                            const src = (inner.match(/<content\b[^<>]*\bsrc=["']([^"']+)["']/i) || [])[1];
                             out.push({
                                 title: label || 'Untitled',
                                 href: src ? resolveHref(ncxDir, src) : null,
                                 anchor: src && src.includes('#') ? src.split('#')[1] : null,
-                                children: parsePoints(inner),
+                                children: parsePoints(inner, level + 1),
                             });
                         }
                     }
                 }
                 return out;
             };
-            const navMap = (ncx.match(/<navMap\b[^>]*>([\s\S]*)<\/navMap>/i) || [])[1];
+            const navMap = innerOf(ncx, /<navMap\b[^<>]*>/i, '</navMap>', true);
             if (navMap) toc = parsePoints(navMap);
         }
     }
@@ -258,4 +296,4 @@ async function buildEpubManifest(docId, loadBuf) {
     return { spine, toc, pageList };
 }
 
-module.exports = { buildEpubManifest, readEpubEntry };
+module.exports = { buildEpubManifest, readEpubEntry, CONTENT_TYPES };

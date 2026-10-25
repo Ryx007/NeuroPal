@@ -41,7 +41,7 @@ export function SelectionBar({ wordCount, onHighlight, onExplain, onCancel }) {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 11,
               marginRight: 10,
             }}
@@ -85,7 +85,7 @@ export function SelectionBar({ wordCount, onHighlight, onExplain, onCancel }) {
               style={{
                 marginLeft: 6,
                 color: palette.accent,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 12,
               }}
             >

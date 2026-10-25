@@ -11,6 +11,19 @@ const DEFAULT_MONGODB_URI =
     'mongodb://127.0.0.1:27017/neuropal?replicaSet=rs0';
 
 async function main() {
+    // A public server must never run the no-login single-user mode: every
+    // request would be served as the owner. PUBLIC_DEPLOYMENT=true is set by
+    // deploy/vps; refuse to start rather than expose the library.
+    if (process.env.PUBLIC_DEPLOYMENT === 'true' && process.env.LOCAL_MODE === 'true') {
+        throw new Error('LOCAL_MODE=true on a PUBLIC_DEPLOYMENT — set LOCAL_MODE=false');
+    }
+    if (process.env.LOCAL_MODE !== 'true') {
+        const s = process.env.JWT_SECRET || '';
+        if (s.length < 32 || /CHANGE_ME/.test(s)) {
+            throw new Error('JWT_SECRET must be a real secret of 32+ characters when LOCAL_MODE is off');
+        }
+    }
+
     // Storage root must exist before the upload route is ever hit.
     const storageRoot = path.resolve(process.env.STORAGE_ROOT || './storage');
     fs.mkdirSync(storageRoot, { recursive: true });
@@ -42,6 +55,8 @@ async function main() {
         // eslint-disable-next-line no-console
         console.log(`[api] listening on :${port}`);
     });
+    // A stalled event loop gets the process restarted instead of hanging.
+    require('./watchdog').startWatchdog();
 
     // Drop-folder ingestion — single-user concept, so LOCAL_MODE only.
     // Non-fatal: the API works fine without it.

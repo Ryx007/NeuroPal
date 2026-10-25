@@ -35,7 +35,9 @@ function describeIngestError(err) {
 
 const { Document, DocumentChunk } = require('../models');
 const { getQdrant } = require('../db/qdrant');
-const { extractText } = require('./textExtractor');
+// Extraction runs in a child process (memory cap + timeout): a hostile or
+// broken file can then only kill that child, never the shared API.
+const { extractTextIsolated: extractText } = require('./extractIsolated');
 const { arxivIdFromPath } = require('./arxivLatex');
 const { chunkText } = require('./chunker');
 const { embedBatch, getModelName, getDim } = require('./embedder');
@@ -529,25 +531,52 @@ async function deleteDocumentChunks(documentId) {
 // Ingest is fire-and-forget, so a server restart kills any in-flight run
 // and strands its document in a processing status forever. Called on boot:
 // every stuck document gets its partial chunks wiped and ingest re-kicked.
+// A document that kills the process (out of memory, say) would otherwise be
+// resumed on every boot forever: each resume counts an attempt, and after
+// MAX_RESUMES the document is marked failed instead (Reingest resets it).
+// Resumes run one at a time, so a restart doesn't start every user's books
+// at once.
+const MAX_RESUMES = 2;
+
 async function resumeStuckIngests() {
     const stuck = await Document.find({
         status: { $in: ['pending', 'parsing', 'chunking', 'embedding'] },
         deletedAt: null,
-    }).select('_id title status');
+    }).select('_id title status ingestAttempts');
 
-    for (const doc of stuck) {
-        // eslint-disable-next-line no-console
-        console.warn(
-            `[ingest] resuming "${doc.title}" (stuck in '${doc.status}' from a previous run)`,
-        );
-        // do NOT wipe chunks here (Issue 1): the pipeline reuses windows a
-        // previous run already committed, and self-verifies they still
-        // match the fresh extraction before trusting them
-        ingestDocument(doc._id).catch((err) => {
+    // Math upgrades are re-armed below in parallel with this queue.
+    (async () => {
+        for (const doc of stuck) {
+            if ((doc.ingestAttempts || 0) >= MAX_RESUMES) {
+                // eslint-disable-next-line no-console
+                console.warn(`[ingest] giving up on "${doc.title}" after ${MAX_RESUMES} interrupted runs`);
+                await Document.updateOne(
+                    { _id: doc._id },
+                    {
+                        $set: {
+                            status: 'failed',
+                            ingestError:
+                                'Reading this file was interrupted twice. Use Reingest to try again — if it keeps failing, the file may be damaged.',
+                            ingestFinishedAt: new Date(),
+                        },
+                    },
+                ).catch(() => {});
+                continue;
+            }
             // eslint-disable-next-line no-console
-            console.error('[ingest] resume failed:', doc._id, err.message || err);
-        });
-    }
+            console.warn(
+                `[ingest] resuming "${doc.title}" (stuck in '${doc.status}' from a previous run)`,
+            );
+            await Document.updateOne({ _id: doc._id }, { $inc: { ingestAttempts: 1 } }).catch(() => {});
+            // do NOT wipe chunks here (Issue 1): the pipeline reuses windows a
+            // previous run already committed, and self-verifies they still
+            // match the fresh extraction before trusting them
+            await ingestDocument(doc._id).catch((err) => {
+                // eslint-disable-next-line no-console
+                console.error('[ingest] resume failed:', doc._id, err.message || err);
+            });
+        }
+    })();
 
     // Two-pass: re-arm math upgrades interrupted by a restart. 'running'
     // means the process died mid-upgrade — the doc is still ready on its

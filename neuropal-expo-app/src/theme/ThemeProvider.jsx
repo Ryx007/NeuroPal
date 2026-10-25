@@ -1,17 +1,64 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 import { useSelector } from "react-redux";
 
 import { selectUiState } from "../store/selectors";
-import { DEFAULT_PALETTE, resolvePalette } from "./palette";
+import { fontsFor } from "./fonts";
+import {
+  effectiveMotion,
+  normalizeAppearance,
+  resolveAppearancePalette,
+  resolveClassicPalette,
+  resolveSignalPalette,
+} from "./tokens";
+
+// v2: two skins, one token vocabulary. Classic resolves EXACTLY the original
+// palette.js values (tested in packages/tokens); Signal maps its brutal-glass
+// settings onto the same token names, so every existing screen restyles
+// without code changes. Extras every skin answers: palette.fonts.<role>,
+// palette.shape {radius, radiusMedium, radiusControl, border, shadow},
+// palette.motion, palette.field, palette.texture, palette.line/control/
+// shadowColor, palette.accentFill/accentInk/accentText.
+
+const DEFAULT_PALETTE = {
+  ...resolveClassicPalette({ theme: "dark", accent: "ruby" }),
+  fonts: fontsFor("classic"),
+};
 
 const ThemeContext = createContext({
   palette: DEFAULT_PALETTE,
+  skin: "classic",
+  isSignal: false,
+  motionLevel: "Calm",
+  reduceMotion: false,
+  redState: false,
   readerFontFamily: "Inter_400Regular",
   readerFontSize: 20,
   readerLineHeight: 1.7,
   readerExtraLetterSpacing: false,
   isLight: false,
 });
+
+// The OS "reduce motion" setting, kept live. Reanimated's hook is read once
+// at start-up, so it only seeds the value; the listener follows changes made
+// while the app is open.
+function useLiveReduceMotion() {
+  const atStart = useReducedMotion();
+  const [reduce, setReduce] = useState(Boolean(atStart));
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((v) => alive && setReduce(Boolean(v)))
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.("reduceMotionChanged", (v) => setReduce(Boolean(v)));
+    return () => {
+      alive = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduce;
+}
 
 function fontFor(font) {
   switch (font) {
@@ -29,19 +76,40 @@ function fontFor(font) {
 
 export function ThemeProvider({ children }) {
   const tweaks = useSelector(selectUiState);
+  const look = useSelector((s) => s.look);
+  const nervous = useSelector((s) => s.home.nervousState);
+  // The OS setting always wins over the user's motion pick (WCAG 2.3.3), and
+  // so does the app's own Reduce motion switch (Settings → Appearance), the
+  // in-app way to stop Pal, the slider glide and sliding sheets (WCAG 2.2.2).
+  const osReduceMotion = useLiveReduceMotion();
+  const reduceMotion = osReduceMotion || tweaks.reduceMotion === true;
 
   const value = useMemo(() => {
-    const palette = resolvePalette(tweaks.theme, tweaks.accent);
+    const isSignal = look.skin === "signal";
+    const base = isSignal
+      ? resolveSignalPalette(look.signal)
+      : resolveClassicPalette({ theme: tweaks.theme, accent: tweaks.accent });
+    const palette = { ...base, fonts: fontsFor(look.skin, base.type) };
 
     return {
       palette,
+      skin: isSignal ? "signal" : "classic",
+      isSignal,
+      motionLevel: effectiveMotion(palette.motion.level, reduceMotion),
+      reduceMotion: Boolean(reduceMotion),
+      // Red state calms every background field (docs/PLATFORM-PLAN.md §7).
+      redState: nervous === "red",
       readerFontFamily: fontFor(tweaks.readerFont),
       readerFontSize: tweaks.fontSize,
       readerLineHeight: tweaks.lineSpacing,
       readerExtraLetterSpacing: tweaks.readerFont === "dyslexic",
-      isLight: tweaks.theme === "light" || tweaks.theme === "sepia",
+      isLight: !palette.dark,
     };
   }, [
+    look.skin,
+    look.signal,
+    nervous,
+    reduceMotion,
     tweaks.accent,
     tweaks.fontSize,
     tweaks.lineSpacing,
@@ -49,9 +117,29 @@ export function ThemeProvider({ children }) {
     tweaks.theme,
   ]);
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+// Render a subtree in a PROPOSED appearance (the studio's preview card,
+// Pal builder stage, Arrange home's mini phone) without touching the store.
+// Same context shape as ThemeProvider; the OS reduce-motion switch, red state
+// and reader settings carry over from the real theme.
+export function ThemeOverride({ appearance, children }) {
+  const parent = useContext(ThemeContext);
+  const value = useMemo(() => {
+    const a = normalizeAppearance(appearance);
+    const base = resolveAppearancePalette(a);
+    const palette = { ...base, fonts: fontsFor(a.skin, base.type) };
+    return {
+      ...parent,
+      palette,
+      skin: a.skin,
+      isSignal: a.skin === "signal",
+      motionLevel: effectiveMotion(palette.motion.level, parent.reduceMotion),
+      isLight: !palette.dark,
+    };
+  }, [appearance, parent]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {
@@ -60,4 +148,8 @@ export function useTheme() {
 
 export function usePalette() {
   return useContext(ThemeContext).palette;
+}
+
+export function useTypeRoles() {
+  return useContext(ThemeContext).palette.fonts;
 }

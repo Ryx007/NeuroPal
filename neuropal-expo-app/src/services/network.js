@@ -6,6 +6,8 @@ import {
   apiHost,
   baseUrl,
   getHeaders,
+  isCurrentSession401,
+  notifyUnauthorized,
   recheckApi,
   subscribeApi,
 } from "../store/ApiLink";
@@ -38,6 +40,20 @@ apiClient.interceptors.request.use(async (config) => {
   config.headers = { ...config.headers, ...headers };
   return config;
 });
+
+// A 401 from any data call means the session is gone (expired, revoked, or
+// this is a different server) — route to sign-in instead of failing
+// screen by screen. The sign-in calls themselves report their own 401s.
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const url = String(error?.config?.url || "");
+    if (error?.response?.status === 401 && !/(^|\/)auth\//.test(url)) {
+      if (await isCurrentSession401(error).catch(() => true)) notifyUnauthorized();
+    }
+    return Promise.reject(error);
+  }
+);
 
 function assertConfigured() {
   if (!apiConfigured) {
@@ -74,7 +90,7 @@ export function describeNetworkError(error) {
     // for where this device is right now; re-probe so the NEXT attempt can
     // ride a fallback (coalesced + fire-and-forget inside ApiLink)
     recheckApi();
-    return `Cannot reach the backend at ${describeHost()} — is the Mac Mini running, and is Tailscale on (or this device on home WiFi)?`;
+    return `Cannot reach the server at ${describeHost()} — check your internet connection, or the address in Settings → Backend connection.`;
   }
   return error?.message || "Unknown network error";
 }
@@ -563,9 +579,56 @@ export async function deleteDocument(documentId) {
   }
 }
 
-// URL of a rendered PDF page image (reader "Original pages" view).
-export function documentPageUrl(documentId, page) {
-  return `${baseUrl}documents/${documentId}/page/${page}`;
+// URL of a rendered PDF page image (reader "Original pages" view). On a
+// signed-in server an <Image> can't always send the session header, so the
+// URL carries a document ticket (see fetchDocTicket).
+export function documentPageUrl(documentId, page, ticket) {
+  const url = `${baseUrl}documents/${documentId}/page/${page}`;
+  return ticket ? `${url}?t=${encodeURIComponent(ticket)}` : url;
+}
+
+// ---- document tickets --------------------------------------------------------
+// GET /api/documents/:id/ticket → { ticket, expiresAt } — a 12-hour read pass
+// for ONE document, for requests that can't carry the Authorization header
+// (the EPUB WebView's relative subresources, page images). null when the
+// server doesn't need one (single-user LOCAL_MODE, or an older server without
+// the route). Cached per document and host until an hour before expiry.
+const ticketCache = new Map(); // `${host}|${docId}` -> { ticket, until }
+
+// Tickets belong to a session: drop them on sign-out / "sign out everywhere"
+// / a password change, or old ones would 401 until the app restarts.
+export function clearDocTickets() {
+  ticketCache.clear();
+}
+
+export async function fetchDocTicket(documentId) {
+  if (USE_MOCK || !documentId) return null;
+  const key = `${apiHost}|${documentId}`;
+  const hit = ticketCache.get(key);
+  if (hit && hit.until > Date.now()) return hit.ticket;
+  // A dropped connection is retried (twice) — without a pass a signed-in
+  // server refuses the book's pictures, styles and page images.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { data } = await apiClient.get(`documents/${documentId}/ticket`, { timeout: 15000 });
+      const ticket = data?.ticket || null;
+      const expires = Date.parse(data?.expiresAt || "");
+      const until = Number.isFinite(expires) ? expires - 60 * 60 * 1000 : Date.now() + 60 * 60 * 1000;
+      ticketCache.set(key, { ticket, until });
+      return ticket;
+    } catch (error) {
+      const status = error?.response?.status;
+      // 404 = a server from before tickets existed: plain URLs still work there
+      if (status === 404) {
+        ticketCache.set(key, { ticket: null, until: Date.now() + 10 * 60 * 1000 });
+        return null;
+      }
+      // an answer that won't change on a retry (signed out, not yours…)
+      if (status && status !== 429 && status < 500) return null;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, attempt === 0 ? 1500 : 4000));
+    }
+  }
+  return null;
 }
 
 // ---- Issue 1: EPUB dual-representation reader -------------------------------
@@ -603,9 +666,11 @@ export async function fetchEpubChapterApi(documentId, href) {
 // Base URL of a chapter's DIRECTORY inside the epub mount — the <base> tag
 // the reader injects so the publisher's relative hrefs (css, images, fonts)
 // resolve against the backend.
-export function epubChapterBaseUrl(documentId, href) {
+export function epubChapterBaseUrl(documentId, href, ticket) {
   const dir = href.includes("/") ? href.slice(0, href.lastIndexOf("/") + 1) : "";
-  return `${baseUrl}documents/${documentId}/epub/${dir}`;
+  // The ticket sits in the PATH so every relative href inherits it.
+  const mount = ticket ? `epub/t/${encodeURIComponent(ticket)}/` : "epub/";
+  return `${baseUrl}documents/${documentId}/${mount}${dir}`;
 }
 
 // GET /api/documents/:id/text — the reader's TTS source.

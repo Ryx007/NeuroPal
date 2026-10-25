@@ -13,7 +13,9 @@ import { hydrateFlashcards } from "../store/slices/flashcardsSlice";
 import { hydrateFocus } from "../store/slices/focusSlice";
 import { hydrateHome } from "../store/slices/homeSlice";
 import { hydrateLibrary } from "../store/slices/librarySlice";
+import { hydrateLook } from "../store/slices/lookSlice";
 import { hydrateOnboarding } from "../store/slices/onboardingSlice";
+import { hydratePal, persistedPal } from "../store/slices/palSlice";
 import { hydrateReader } from "../store/slices/readerSlice";
 import { hydrateNotes } from "../store/slices/notesSlice";
 import { hydrateReminders } from "../store/slices/remindersSlice";
@@ -21,6 +23,7 @@ import { hydrateUi } from "../store/slices/uiSlice";
 
 const STORAGE_KEYS = {
   ui: "np.ui.v3",
+  look: "np.look.v1",
   onboarding: "np.onboarding.v3",
   home: "np.home.v2",
   library: "np.library.v2",
@@ -29,6 +32,7 @@ const STORAGE_KEYS = {
   reminders: "np.reminders.v1",
   flashcards: "np.flashcards.v1",
   notes: "np.notes.v1",
+  pal: "np.pal.v1",
 };
 
 const CRASH_KEY = "np.lastCrash";
@@ -92,10 +96,17 @@ function getPersistedSlices(state) {
       voice: state.ui.voice,
       voiceId: state.ui.voiceId,
       speakEquations: state.ui.speakEquations,
+      reduceMotion: state.ui.reduceMotion,
     }),
+    // v2 — skin, Signal settings, Pal, Home layout (docs/PLATFORM-PLAN.md).
+    [STORAGE_KEYS.look]: JSON.stringify(state.look),
     [STORAGE_KEYS.onboarding]: JSON.stringify(state.onboarding),
     [STORAGE_KEYS.home]: JSON.stringify({
       nervousState: state.home.nervousState,
+      // Home check-in slider: exact level + capped history (hydrateHome
+      // tolerates saves without them).
+      nervousLevel: state.home.nervousLevel,
+      checkins: state.home.checkins,
       tasks: state.home.tasks,
       anchors: state.home.anchors,
       todos: state.home.todos,
@@ -111,6 +122,8 @@ function getPersistedSlices(state) {
     [STORAGE_KEYS.reminders]: JSON.stringify({ items: state.reminders.items }),
     [STORAGE_KEYS.flashcards]: JSON.stringify({ byDoc: state.flashcards.byDoc }),
     [STORAGE_KEYS.notes]: JSON.stringify({ items: state.notes.items }),
+    // Pal as a buddy: bubble setting, brain dump, chat, sit (never sheetOpen).
+    [STORAGE_KEYS.pal]: JSON.stringify(persistedPal(state.pal)),
   };
 }
 
@@ -128,6 +141,10 @@ export function AppProviders({ children }) {
 
         if (persisted[STORAGE_KEYS.ui]) {
           appStore.dispatch(hydrateUi(JSON.parse(persisted[STORAGE_KEYS.ui])));
+        }
+
+        if (persisted[STORAGE_KEYS.look]) {
+          appStore.dispatch(hydrateLook(JSON.parse(persisted[STORAGE_KEYS.look])));
         }
 
         if (persisted[STORAGE_KEYS.onboarding]) {
@@ -179,11 +196,27 @@ export function AppProviders({ children }) {
         if (persisted[STORAGE_KEYS.notes]) {
           appStore.dispatch(hydrateNotes(JSON.parse(persisted[STORAGE_KEYS.notes])));
         }
+
+        if (persisted[STORAGE_KEYS.pal]) {
+          try {
+            appStore.dispatch(hydratePal(JSON.parse(persisted[STORAGE_KEYS.pal])));
+          } catch (e) {
+            // a corrupt Pal entry must not cost the rest of the app its state
+          }
+        }
       } catch {
         // Fall back to the bundled mock state if storage is unavailable.
       } finally {
         if (active) {
           setReady(true);
+        }
+        // v2 — reconcile the appearance with the backend (best effort; the
+        // app is fully usable offline and never waits on this).
+        try {
+          const { startAppearanceSync } = require("../services/appearanceSync");
+          startAppearanceSync(appStore);
+        } catch (e) {
+          // sync unavailable — local appearance still applies
         }
         // P8 — Android drops the OS notification schedule on reboot; rebuild
         // it from the hydrated state on every launch (idempotent, no boot

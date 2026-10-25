@@ -220,7 +220,9 @@ export async function setApiOverride(url) {
 
 // Load the persisted override at startup, then run the first resolution.
 // Until both land the app talks to candidates[0] (the baked preference).
-(async () => {
+// `apiReady` resolves once the override is known, so the session code never
+// compares a token's server against a host that is about to change.
+export const apiReady = (async () => {
     try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const stored = await AsyncStorage.getItem(OVERRIDE_KEY);
@@ -237,13 +239,71 @@ export async function setApiOverride(url) {
 })();
 
 // ---- session ----------------------------------------------------------------
+//
+// A session belongs to the server that issued it. It is stored together with
+// that server's address and only ever sent there: after "Change server" (or a
+// fallback address taking over) the other host gets no token at all and asks
+// for its own sign-in, and switching back finds the old session intact.
+//
+// Native: expo-secure-store (Android Keystore / iOS Keychain), so the token is
+// encrypted at rest and never restored from a backup onto another phone.
+// Web: localStorage via AsyncStorage (no keystore in a browser).
 
-// Local storage key — must match what `ApiRequest.js` reads/writes.
+// Old plain-token key (≤ 0.2.0, a single-user server: never a real session).
 export const SESSION_KEY = 'neuropal-session';
+const SESSION_RECORD_KEY = 'neuropal.session.v2';
+// Set by a sign-out (or the server ending the session), cleared by the next
+// sign-in: after a sign-out the app no longer opens offline without one.
+const SIGNED_OUT_KEY = 'neuropal.signed-out';
 
-// Header injection — runs before every axios request. Reads the JWT out of
-// AsyncStorage and attaches it as `Authorization: Bearer <jwt>` (the
-// backend accepts that AND `x-session: <jwt>`; we send the standard one).
+function asyncStorage() {
+    return require('@react-native-async-storage/async-storage').default;
+}
+
+function secureStore() {
+    if (Platform.OS === 'web') return null;
+    try {
+        return require('expo-secure-store');
+    } catch (e) {
+        return null;
+    }
+}
+
+async function readRecord() {
+    try {
+        const ss = secureStore();
+        const raw = ss ? await ss.getItemAsync(SESSION_RECORD_KEY) : await asyncStorage().getItem(SESSION_RECORD_KEY);
+        if (!raw) return null;
+        const rec = JSON.parse(raw);
+        return rec && typeof rec.token === 'string' && typeof rec.host === 'string' ? rec : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function writeRecord(rec) {
+    const ss = secureStore();
+    if (ss) {
+        if (rec) await ss.setItemAsync(SESSION_RECORD_KEY, JSON.stringify(rec));
+        else await ss.deleteItemAsync(SESSION_RECORD_KEY);
+    } else if (rec) {
+        await asyncStorage().setItem(SESSION_RECORD_KEY, JSON.stringify(rec));
+    } else {
+        await asyncStorage().removeItem(SESSION_RECORD_KEY);
+    }
+}
+
+// A token left by an older build under the plain key is dropped unused.
+(async () => {
+    try {
+        await asyncStorage().removeItem(SESSION_KEY);
+    } catch (e) {
+        // nothing to clean
+    }
+})();
+
+// Header injection — runs before every axios request: `Authorization:
+// Bearer <jwt>` when the active server is the one that issued the session.
 export async function getHeaders() {
     try {
         const session = await getSessionToken();
@@ -253,24 +313,77 @@ export async function getHeaders() {
     }
 }
 
-async function getSessionToken() {
+// The session for the server the app is talking to now, or null.
+export async function getSessionToken() {
+    await apiReady.catch(() => {});
+    const rec = await readRecord();
+    return rec && rec.host === apiHost ? rec.token : null;
+}
+
+// Keep a session from the active server (sign-in, refresh, password change).
+export async function saveSessionToken(token, host = apiHost) {
+    if (!token) return clearSession();
+    await writeRecord({ host: clean(host), token: String(token) });
     try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        return await AsyncStorage.getItem(SESSION_KEY);
+        await asyncStorage().removeItem(SIGNED_OUT_KEY);
     } catch (e) {
-        return null;
+        // the flag only decides whether the app may open offline
     }
 }
 
-export async function saveSessionToken(token) {
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    if (token) {
-        await AsyncStorage.setItem(SESSION_KEY, token);
-    } else {
-        await AsyncStorage.removeItem(SESSION_KEY);
-    }
-}
-
+// End the session with the active server (sign-out, or the server said 401).
+// A session that belongs to another server is left alone — this one never
+// had it.
 export async function clearSession() {
-    await saveSessionToken(null);
+    await apiReady.catch(() => {});
+    const rec = await readRecord();
+    if (!rec || rec.host === apiHost) await writeRecord(null);
+    try {
+        await asyncStorage().setItem(SIGNED_OUT_KEY, '1');
+    } catch (e) {
+        // best effort
+    }
 }
+
+// Does a 401 end the session we hold NOW? Not when the request went out with
+// an older token, or with none while we have one (e.g. a request that left
+// just before a sign-in finished): that answer is stale, and acting on it
+// would throw away the fresh session.
+export async function isCurrentSession401(error) {
+    const h = error?.config?.headers;
+    const raw = (h && (typeof h.get === 'function' ? h.get('Authorization') : h.Authorization || h.authorization)) || '';
+    const sent = String(raw).replace(/^Bearer\s+/i, '');
+    const current = await getSessionToken();
+    return !current || sent === current;
+}
+
+// True after a sign-out until the next sign-in.
+export async function wasSignedOut() {
+    try {
+        return (await asyncStorage().getItem(SIGNED_OUT_KEY)) === '1';
+    } catch (e) {
+        return false;
+    }
+}
+
+// ---- "this server wants you to sign in again" -------------------------------
+// Any API client that gets a 401 calls notifyUnauthorized(); the navigator
+// listens and routes to the sign-in screen. A plain event (not a Redux import)
+// keeps the HTTP layer free of a store dependency.
+const unauthorizedListeners = new Set();
+
+export function onUnauthorized(fn) {
+    unauthorizedListeners.add(fn);
+    return () => unauthorizedListeners.delete(fn);
+}
+
+export function notifyUnauthorized() {
+    unauthorizedListeners.forEach((fn) => {
+        try {
+            fn();
+        } catch (e) {
+            // one broken listener must not break the others
+        }
+    });
+}
+

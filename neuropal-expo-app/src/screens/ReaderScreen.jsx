@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../components/toast";
 
 import { withAlpha } from "../components/primitives";
@@ -30,6 +31,7 @@ import { TocSheet } from "../components/reader/TocSheet";
 import { StudySheet } from "../components/StudySheet";
 import {
   documentPageUrl,
+  fetchDocTicket,
   fetchReadingProgressApi,
   reingestDocumentApi,
   saveReadingProgressApi,
@@ -952,7 +954,7 @@ function TextReader() {
               style={{
                 marginLeft: 6,
                 color: palette.accent,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 13,
               }}
             >
@@ -1006,7 +1008,7 @@ function TextReader() {
             style={{
               marginLeft: 6,
               color: palette.accent,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 13,
             }}
           >
@@ -1046,6 +1048,7 @@ function TextReader() {
           onWpm={(value) => dispatch(setWpm(value))}
           voice={voice}
           onVoice={(value) => dispatch(setVoice(value))}
+          words={words}
         />
       ) : null}
 
@@ -1120,6 +1123,8 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable
         onPress={onClose}
         style={{
@@ -1143,7 +1148,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 16,
             }}
           >
@@ -1169,7 +1174,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
                 borderRadius: 12,
                 backgroundColor: palette.surfaceHigh,
                 color: palette.onSurface,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 16,
               }}
             />
@@ -1193,7 +1198,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -1203,6 +1208,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1293,7 +1299,7 @@ function ReaderBody({
               accessibilityRole="alert"
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 15,
                 lineHeight: 22,
               }}
@@ -1319,7 +1325,7 @@ function ReaderBody({
                 <Text
                   style={{
                     color: palette.accent,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 14,
                   }}
                 >
@@ -1346,7 +1352,7 @@ function ReaderBody({
                 <Text
                   style={{
                     color: palette.error,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 14,
                   }}
                 >
@@ -1362,7 +1368,7 @@ function ReaderBody({
             <Text
               style={{
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_700Bold",
+                fontFamily: palette.fonts.display,
                 fontSize: 21,
                 marginTop: 8,
                 marginBottom: 16,
@@ -1634,7 +1640,7 @@ function MarginNote({ note }) {
         <Text
           style={{
             color: palette.accent,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 10,
             letterSpacing: 2,
           }}
@@ -1646,7 +1652,7 @@ function MarginNote({ note }) {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 14,
         }}
       >
@@ -1656,7 +1662,7 @@ function MarginNote({ note }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 13,
           lineHeight: 20,
         }}
@@ -1685,7 +1691,7 @@ function MarginNote({ note }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 10,
                 }}
               >
@@ -1706,6 +1712,17 @@ function MarginNote({ note }) {
 function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChange, onTapPage }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
+  // A signed-in server needs a document ticket on each page URL (an <Image>
+  // can't send the session header). undefined = still asking; null = the
+  // server needs none.
+  const [ticket, setTicket] = useState(undefined);
+  useEffect(() => {
+    let alive = true;
+    fetchDocTicket(documentId).then((t) => alive && setTicket(t));
+    return () => {
+      alive = false;
+    };
+  }, [documentId]);
   const pageWidth = Math.min(width - 16, 900);
   const pageHeight = Math.round(pageWidth * 1.35);
   const pages = useMemo(
@@ -1742,7 +1759,7 @@ function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChang
       renderItem={({ item: n }) => (
         <Pressable onPress={onTapPage} style={{ marginTop: 8, alignItems: "center" }}>
           <Image
-            source={{ uri: documentPageUrl(documentId, n) }}
+            source={ticket === undefined ? undefined : { uri: documentPageUrl(documentId, n, ticket) }}
             style={{
               width: pageWidth,
               height: pageHeight,
@@ -1755,7 +1772,7 @@ function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChang
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "JetBrainsMono_400Regular",
+              fontFamily: palette.fonts.mono,
               fontSize: 10,
               marginTop: 4,
             }}

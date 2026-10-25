@@ -4,9 +4,11 @@ const { Router } = require('express');
 const { Document, DocumentChunk, ChatMessage } = require('../models');
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { spendAiBudget } = require('../services/aiBudget');
 const { getQdrant } = require('../db/qdrant');
 const { embedText, getModelName } = require('../services/embedder');
-const { extractText } = require('../services/textExtractor');
+// isolated: a hostile file can't freeze the API for everyone (extractWorker.js)
+const { extractTextIsolated: extractText } = require('../services/extractIsolated');
 const { generateAnswer, activeProvider } = require('../services/aiProvider');
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || './storage';
@@ -133,6 +135,7 @@ router.post(
         }
 
         // ---- Stage 2: reason (provider-agnostic) -----------------------------
+        if (!spendAiBudget(req, res)) return;
         const result = await generateAnswer({
             question: question.trim(),
             contextChunks: hits,

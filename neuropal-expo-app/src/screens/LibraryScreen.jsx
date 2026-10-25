@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../components/toast";
 
 import {
@@ -33,6 +34,8 @@ import {
 } from "../store/slices/librarySlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 
 // Backend → UI normalisation. Mongo gives us `_id` + ingest status; the
 // card renderer below reads `id`, `progress`, `subtitle`. One shared mapper
@@ -101,6 +104,7 @@ const FILTERS = [
 ];
 
 export function LibraryScreen() {
+  const palClear = usePalBubbleClearance();
   const palette = usePalette();
   const navigation = useNavigation();
   const dispatch = useDispatch();
@@ -240,18 +244,18 @@ export function LibraryScreen() {
 
   return (
     <View className="flex-1" style={{ flex: 1 }}>
-      <ScrollView
+      <KeyboardSafeScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 20,
-          paddingBottom: 40,
+          paddingBottom: Math.max(40, palClear),
         }}
       >
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "SpaceGrotesk_700Bold",
+            fontFamily: palette.fonts.display,
             fontSize: 34,
             letterSpacing: -0.8,
           }}
@@ -261,7 +265,7 @@ export function LibraryScreen() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_400Regular",
+            fontFamily: palette.fonts.body,
             fontSize: 16,
             marginTop: 4,
           }}
@@ -274,7 +278,7 @@ export function LibraryScreen() {
             accessibilityRole="alert"
             style={{
               color: palette.warn,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 12,
               marginTop: 10,
             }}
@@ -303,7 +307,7 @@ export function LibraryScreen() {
               style={{
                 flex: 1,
                 color: palette.error,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
                 lineHeight: 18,
               }}
@@ -325,7 +329,7 @@ export function LibraryScreen() {
                 <Text
                   style={{
                     color: palette.error,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 13,
                   }}
                 >
@@ -372,7 +376,7 @@ export function LibraryScreen() {
                 <Text
                   style={{
                     color: selected ? palette.accent : palette.onSurfaceVariant,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 13,
                   }}
                 >
@@ -411,7 +415,7 @@ export function LibraryScreen() {
               paddingVertical: 12,
               paddingHorizontal: 8,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 14,
             }}
           />
@@ -480,7 +484,7 @@ export function LibraryScreen() {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: palette.fonts.bodyMedium,
                   fontSize: 14,
                   textAlign: "center",
                 }}
@@ -507,7 +511,7 @@ export function LibraryScreen() {
                 <Text
                   style={{
                     color: palette.accent,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: palette.fonts.bodySemi,
                     fontSize: 13,
                   }}
                 >
@@ -525,7 +529,7 @@ export function LibraryScreen() {
             <UploadCard onPress={pickDocument} />
           </View>
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       <DocActionsSheet
         document={actionDoc}
@@ -647,6 +651,8 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable
         onPress={onClose}
         style={{
@@ -671,7 +677,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
             numberOfLines={2}
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
             }}
           >
@@ -681,7 +687,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 11,
               letterSpacing: 1.2,
               marginTop: 16,
@@ -702,7 +708,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
               borderRadius: 12,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 15,
             }}
           />
@@ -731,7 +737,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
                 }}
               >
                 <MaterialIcons name="refresh" size={16} color={palette.accent} />
-                <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
                   Reingest
                 </Text>
               </Pressable>
@@ -756,7 +762,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
                   }}
                 >
                   <MaterialIcons name="functions" size={16} color={palette.tertiary} />
-                  <Text style={{ color: palette.tertiary, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                  <Text style={{ color: palette.tertiary, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
                     Reingest (math)
                   </Text>
                 </Pressable>
@@ -785,7 +791,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
               }}
             >
               <MaterialIcons name="edit-note" size={18} color={palette.tertiary} />
-              <Text style={{ color: palette.tertiary, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+              <Text style={{ color: palette.tertiary, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>
                 Edit content
               </Text>
             </Pressable>
@@ -808,7 +814,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
                 opacity: busy || !title.trim() || title.trim() === document.title ? 0.4 : 1,
               }}
             >
-              <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+              <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>
                 Save name
               </Text>
             </Pressable>
@@ -828,7 +834,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
                 opacity: busy ? 0.4 : 1,
               }}
             >
-              <Text style={{ color: palette.error, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+              <Text style={{ color: palette.error, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>
                 {confirmingDelete ? "Tap again to delete" : "Delete"}
               </Text>
             </Pressable>
@@ -842,7 +848,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
               }}
             >
@@ -851,6 +857,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
           </Pressable>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -924,7 +931,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
                   document.extractor === "nougat" || document.extractor === "arxiv-latex"
                     ? palette.accent
                     : palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 10,
                 letterSpacing: 1.4,
               }}
@@ -943,7 +950,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 10,
                 letterSpacing: 1.4,
               }}
@@ -958,7 +965,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
         numberOfLines={2}
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_600SemiBold",
+          fontFamily: palette.fonts.displaySemi,
           fontSize: 16,
         }}
       >
@@ -968,7 +975,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
         numberOfLines={1}
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 12,
           marginTop: 4,
         }}
@@ -981,7 +988,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 11,
           }}
         >
@@ -991,7 +998,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 11,
           }}
         >
@@ -1038,7 +1045,7 @@ function DocCard({ document, onPress, onLongPress, onRetry }) {
         <Text
           style={{
             color: failed ? palette.error : typeTint,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 14,
           }}
         >
@@ -1090,7 +1097,7 @@ function UploadCard({ onPress }) {
       <Text
         style={{
           color: palette.onSurface,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 14,
         }}
       >
@@ -1099,7 +1106,7 @@ function UploadCard({ onPress }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 12,
           textAlign: "center",
           marginTop: 6,
@@ -1111,7 +1118,7 @@ function UploadCard({ onPress }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 11,
           textAlign: "center",
           marginTop: 8,

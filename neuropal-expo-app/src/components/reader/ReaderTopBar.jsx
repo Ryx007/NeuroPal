@@ -62,7 +62,7 @@ export function ReaderTopBar({
               numberOfLines={1}
               style={{
                 color: palette.onSurface,
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                fontFamily: palette.fonts.displaySemi,
                 fontSize: 16,
               }}
             >
@@ -73,7 +73,7 @@ export function ReaderTopBar({
                 numberOfLines={1}
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: palette.fonts.body,
                   fontSize: 11,
                 }}
               >
@@ -152,7 +152,7 @@ export function ReaderTopBar({
                   style={{
                     marginLeft: 12,
                     color: palette.onSurface,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: palette.fonts.bodyMedium,
                     fontSize: 14,
                   }}
                 >

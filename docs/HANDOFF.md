@@ -8,12 +8,308 @@
 > `docs/PROJECT-STATUS.md` (phase table + Next actions). `BUILD-BRIEF.md` is
 > the original spec but predates most of what's below.
 >
-> _Written 2026-08-04 after the port-split + collaborator-prep session._
+> _Written 2026-08-04 after the port-split + collaborator-prep session;
+> §0 added 2026-10-23 for the v2 platform branch, round 2 on 2026-10-24._
 > _Author: Claude (Opus/Sonnet/Fable across the session), owner "Ryx"._
 
 ---
 
-## 1. Where things stand RIGHT NOW
+## 0. v2 PLATFORM BUILD-OUT (branch `v2-platform`, 2026-10-23) — read first
+
+### Round 2 (2026-10-24): cloud server, sign-in, keyboard, check-in slider, Pal assistant + widget
+
+The owner is travelling (India) and the Mac Mini in Italy is unreachable, so
+the backend moves to the **Contabo VPS** (161.97.154.212, shared with a
+friend). Owner's choices: public HTTPS now · start with an empty database ·
+set NeuroPal up alongside the friend's services and change nothing of theirs ·
+a sign-up key (invite code) · react-native-keyboard-controller.
+
+- **VPS stack — `deploy/vps/`** (commit `a19ca09`). Compose project
+  `neuropal-v2`:
+  - **api**: Node 22 image with poppler, tesseract and djvulibre.
+  - **mongo 8**: the app user has readWrite on `neuropal` only.
+  - **qdrant v1.20**, with an API key.
+  - **ollama 0.40.10**: the embedder only; `OLLAMA_CHAT_MODEL=off`.
+  - **backup**: a nightly dump.
+  - **cloudflared**: behind profile `tunnel`.
+
+  No host port is published: the only way in is the Cloudflare Tunnel at
+  **https://api.ryx007.work** (DNS for ryx007.work is on Cloudflare). The
+  scripts:
+  - `install.sh`: the one-line installer. It clones to `/opt/neuropal`, then
+    runs the next two.
+  - `bootstrap.sh`: writes the secrets to `deploy/vps/.env` (chmod 600; the
+    invite code is `SIGNUP_INVITE_CODE`) and asks for the Gemini key.
+  - `tunnel.sh`: Cloudflare login, tunnel + DNS route, then starts
+    cloudflared.
+
+  **Not deployed yet.** It needs either SSH access (the owner runs
+  `ssh-copy-id -i ~/.ssh/neuropal_vps.pub root@161.97.154.212` on the Mac) or
+  the owner running `install.sh` as root on the VPS.
+- **Backend for a public server** (`a19ca09`; BRAIN §4 has the endpoints):
+  - Sessions: JWT, 30 days, refreshed by `/auth/me` up to 90 days from
+    sign-in. Sign out everywhere and password change both bump
+    `tokenVersion`.
+  - Sign-up is by invite only.
+  - Scoped document tickets for EPUB files and page images.
+  - scrypt passwords; rate limits per network and per account.
+  - Extraction and EPUB unpacking run in child processes with memory caps
+    and timeouts.
+  - SSRF-safe arXiv import.
+  - Daily AI budget per user.
+  - Pal routes `/api/pal/*`.
+- **Expo app 0.3.0:**
+  - **Sign-in screen and gate.** Only a 401 from the server shows sign-in.
+    Offline, or with the server down, the app still opens: everything on the
+    phone works. Settings → Account has sign out, sign out everywhere and
+    change password. The server address can be changed on the sign-in
+    screen and in Settings.
+  - **Keyboard:** react-native-keyboard-controller. `KeyboardProvider` sits
+    in App.js; `components/KeyboardSafeScrollView.jsx` is on every screen
+    with a text field, Home included (a plain ScrollView on web); modals use
+    its `KeyboardAvoidingView`. react-native-keyboard-aware-scroll-view is
+    gone: its measurements are no-ops on the New Architecture with
+    edge-to-edge.
+  - **Check-in slider** on Home (`components/home/StateSlider.jsx`,
+    `stateScale.js`): drag or tap.
+    - The region decides the state: 0–33 okay, 34–66 bit off, 67–100
+      overwhelmed.
+    - History lives in `home.checkins`: cap 200, and a move within 60 s
+      refines the last entry.
+    - Moving into overwhelmed opens the calming steps.
+  - **Motion** (`components/motion/`): entrances, press feedback, a state
+    pulse, Pal's mood hop and haptics. All of it stops at motion "Still" and
+    with the OS reduce-motion setting.
+  - **Pal assistant** (`components/pal/`, `services/pal*.js`,
+    `store/slices/palSlice.js`):
+    - A floating bubble (`PalBuddyHost` in AppNavigator's NavOverlay; not on
+      Reader or Studio) and a sheet with What now?, Break it down, Brain
+      dump, Sit with me and Talk.
+    - Home's Pal tile and Signal's header Pal open the sheet too.
+    - Settings → "Pal's bubble" hides the bubble. Screens pad their last row
+      clear of it (`usePalBubbleClearance`).
+    - Messages that sound like a crisis never leave the phone.
+  - **Android widget "Pal"** (`src/widgets/`, react-native-android-widget
+    0.24):
+    - Shows the state, the next anchor and three check-ins.
+    - Okay and Bit off record in the background. Overwhelmed opens the
+      calming steps through `neuropal://calm` and checks in there.
+    - Ask Pal opens the sheet through `neuropal://pal`.
+    - The app writes a snapshot about 1 s after a change
+      (`useWidgetBridge`). Widget check-ins join the check-in history at the
+      time they were tapped.
+- **Flutter 0.2.0** (`e78a575`): sign-in to the public server, Cloud first.
+
+**Review fixes (round 2).** Three independent reviews (security,
+correctness, accessibility) of the Expo diff; fixed before commit:
+- **Sessions.** A session is stored with the server that issued it
+  (`neuropal.session.v2`: `{host, token}`) and only ever sent there, so
+  "Change server" or a fallback address never carries it to another host.
+  - It lives in expo-secure-store (Keystore/Keychain) on the phone and in
+    localStorage on the web.
+  - A 401 only ends the session when it answers a request that carried the
+    current token (`isCurrentSession401`).
+  - After a sign-out the app no longer opens offline without signing in
+    again (`neuropal.signed-out`). A phone that never signed in still opens
+    offline.
+  - Local data is not separated per account: signing out keeps check-ins,
+    anchors, the brain dump and Pal's chat on the phone.
+- **Book chapters.** A strict Content-Security-Policy and
+  `referrer: no-referrer` come before any of the book's markup
+  (`buildChapterHtml`):
+  - only the reader's own two scripts run (per-chapter nonce);
+  - the book's CSS, images and fonts load only from the API host;
+  - no forms, frames or fetches.
+
+  The regex stripping is now only a second layer. Checked in Chromium
+  against the reviewer's bypasses: none ran, and the external beacon was
+  blocked.
+- **Widget link.** `neuropal://calm` from the widget carries a secret key
+  (`?k=`, stored in the app's private storage and in the snapshot). Only
+  with the key does it also check in as red; any other app's
+  `neuropal://calm` just opens the calming steps.
+  - Pending widget check-ins are applied first.
+  - A widget tap older than the app's newest check-in only joins the
+    history (in time order) and never changes the state.
+  - The calming steps open at once on a cold start (no wait behind
+    "Connecting…").
+  - Their close button always leads somewhere, even when there is nothing
+    to go back to.
+- **Crisis check.** The on-device and server crisis check covers more
+  phrasings and Italian, Spanish, French, German and romanised
+  Hindi/Bengali. The app no longer claims it catches everything.
+- **Smaller fixes:**
+  - A 200 that isn't a user is treated as no answer (never a sign-out);
+    a 404 with no session shows the sign-in screen.
+  - The account loads when the server comes back after an offline start.
+  - The document pass is retried on dropped connections.
+  - The Pal sheet closes when the session ends.
+  - The brain dump is capped as items are added.
+  - Widget buttons keep their words with enlarged text (≥ 300 dp), and
+    TalkBack hears Pal's line.
+- **Accessibility:**
+  - Slider steps commit after a pause and never jump into the calming
+    steps; red offers a button instead.
+  - Announcements go through `services/announce.js` (native
+    announceForAccessibility plus web live regions).
+  - Sign-in errors stay on screen.
+  - Radio semantics for the state options and the Settings segments.
+  - Dialogs scroll above the keyboard.
+  - Visible field edges.
+  - A "Reduce motion" setting.
+  - Pal's bubble hides while a note is open.
+
+  Details are in the commit.
+
+Left by decision:
+- **`usesCleartextTraffic` stays on.** LAN and Tailscale servers are http;
+  the cloud default is https.
+- **No purge of local data on sign-out.** Check-ins, anchors and the brain
+  dump exist only on the phone, so purging would destroy them. A sign-out
+  now blocks the offline open instead.
+- **The widget's "handled once" launch-link guard stays module-level.** It
+  only matters if Android recreates the Activity while the JS runtime
+  lives on.
+- **Home still dispatches `setNervousState` after `recordCheckin`.**
+  Existing listeners depend on that action.
+- **Ask Pal stays 42 dp tall at the 4×2 minimum.** That is AA; 48 dp is
+  the app's own goal.
+
+Also found and left for M2: AnchorEditor, AskSheet and the colour picker
+still label their fields only in placeholders. Classic's primary-button
+gradient (predates v2) fails text contrast at its far end in every Classic
+theme except Contrast; changing it changes Classic's look, so it's the
+owner's call. `readerMargin` isn't persisted.
+
+**Waiting on the owner (round 2):**
+1. VPS access (above).
+2. Ask the friend about their MongoDB (:27017) and Qdrant (:6333), which
+   are open to the internet, and about the shared Mongo password. NeuroPal
+   uses its own containers and leaves theirs alone.
+3. The free-Gemini privacy decision (below), which now also covers Pal's
+   Talk.
+4. Optional: a Cloudflare rate-limit rule for `/api/auth/*`.
+5. Install both APKs.
+
+Known limits: uploads over 100 MB fail through the tunnel (a Cloudflare
+limit), and there is no Nougat math tier on the VPS (pdf-parse instead).
+
+**Traps from round 2 (don't re-derive):**
+- Widget files start with `"use no memo"`: the React Compiler would break the
+  library's plain-function rendering.
+- The widget's native wiring exists only after a full `expo prebuild` run
+  from `neuropal-expo-app`; `NO_PREBUILD=1` builds lack it.
+- keyboard-controller's scroll-view ref spreads the instance, which loses
+  react-native-web's `scrollTo`. That is why web gets a plain ScrollView.
+- Metro caches inlined `EXPO_PUBLIC_*` values: use `expo export --clear` when
+  switching env.
+- The React Compiler skips components with `try/finally` and no `catch`.
+- `net.BlockList` with `::ffff:0:0/96` blocks every IPv4 address.
+- `pdftoppm --version` exits 1, so find it on PATH instead.
+- `pkill -f` / `pgrep -f` also match the shell running them; write the
+  pattern as `name[.]cjs`.
+- The review-council reviewer agents refuse to run on this branch because
+  the CI workflow files differ from main. Use general-purpose reviewers.
+
+### v2 build-out (2026-10-23)
+
+The owner signed off the v2 render (two skins: **Classic** = the original
+look, untouched; **Signal** = brutal glass, red on graphite by default, every
+token adjustable) and asked for the apps + platform. Locked decisions and the
+full plan: **`docs/PLATFORM-PLAN.md`** (repo layout, the appearance object,
+parity table, milestones). What exists on the branch:
+
+- **`packages/tokens/`** — the single source of truth for both skins:
+  colour maths with auto-contrast (any accent on any Signal base keeps text ≥
+  4.5:1 — tested), `resolveClassicPalette` (byte-identical to the old
+  `palette.js` — tested against it), `resolveSignalPalette`,
+  `normalizeAppearance`, the Ask-Pal keyword interpreters, Home day rules,
+  Pal options. `node packages/tokens/scripts/sync.js` regenerates every copy
+  (Expo, platform, backend vendor dir, Dart `tokens.g.dart` + fixtures, Swift
+  widget fallbacks, CSS); CI runs `--check`. **Never edit a generated copy.**
+- **Backend:** `GET/PUT /api/me/appearance` (BRAIN §4), `User.appearance`
+  (Mixed), last write wins by `updatedAt`, stale → 409 + stored copy.
+  `npm test` (node:test + mongodb-memory-server).
+- **Expo app (leads, v0.2.0):** `ThemeProvider` now resolves either skin into
+  the SAME token names, plus `palette.fonts.<role>` (a codemod replaced ~300
+  hard-coded font names), `palette.shape`, motion/field/texture.
+  `ThemeOverride` previews a proposed look in a subtree. Signal primitives:
+  hard-shadow panels, press-into-shadow buttons, mono labels, expo-gl
+  Chladni/interference field (Home only) + grid/grain/scanline backdrop.
+  New screens: **Make it yours** (`StudioScreen` — skin, vibes, fine-tune,
+  any-hue slider, Ask Pal preview→apply→undo, saved looks), **Build your
+  Pal**, **Arrange home** (order/size/hide + weekday/weekend rules). Home
+  renders the user's tile layout; Signal Home follows the S-Today board
+  (state dial, countdown anchor, focus scope, M tiles pair up). The Reader's
+  expanded player has a Signal version after the S-Reader board. Appearance
+  syncs through `services/appearanceSync.js` (local-first, debounced PUT,
+  409 → adopt). Library/Notes/Toolbox/etc. follow the skin's colours and
+  fonts but keep their Classic layouts (a Signal pass for them is M2).
+- **Flutter app (`neuropal-flutter/`, follows; "NeuroPal F",
+  `io.neuropal.flutter`):** reader-first M1 — library with ingest status,
+  reader with TTS highlight and a Signal player, Ask with sources, both
+  skins, settings (backend address with Tailscale → LAN fallback, demo
+  library opt-in). Dart port of the palette logic, parity-tested against the
+  JS fixtures. Speed calibration constant: `kEngineNormalWpm` in
+  `lib/reader/wpm.dart` (check on the S24). Screenshot harness:
+  `flutter test tool/screenshots_test.dart` (not run by CI). README has the
+  rest, including known limits.
+- **Web platform (`neuropal-platform/`):** Next.js 16 static export —
+  landing (WebGL hero), `/learn` + the two-source interference lesson,
+  `/appearance` (Make it yours on the web, saves to the server), `/sign-in`,
+  `/privacy`. Typed token layer: `src/lib/appearance.ts`. QA: `npm run
+  serve`, then `npm run qa:shots` / `qa:axe` (needs `npx playwright install
+  chromium` once).
+- **iOS extras:** WidgetKit extension in `neuropal-flutter/ios/NeuroPalWidget/`
+  (check-in widget with App Intents, resume-reading widget, focus Live
+  Activity), wired by `ios/scripts/add_widget_target.rb`; the app side is
+  `ios/Runner/NeuroPalIOSExtras.swift` + `lib/platform/ios_extras.dart`.
+  Verified only by the macOS CI build — never run on a device yet.
+- **CI:** `.github/workflows/ci.yml` (tokens, backend, Expo bundles, Flutter
+  analyze/test, platform lint/typecheck/build), `android.yml` (both APKs as
+  artifacts; manual or on main), `ios.yml` (simulator builds of both apps on
+  macOS runners).
+
+**Builds done in the cloud workspace:** Android SDK 36 + JDK 17 + Gradle with
+a Maven Central mirror (`~/.gradle/init.d/maven-mirror.gradle` — Central
+rate-limits to 429). The box has 8 GB and no swap: **never run two Gradle
+builds at once** (they were serialised with `flock` on a shared lock file).
+APKs are signed with the React Native template's debug key (same as the
+Mini's local builds), so they update the installed app in place.
+
+**Waiting on the owner (v2):**
+1. Install and try both APKs on the S24 (Expo 0.2.0 updates the current
+   app in place; "NeuroPal F" installs alongside).
+2. **AI provider vs "your data never trains models".** The default provider
+   is the free Gemini tier, whose terms let Google use submitted content to
+   improve its products (paid use doesn't). Choose: paid Gemini, Claude, or
+   Ollama-only.
+3. iOS on a device needs an Apple developer team and the App Group
+   `group.io.neuropal.flutter` registered; CI only builds for the simulator.
+
+**Review fixes already in (from an independent review of the v2 diff):**
+prototype-safe normalisers, clock-safe last-write-wins on the server,
+never-dropped sync edits, Classic Home restored pixel-for-pixel until
+arranged, live reduce-motion, scoped studio undo, screen-reader-settable
+sliders, error boundary with "Reset the look". Each has a test or a check.
+
+**Traps found in v2 (don't re-derive):**
+- RN-web: SVG `<Pattern id>`s are document-global — two mounted backdrops
+  sharing an id made the visible one blank. Ids now come from `useId()`.
+- RN-web: `Image resizeMode="repeat"` draws the tile once; the grain is a CSS
+  background on web (`expo-asset` resolves its URL).
+- Pal talk templates take a complete phrase (`{task}` = "the CPI notes" or a
+  quoted task title) — they no longer contain "the".
+- The RN Gradle plugin does not support `-x createBundleReleaseJsAndAssets`
+  (it fails resolving generated res) — native-only warm-up builds don't work.
+- Reanimated 4's `useReducedMotion()` is fixed at start-up; ThemeProvider
+  follows `AccessibilityInfo`'s `reduceMotionChanged` instead.
+- The community slider's `onSlidingComplete` never fires for TalkBack or
+  VoiceOver adjustments — never commit a value only there.
+- A single-branch clone only fetches `main`; add a fetch refspec for a
+  feature branch or `git status` claims it was never pushed.
+
+## 1. Where things stand RIGHT NOW (pre-v2 — still true for `main`)
 
 `main` HEAD is **`884e395`** (owner's travel scripts), on top of my
 **`4e0bcb0`** (docs/readme) — clean, pushed, `Ryx007/NeuroPal` (PUBLIC repo).

@@ -53,3 +53,13 @@ neuropal-expo-app/ios/
 
 # Machine-local Claude Code settings
 .claude/settings.local.json
+
+# Session tooling artefacts (cloud workspace plugins)
+.harnesskit/
+
+# Kotlin compiler session files written during Android builds
+.kotlin/
+
+# ── VPS deploy: made on the server, never committed ──
+deploy/vps/backups/
+deploy/vps/cloudflared/

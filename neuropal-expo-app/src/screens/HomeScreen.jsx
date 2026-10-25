@@ -1,12 +1,28 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import Toast from "../components/toast";
 
 import { formatTime12 } from "../data/mockData";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
 import { AnchorEditor } from "../components/planner/AnchorEditor";
+import { Pal } from "../components/pal/Pal";
+import { openPalSheet, usePalBubbleClearance } from "../components/pal/openPalSheet";
+import {
+  SignalAnchorTile,
+  SignalFocusTile,
+  SignalMvdTile,
+  SignalReadingTile,
+  SignalStateTile,
+  hhmm,
+} from "../components/home/SignalTiles";
+import { StateSlider } from "../components/home/StateSlider";
+import { middleOfState } from "../components/home/stateScale";
+import { Entrance } from "../components/motion/Entrance";
+import { MoodHop } from "../components/motion/MoodHop";
+import { announce } from "../services/announce";
 import { anchorsInRange } from "../services/locationAnchors";
 import { categoryForAnchor, scheduleAt } from "../services/notify";
 import {
@@ -19,6 +35,7 @@ import {
 import {
   addAnchor,
   addTask,
+  recordCheckin,
   removeAnchor,
   removeTask,
   setAnchorStatus,
@@ -26,18 +43,35 @@ import {
   toggleTask,
   updateAnchor,
 } from "../store/slices/homeSlice";
-import { usePalette } from "../theme/ThemeProvider";
-import { SectionHeader, withAlpha } from "../components/primitives";
+import { setIntroSeen, setSkin } from "../store/slices/lookSlice";
+import { usePalette, useTheme } from "../theme/ThemeProvider";
+import { effectiveTiles, homeForSkin, palLine } from "../theme/tokens";
+import { GlassPanel, NpPrimaryButton, SectionHeader, SignalLabel, withAlpha } from "../components/primitives";
+
+const MOOD = { green: "okay", yellow: "off", red: "over" };
+// In Signal, two consecutive M tiles of these kinds share a row (S-Today board).
+const PAIRABLE = new Set(["anchor", "focus", "reading", "pal"]);
+// Classic's original gaps above each section (pre-v2 Home), so its default
+// layout renders exactly as it did.
+const CLASSIC_GAP = { state: 26, mvd: 30, anchor: 24, reading: 16, focus: 24, pal: 24 };
+const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 export function HomeScreen() {
   const palette = usePalette();
+  const { isSignal } = useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const tasks = useSelector(selectTasks);
   const remaining = useSelector(selectRemainingTasks);
   const nervous = useSelector(selectNervousState);
+  const nervousLevel = useSelector((s) => s.home.nervousLevel);
   const nextAnchor = useSelector(selectNextAnchor);
   const resume = useSelector(selectResumeDocument);
+  const look = useSelector((s) => s.look);
+  const focus = useSelector((s) => s.focus);
+  // the last tile never sits under Pal's floating bubble
+  const palClear = usePalBubbleClearance();
   const [editingMvd, setEditingMvd] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [anchorEditor, setAnchorEditor] = useState(null); // null | {anchor?}
@@ -45,6 +79,13 @@ export function HomeScreen() {
   // single-user app, so the owner's name is the offline fallback too.
   const userName = useSelector((s) => s.auth.userName);
   const anchors = useSelector((s) => s.home.anchors);
+  // Re-evaluate day rules when the date flips (Home stays mounted).
+  const [today, setToday] = useState(() => new Date());
+  useFocusEffect(
+    useCallback(() => {
+      setToday(new Date());
+    }, [])
+  );
 
   // P8 — place-based anchors, foreground pass: whenever Home gains focus,
   // any anchor pinned to a location fires if the phone is inside its radius
@@ -68,31 +109,214 @@ export function HomeScreen() {
     }, [anchors])
   );
 
+  // v2 — the user's own layout: order, sizes, hidden tiles and today's
+  // day rules ("reading first on weekdays"), from Arrange home.
+  // Tiles with nothing to show today (no document to resume) drop out first,
+  // so pairing never leaves a hole.
+  const tiles = effectiveTiles(homeForSkin(look.home, look.skin), today).filter((t) => t.id !== "reading" || resume);
+  const firstOpenTask = tasks.find((t) => !t.done);
+  const name = userName || "Ryx";
+  const palText = palLine(look.pal, firstOpenTask ? `“${firstOpenTask.title}”` : "your next task");
+  const stateVisible = tiles.some((t) => t.id === "state");
+  // A state button: one tap, and the slider knob moves to that region's middle.
+  const pickState = (v) => {
+    dispatch(recordCheckin({ state: v, level: middleOfState(v) }));
+    dispatch(setNervousState(v));
+    if (v === "red") navigation.getParent()?.navigate("Emergency");
+  };
+  // The slider: its region decides the state, the exact level is kept too.
+  // A drag or tap INTO overwhelmed opens the calming steps (not every
+  // fine-tune inside it). Keys and screen-reader steps never do (WCAG
+  // 3.2.2): you may only be passing through on the way to 70–100, so Home
+  // says where the steps are and the tile shows the button instead.
+  const commitCheckin = (v, level, how) => {
+    const enteringRed = v === "red" && nervous !== "red";
+    dispatch(recordCheckin({ state: v, level }));
+    dispatch(setNervousState(v));
+    if (!enteringRed) return;
+    if (how && how.viaSteps) announce("Overwhelmed. The calming steps are one tap away.");
+    else navigation.getParent()?.navigate("Emergency");
+  };
+  const openCalm = () => navigation.getParent()?.navigate("Emergency");
+  // The trigger gets screen-reader focus back when the sheet closes.
+  const openPal = (ref) => openPalSheet(null, { returnFocusTo: ref });
+  const stateMessage =
+    nervous === "green"
+      ? nextAnchor
+        ? `Good window for focus. ${nextAnchor.title} starts at ${hhmm(nextAnchor.time)}.`
+        : "Good window for focus."
+      : nervous === "yellow"
+        ? "Gentler mode: the Reader slows down and softens contrast. Two minutes is enough today."
+        : nervous === "red"
+          ? "Everything else can wait. Your emergency tools are one tap away."
+          : "Tap how you feel. Home and the Reader adapt to it.";
+
+  const renderSignalTile = (tile, half) => {
+    switch (tile.id) {
+      case "state":
+        return (
+          <SignalStateTile
+            size={tile.size}
+            nervous={nervous}
+            level={nervousLevel}
+            onPick={pickState}
+            onCommit={commitCheckin}
+            onCalm={openCalm}
+            message={stateMessage}
+          />
+        );
+      case "mvd":
+        return (
+          <SignalMvdTile
+            size={tile.size}
+            tasks={tasks}
+            remaining={remaining}
+            editing={editingMvd}
+            onEditToggle={() => setEditingMvd((v) => !v)}
+            newTask={newTask}
+            setNewTask={setNewTask}
+            onAdd={() => {
+              dispatch(addTask(newTask));
+              setNewTask("");
+            }}
+            onToggle={(id) => dispatch(toggleTask(id))}
+            onRemove={(id) => dispatch(removeTask(id))}
+          />
+        );
+      case "anchor":
+        return (
+          <SignalAnchorTile
+            size={tile.size}
+            half={half}
+            anchor={nextAnchor}
+            onEdit={() => setAnchorEditor({ anchor: nextAnchor })}
+            onDone={() => nextAnchor && dispatch(setAnchorStatus({ id: nextAnchor.id, status: "done" }))}
+            onAdd={() => setAnchorEditor({})}
+          />
+        );
+      case "reading":
+        return <SignalReadingTile size={tile.size} half={half} document={resume} onPress={() => navigation.navigate("Reader", { id: resume.id })} />;
+      case "focus":
+        return <SignalFocusTile size={tile.size} half={half} focus={focus} onOpen={() => navigation.navigate("Toolbox")} />;
+      case "pal":
+        return (
+          <PalTile
+            size={tile.size}
+            pal={look.pal}
+            mood={MOOD[nervous] || "okay"}
+            line={palText}
+            half={half}
+            onOpen={openPal}
+            onBuild={() => navigation.getParent()?.navigate("PalBuilder")}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Signal rows: pair consecutive M tiles; everything else is full width.
+  const signalRows = [];
+  for (let k = 0; k < tiles.length; k += 1) {
+    const t = tiles[k];
+    const n = tiles[k + 1];
+    if (t.size === "M" && n && n.size === "M" && PAIRABLE.has(t.id) && PAIRABLE.has(n.id)) {
+      signalRows.push([t, n]);
+      k += 1;
+    } else {
+      signalRows.push([t]);
+    }
+  }
+
+  const renderTile = (tile) => {
+    switch (tile.id) {
+      case "state":
+        return <StateTile size={tile.size} nervous={nervous} level={nervousLevel} onPick={pickState} onCommit={commitCheckin} onCalm={openCalm} />;
+      case "mvd":
+        return (
+          <MvdTile
+            size={tile.size}
+            tasks={tasks}
+            remaining={remaining}
+            editing={editingMvd}
+            onEditToggle={() => setEditingMvd((v) => !v)}
+            newTask={newTask}
+            setNewTask={setNewTask}
+            onAdd={() => {
+              dispatch(addTask(newTask));
+              setNewTask("");
+            }}
+            onToggle={(id) => dispatch(toggleTask(id))}
+            onRemove={(id) => dispatch(removeTask(id))}
+          />
+        );
+      case "anchor":
+        return (
+          <AnchorTile
+            size={tile.size}
+            anchor={nextAnchor}
+            onEdit={() => setAnchorEditor({ anchor: nextAnchor })}
+            onDone={() => nextAnchor && dispatch(setAnchorStatus({ id: nextAnchor.id, status: "done" }))}
+            onAdd={() => setAnchorEditor({})}
+          />
+        );
+      case "reading":
+        return resume ? (
+          <ReadingTile size={tile.size} document={resume} onPress={() => navigation.navigate("Reader", { id: resume.id })} />
+        ) : null;
+      case "focus":
+        return <FocusTile size={tile.size} focus={focus} onOpen={() => navigation.navigate("Toolbox")} />;
+      case "pal":
+        return (
+          <PalTile
+            size={tile.size}
+            pal={look.pal}
+            mood={MOOD[nervous] || "okay"}
+            line={palText}
+            onOpen={openPal}
+            onBuild={() => navigation.getParent()?.navigate("PalBuilder")}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <ScrollView
-      className="flex-1"
+    // Keyboard-safe: the minimum-day "add a task" field can sit low on Home
+    // (any layout from Arrange home), so it scrolls above the keyboard.
+    <KeyboardSafeScrollView
+      style={{ flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        paddingHorizontal: 20,
+        paddingHorizontal: isSignal ? 16 : 20,
         paddingTop: 20,
-        paddingBottom: 40,
+        paddingBottom: Math.max(40, palClear),
       }}
       showsVerticalScrollIndicator={false}
     >
+      {isSignal ? (
+        <SignalLabel style={{ marginBottom: 6 }}>
+          {`${DAYS[today.getDay()]} · ${today.getDate()} ${MONTHS[today.getMonth()]}`}
+        </SignalLabel>
+      ) : null}
       <Text
+        accessibilityRole="header"
         style={{
           color: palette.onSurface,
-          fontFamily: "SpaceGrotesk_700Bold",
-          fontSize: 34,
-          letterSpacing: -0.8,
+          fontFamily: palette.fonts.display,
+          fontSize: isSignal ? 40 : 34,
+          letterSpacing: isSignal ? -0.6 : -0.8,
+          lineHeight: isSignal ? 42 : undefined,
         }}
       >
-        Hello, {userName || "Ryx"}
+        Hello, {name}
+        {isSignal ? "." : ""}
       </Text>
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_400Regular",
+          fontFamily: palette.fonts.body,
           fontSize: 16,
           marginTop: 4,
         }}
@@ -100,12 +324,26 @@ export function HomeScreen() {
         One step at a time today.
       </Text>
 
-      {nervous === "yellow" ? (
+      {!look.introSeen ? (
+        <IntroCard
+          onTry={() => {
+            dispatch(setSkin("signal"));
+            dispatch(setIntroSeen());
+          }}
+          onStudio={() => {
+            dispatch(setIntroSeen());
+            navigation.navigate("Studio");
+          }}
+          onDismiss={() => dispatch(setIntroSeen())}
+        />
+      ) : null}
+
+      {nervous === "yellow" && (!isSignal || !stateVisible) ? (
         <View
           style={{
             marginTop: 20,
             padding: 16,
-            borderRadius: 18,
+            borderRadius: isSignal ? palette.shape.radiusMedium : 18,
             backgroundColor: withAlpha(palette.warn, 0.1),
             borderWidth: 1,
             borderColor: withAlpha(palette.warn, 0.35),
@@ -122,7 +360,7 @@ export function HomeScreen() {
             style={{
               flex: 1,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 13,
               lineHeight: 19,
             }}
@@ -133,189 +371,58 @@ export function HomeScreen() {
         </View>
       ) : null}
 
-      <View
-        style={{
-          marginTop: 26,
-          padding: 20,
-          borderRadius: 26,
-          backgroundColor: palette.surfaceLow,
-        }}
-      >
-        <Text
+      {/* Signal tiles fade and rise in one after another on mount (motion
+          constants: components/motion/motion.js). Classic is untouched. */}
+      {isSignal
+        ? signalRows.map((row, k) =>
+            row.length === 2 ? (
+              <Entrance key={`${row[0].id}+${row[1].id}`} index={k} style={{ marginTop: 14, flexDirection: "row", gap: 12 }}>
+                {row.map((t) => (
+                  <View key={t.id} style={{ flex: 1 }}>
+                    {renderSignalTile(t, true)}
+                  </View>
+                ))}
+              </Entrance>
+            ) : (
+              <Entrance key={row[0].id} index={k} style={{ marginTop: 14 }}>
+                {renderSignalTile(row[0], false)}
+              </Entrance>
+            )
+          )
+        : tiles.map((tile) => {
+            const node = renderTile(tile);
+            return node ? (
+              <View key={tile.id} style={{ marginTop: CLASSIC_GAP[tile.id] ?? 24 }}>
+                {node}
+              </View>
+            ) : null;
+          })}
+
+      {/* Classic Home stays exactly as it was; its layout is arranged from
+          Make it yours. Signal gets the shortcut here. */}
+      {isSignal ? (
+        <Pressable
+          onPress={() => navigation.getParent()?.navigate("HomeArrange")}
+          accessibilityRole="button"
+          accessibilityLabel="Arrange home: reorder, resize or hide these tiles"
           style={{
-            color: palette.onSurfaceVariant,
-            fontFamily: "SpaceGrotesk_600SemiBold",
-            fontSize: 16,
+            marginTop: 22,
+            minHeight: 44,
+            alignSelf: "center",
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 14,
+            borderRadius: palette.shape.radiusControl,
+            borderWidth: 1,
+            borderColor: palette.control,
           }}
         >
-          How are you feeling right now?
-        </Text>
-        <View style={{ height: 14 }} />
-        <StateOption
-          selected={nervous === "green"}
-          icon="sentiment-satisfied"
-          label="I feel okay"
-          tint={palette.secondary}
-          onPress={() => dispatch(setNervousState("green"))}
-        />
-        <View style={{ height: 10 }} />
-        <StateOption
-          selected={nervous === "yellow"}
-          icon="sentiment-neutral"
-          label="Feeling a bit off"
-          tint={palette.tertiary}
-          onPress={() => dispatch(setNervousState("yellow"))}
-        />
-        <View style={{ height: 10 }} />
-        <StateOption
-          selected={nervous === "red"}
-          icon="sentiment-very-dissatisfied"
-          label="Help, I'm overwhelmed"
-          tint={palette.error}
-          onPress={() => {
-            dispatch(setNervousState("red"));
-            navigation.getParent()?.navigate("Emergency");
-          }}
-        />
-      </View>
-
-      <View style={{ marginTop: 30 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View style={{ flex: 1 }}>
-            <SectionHeader
-              label="Minimum viable day"
-              trailing={`${remaining} tasks remaining`}
-            />
-          </View>
-          <Pressable
-            onPress={() => setEditingMvd((v) => !v)}
-            accessibilityRole="button"
-            accessibilityLabel={editingMvd ? "Done editing tasks" : "Edit tasks"}
-            hitSlop={8}
-            style={{
-              marginLeft: 10,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 99,
-              backgroundColor: editingMvd
-                ? withAlpha(palette.accent, 0.16)
-                : palette.surfaceContainer,
-            }}
-          >
-            <Text
-              style={{
-                color: editingMvd ? palette.accent : palette.onSurfaceVariant,
-                fontFamily: "Inter_600SemiBold",
-                fontSize: 12,
-              }}
-            >
-              {editingMvd ? "Done" : "Edit"}
-            </Text>
-          </Pressable>
-        </View>
-        <View style={{ height: 12 }} />
-        {tasks.map((task) => (
-          <MvdRow
-            key={task.id}
-            task={task}
-            editing={editingMvd}
-            onToggle={() => dispatch(toggleTask(task.id))}
-            onRemove={() => dispatch(removeTask(task.id))}
-          />
-        ))}
-        {editingMvd ? (
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 2,
-            }}
-          >
-            <TextInput
-              value={newTask}
-              onChangeText={setNewTask}
-              onSubmitEditing={() => {
-                dispatch(addTask(newTask));
-                setNewTask("");
-              }}
-              placeholder="Add a task for today…"
-              placeholderTextColor={palette.onSurfaceVariant}
-              accessibilityLabel="New task title"
-              style={{
-                flex: 1,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                borderRadius: 14,
-                backgroundColor: palette.surfaceHigh,
-                color: palette.onSurface,
-                fontFamily: "Inter_400Regular",
-                fontSize: 14,
-              }}
-            />
-            <Pressable
-              onPress={() => {
-                dispatch(addTask(newTask));
-                setNewTask("");
-              }}
-              disabled={!newTask.trim()}
-              accessibilityRole="button"
-              accessibilityLabel="Add task"
-              style={{
-                width: 46,
-                borderRadius: 14,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: withAlpha(palette.accent, 0.16),
-                borderWidth: 1,
-                borderColor: withAlpha(palette.accent, 0.4),
-                opacity: newTask.trim() ? 1 : 0.4,
-              }}
-            >
-              <MaterialIcons name="add" size={20} color={palette.accent} />
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={{ marginTop: 24 }}>
-        {nextAnchor ? (
-          <NextAnchor
-            anchor={nextAnchor}
-            onEdit={() => setAnchorEditor({ anchor: nextAnchor })}
-            onDone={() =>
-              dispatch(setAnchorStatus({ id: nextAnchor.id, status: "done" }))
-            }
-            onAdd={() => setAnchorEditor({})}
-          />
-        ) : (
-          <Pressable
-            onPress={() => setAnchorEditor({})}
-            accessibilityRole="button"
-            accessibilityLabel="Set your next anchor"
-            style={{
-              padding: 18,
-              borderRadius: 22,
-              borderWidth: 1.4,
-              borderStyle: "dashed",
-              borderColor: withAlpha(palette.outlineVariant, 0.4),
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <MaterialIcons name="add-alarm" size={22} color={palette.accent} />
-            <Text
-              style={{
-                color: palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
-                fontSize: 14,
-              }}
-            >
-              Set your next anchor — meds, break, study block…
-            </Text>
-          </Pressable>
-        )}
-      </View>
+          <MaterialIcons name="dashboard-customize" size={16} color={palette.onSurfaceVariant} />
+          <Text style={{ marginLeft: 8, color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
+            Arrange home
+          </Text>
+        </Pressable>
+      ) : null}
 
       <AnchorEditor
         visible={Boolean(anchorEditor)}
@@ -334,27 +441,453 @@ export function HomeScreen() {
           setAnchorEditor(null);
         }}
       />
-
-      {resume ? (
-        <View style={{ marginTop: 16 }}>
-          <ResumeReading
-            document={resume}
-            onPress={() => navigation.navigate("Reader", { id: resume.id })}
-          />
-        </View>
-      ) : null}
-    </ScrollView>
+    </KeyboardSafeScrollView>
   );
 }
 
-function StateOption({ selected, icon, label, tint, onPress }) {
+// ---- tiles -----------------------------------------------------------------
+// Each tile honours the size the user picked in Arrange home: S = one line,
+// M = the standard card, L = everything. Classic keeps its original look;
+// Signal wraps tiles in brutal-glass panels.
+
+function TileFrame({ children, padded = true, grow = false }) {
+  const { isSignal } = useTheme();
+  if (!isSignal) return children;
+  return <GlassPanel style={{ padding: padded ? 14 : 0, flexGrow: grow ? 1 : 0 }}>{children}</GlassPanel>;
+}
+
+function OneLine({ icon, label, value, onPress, accessibilityLabel }) {
+  const palette = usePalette();
+  const { isSignal } = useTheme();
+  return (
+    <TileFrame>
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole={onPress ? "button" : undefined}
+        accessibilityLabel={accessibilityLabel || `${label}: ${value}`}
+        style={{
+          minHeight: 44,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: isSignal ? 0 : 16,
+          paddingVertical: isSignal ? 0 : 12,
+          borderRadius: 18,
+          backgroundColor: isSignal ? "transparent" : palette.surfaceContainer,
+        }}
+      >
+        <MaterialIcons name={icon} size={18} color={palette.accent} />
+        <Text style={{ marginLeft: 10, color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodyMedium, fontSize: 13 }}>{label}</Text>
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, color: palette.onSurface, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>
+          {value}
+        </Text>
+        {onPress ? <MaterialIcons name="chevron-right" size={18} color={palette.outline} /> : null}
+      </Pressable>
+    </TileFrame>
+  );
+}
+
+const STATES = [
+  { id: "green", icon: "sentiment-satisfied", label: "I feel okay", short: "Okay", tint: "secondary" },
+  { id: "yellow", icon: "sentiment-neutral", label: "Feeling a bit off", short: "Bit off", tint: "tertiary" },
+  // Choosing it opens the calming steps; screen readers hear that first.
+  { id: "red", icon: "sentiment-very-dissatisfied", label: "Help, I'm overwhelmed", short: "Overwhelmed", tint: "error", a11y: "Help, I'm overwhelmed. Opens the calming steps" },
+];
+
+// While overwhelmed, the calming steps are one tap away in the tile itself
+// (the slider's keys / screen-reader steps never open them on their own).
+function CalmButton({ nervous, onCalm }) {
+  if (nervous !== "red" || !onCalm) return null;
+  return (
+    <View style={{ marginTop: 14 }}>
+      <NpPrimaryButton label="Open the calming steps" icon="spa" onPress={onCalm} />
+    </View>
+  );
+}
+
+// The original three choices stay exactly as they were; the slider sits under
+// them (L) or under the row of three (M/S, where the row is its legend).
+function StateTile({ size, nervous, level, onPick, onCommit, onCalm }) {
+  const palette = usePalette();
+  const { isSignal } = useTheme();
+  if (size === "L") {
+    const body = (
+      <>
+        {isSignal ? (
+          <SignalLabel accessibilityRole="header">How are you feeling right now?</SignalLabel>
+        ) : (
+          <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.displaySemi, fontSize: 16 }}>
+            How are you feeling right now?
+          </Text>
+        )}
+        <View style={{ height: 14 }} />
+        <View accessibilityRole="radiogroup" aria-label="How are you feeling right now?">
+          {STATES.map((st, i) => (
+            <View key={st.id} style={{ marginTop: i ? 10 : 0 }}>
+              <StateOption selected={nervous === st.id} icon={st.icon} label={st.label} a11y={st.a11y} tint={palette[st.tint]} onPress={() => onPick(st.id)} />
+            </View>
+          ))}
+        </View>
+        <StateSlider style={{ marginTop: 16 }} nervous={nervous} level={level} onCommit={onCommit} legend />
+        <CalmButton nervous={nervous} onCalm={onCalm} />
+      </>
+    );
+    return isSignal ? (
+      <GlassPanel style={{ padding: 16 }}>{body}</GlassPanel>
+    ) : (
+      <View style={{ padding: 20, borderRadius: 26, backgroundColor: palette.surfaceLow }}>{body}</View>
+    );
+  }
+  // M and S: one row of three — S drops the heading.
+  return (
+    <TileFrame>
+      {size === "M" ? (
+        <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodySemi, fontSize: 13, marginBottom: 8, marginLeft: isSignal ? 0 : 4 }}>
+          How are you feeling?
+        </Text>
+      ) : null}
+      <View style={{ flexDirection: "row", gap: 8 }} accessibilityRole="radiogroup" aria-label="How are you feeling right now?">
+        {STATES.map((st) => {
+          const on = nervous === st.id;
+          const tint = palette[st.tint];
+          return (
+            <Pressable
+              key={st.id}
+              onPress={() => onPick(st.id)}
+              accessibilityRole="radio"
+              aria-checked={on}
+              accessibilityLabel={st.a11y || st.label}
+              style={{
+                flex: 1,
+                minHeight: 48,
+                borderRadius: isSignal ? palette.shape.radiusControl : 16,
+                borderWidth: on ? 2 : 1,
+                borderColor: on ? tint : isSignal ? palette.control : withAlpha(palette.outlineVariant, 0.4),
+                backgroundColor: on ? withAlpha(tint, 0.14) : isSignal ? "transparent" : palette.surfaceContainer,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 6,
+              }}
+            >
+              <MaterialIcons name={st.icon} size={20} color={tint} />
+              <Text style={{ marginTop: 2, color: palette.onSurface, fontFamily: palette.fonts.bodySemi, fontSize: 12 }}>{st.short}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <StateSlider style={{ marginTop: 6 }} nervous={nervous} level={level} onCommit={onCommit} />
+      <CalmButton nervous={nervous} onCalm={onCalm} />
+    </TileFrame>
+  );
+}
+
+// Classic only (Signal renders SignalMvdTile). Size L is the original tile.
+function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNewTask, onAdd, onToggle, onRemove }) {
+  const palette = usePalette();
+  if (size === "S") {
+    return <OneLine icon="checklist" label="Minimum day" value={remaining ? `${remaining} left` : "all done"} onPress={onEditToggle} />;
+  }
+  const shown = size === "M" && !editing ? tasks.slice(0, 3) : tasks;
+  const hiddenCount = tasks.length - shown.length;
+  return (
+    <TileFrame>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ flex: 1 }}>
+          <SectionHeader label="Minimum viable day" trailing={`${remaining} tasks remaining`} />
+        </View>
+        <Pressable
+          onPress={onEditToggle}
+          accessibilityRole="button"
+          accessibilityLabel={editing ? "Done editing tasks" : "Edit tasks"}
+          hitSlop={8}
+          style={{
+            marginLeft: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 99,
+            backgroundColor: editing ? withAlpha(palette.accent, 0.16) : palette.surfaceContainer,
+          }}
+        >
+          <Text style={{ color: editing ? palette.accent : palette.onSurfaceVariant, fontFamily: palette.fonts.bodySemi, fontSize: 12 }}>
+            {editing ? "Done" : "Edit"}
+          </Text>
+        </Pressable>
+      </View>
+      <View style={{ height: 12 }} />
+      {shown.map((task) => (
+        <MvdRow key={task.id} task={task} editing={editing} onToggle={() => onToggle(task.id)} onRemove={() => onRemove(task.id)} />
+      ))}
+      {hiddenCount > 0 ? (
+        <Pressable onPress={onEditToggle} accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 4 }}>
+          <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
+            {`+ ${hiddenCount} more`}
+          </Text>
+        </Pressable>
+      ) : null}
+      {editing ? (
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+          <TextInput
+            value={newTask}
+            onChangeText={setNewTask}
+            onSubmitEditing={onAdd}
+            placeholder="Add a task for today…"
+            placeholderTextColor={palette.onSurfaceVariant}
+            accessibilityLabel="New task title"
+            style={{
+              flex: 1,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderRadius: 14,
+              backgroundColor: palette.surfaceHigh,
+              color: palette.onSurface,
+              fontFamily: palette.fonts.body,
+              fontSize: 14,
+            }}
+          />
+          <Pressable
+            onPress={onAdd}
+            disabled={!newTask.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Add task"
+            style={{
+              width: 46,
+              borderRadius: 14,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: withAlpha(palette.accent, 0.16),
+              borderWidth: 1,
+              borderColor: withAlpha(palette.accent, 0.4),
+              opacity: newTask.trim() ? 1 : 0.4,
+            }}
+          >
+            <MaterialIcons name="add" size={20} color={palette.accent} />
+          </Pressable>
+        </View>
+      ) : null}
+    </TileFrame>
+  );
+}
+
+function AnchorTile({ size, anchor, onEdit, onDone, onAdd }) {
+  const palette = usePalette();
+  if (!anchor) {
+    return (
+      <Pressable
+        onPress={onAdd}
+        accessibilityRole="button"
+        accessibilityLabel="Set your next anchor"
+        style={{
+          padding: 18,
+          borderRadius: 22,
+          borderWidth: 1.4,
+          borderStyle: "dashed",
+          borderColor: withAlpha(palette.outlineVariant, 0.4),
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <MaterialIcons name="add-alarm" size={22} color={palette.accent} />
+        <Text style={{ color: palette.onSurfaceVariant, fontFamily: palette.fonts.bodyMedium, fontSize: 14 }}>
+          Set your next anchor — meds, break, study block…
+        </Text>
+      </Pressable>
+    );
+  }
+  if (size === "S") {
+    return <OneLine icon={anchor.icon || "anchor"} label="Next" value={`${anchor.title} · ${formatTime12(anchor.time)}`} onPress={onEdit} />;
+  }
+  return <NextAnchor anchor={anchor} onEdit={onEdit} onDone={onDone} onAdd={onAdd} />;
+}
+
+function ReadingTile({ size, document, onPress }) {
+  if (size === "S") {
+    return (
+      <OneLine
+        icon="chrome-reader-mode"
+        label="Resume"
+        value={document.title}
+        onPress={onPress}
+        accessibilityLabel={`Resume reading ${document.title}`}
+      />
+    );
+  }
+  return <ResumeReading document={document} onPress={onPress} />;
+}
+
+function focusRemaining(focus, now) {
+  if (!focus.running || !focus.endsAt) return null;
+  const ms = Math.max(0, focus.endsAt - now);
+  const m = Math.floor(ms / 60000);
+  const sec = Math.floor((ms % 60000) / 1000);
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function FocusTile({ size, focus, onOpen }) {
+  const palette = usePalette();
+  const { isSignal } = useTheme();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!focus.running) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [focus.running]);
+  const left = focusRemaining(focus, now);
+  const status = left
+    ? `${focus.phase === "work" ? "Focus" : "Break"} · ${left} left`
+    : `${focus.workMin} min block ready`;
+  if (size === "S") return <OneLine icon="timer" label="Focus" value={status} onPress={onOpen} />;
+  return (
+    <TileFrame>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Focus: ${status}. Open the focus tools`}
+        style={{
+          padding: isSignal ? 0 : 16,
+          borderRadius: 22,
+          backgroundColor: isSignal ? "transparent" : palette.surfaceContainer,
+          flexDirection: "row",
+          alignItems: "center",
+        }}
+      >
+        <View
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            borderWidth: 3,
+            borderColor: focus.running ? palette.accent : palette.outlineVariant,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialIcons name={focus.running ? "graphic-eq" : "timer"} size={22} color={palette.accent} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <SignalLabel>Focus</SignalLabel>
+          <Text style={{ marginTop: 4, color: palette.onSurface, fontFamily: palette.fonts.displaySemi, fontSize: 17 }}>{status}</Text>
+          {size === "L" ? (
+            <Text style={{ marginTop: 4, color: palette.onSurfaceVariant, fontFamily: palette.fonts.body, fontSize: 12.5 }}>
+              {`${focus.cyclesDone} block${focus.cyclesDone === 1 ? "" : "s"} done today · ${focus.breakMin} min breaks`}
+            </Text>
+          ) : null}
+        </View>
+        <MaterialIcons name="chevron-right" size={20} color={palette.outline} />
+      </Pressable>
+    </TileFrame>
+  );
+}
+
+function PalTile({ size, pal, mood, line, onOpen, onBuild, half = false }) {
+  const palette = usePalette();
+  const { isSignal } = useTheme();
+  const openRef = useRef(null); // focus comes back here when the sheet closes
+  const small = size === "S";
+  const said = mood === "over" ? "Nothing needed right now. Breathe with me if you like." : line;
+  return (
+    <TileFrame grow={half}>
+      <View
+        style={{
+          padding: isSignal ? 0 : 14,
+          borderRadius: 22,
+          backgroundColor: isSignal ? "transparent" : palette.surfaceContainer,
+        }}
+      >
+        {/* The tile opens Pal, the assistant — like the floating bubble. */}
+        <Pressable
+          ref={openRef}
+          onPress={() => onOpen(openRef)}
+          accessibilityRole="button"
+          accessibilityLabel={`${pal.name}: ${said}`}
+          accessibilityHint={`Opens ${pal.name}, your assistant`}
+          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", opacity: pressed ? 0.85 : 1 })}
+        >
+          {/* Signal: Pal reacts when your state changes. Classic: unchanged.
+              The button's label already says it: the picture is decorative. */}
+          <MoodHop mood={mood} enabled={isSignal}>
+            <Pal pal={pal} size={small ? 44 : 78} mood={mood} decorative />
+          </MoodHop>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: small ? 13.5 : 15, lineHeight: small ? 19 : 21 }}>
+              <Text style={{ fontFamily: palette.fonts.bodyBold }}>{`${pal.name}: `}</Text>
+              {said}
+            </Text>
+          </View>
+          {!half ? <MaterialIcons name="chevron-right" size={20} color={palette.outline} style={{ marginLeft: 6 }} /> : null}
+        </Pressable>
+        {!small ? (
+          <Pressable
+            onPress={onBuild}
+            accessibilityRole="button"
+            accessibilityLabel={`Build your Pal, ${pal.name}`}
+            style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start", marginLeft: half ? 0 : 78 + 12 }}
+          >
+            <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>Build your Pal</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </TileFrame>
+  );
+}
+
+function IntroCard({ onTry, onStudio, onDismiss }) {
+  const palette = usePalette();
+  const { isSignal } = useTheme();
+  return (
+    <GlassPanel style={{ marginTop: 18, padding: 16 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View style={{ flex: 1 }}>
+          <SignalLabel>New in NeuroPal</SignalLabel>
+          <Text style={{ marginTop: 6, color: palette.onSurface, fontFamily: palette.fonts.displaySemi, fontSize: 18 }}>
+            Two skins, and it's all yours to shape.
+          </Text>
+          <Text style={{ marginTop: 6, color: palette.onSurfaceVariant, fontFamily: palette.fonts.body, fontSize: 13.5, lineHeight: 19 }}>
+            Classic stays exactly as it was. Signal is new: brutal glass, a living background, any colour you like. Build your own Pal and arrange Home too.
+          </Text>
+        </View>
+        <Pressable onPress={onDismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Dismiss" style={{ padding: 4 }}>
+          <MaterialIcons name="close" size={18} color={palette.outline} />
+        </Pressable>
+      </View>
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+        {!isSignal ? (
+          <Pressable
+            onPress={onTry}
+            accessibilityRole="button"
+            style={{ minHeight: 44, paddingHorizontal: 16, borderRadius: 999, backgroundColor: palette.accent, justifyContent: "center" }}
+          >
+            <Text style={{ color: palette.onPrimary, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>Try Signal</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={onStudio}
+          accessibilityRole="button"
+          style={{
+            minHeight: 44,
+            paddingHorizontal: 16,
+            borderRadius: isSignal ? palette.shape.radiusControl : 999,
+            borderWidth: 1.5,
+            borderColor: isSignal ? palette.control : withAlpha(palette.accent, 0.5),
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: isSignal ? palette.onSurface : palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 14 }}>Open Make it yours</Text>
+        </Pressable>
+      </View>
+    </GlassPanel>
+  );
+}
+
+function StateOption({ selected, icon, label, a11y, tint, onPress }) {
   const palette = usePalette();
 
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityRole="radio"
+      aria-checked={selected}
+      accessibilityLabel={a11y || label}
       style={{
         padding: 14,
         borderRadius: 18,
@@ -384,7 +917,7 @@ function StateOption({ selected, icon, label, tint, onPress }) {
         style={{
           flex: 1,
           color: palette.onSurface,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 15,
         }}
       >
@@ -440,7 +973,7 @@ function MvdRow({ task, onToggle, onRemove, editing }) {
         <Text
           style={{
             color: task.done ? palette.onSurfaceVariant : palette.onSurface,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 15,
             textDecorationLine: task.done ? "line-through" : "none",
           }}
@@ -451,7 +984,7 @@ function MvdRow({ task, onToggle, onRemove, editing }) {
           <Text
             style={{
               color: palette.onSurfaceVariant,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 12,
             }}
           >
@@ -513,7 +1046,7 @@ function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
           <Text
             style={{
               color: withAlpha(palette.accent, 0.75),
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 11,
               letterSpacing: 3,
             }}
@@ -524,7 +1057,7 @@ function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 20,
             }}
           >
@@ -541,7 +1074,7 @@ function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_400Regular",
+                fontFamily: palette.fonts.body,
                 fontSize: 13,
               }}
             >
@@ -588,7 +1121,7 @@ function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
           <Text
             style={{
               color: palette.secondary,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: palette.fonts.bodySemi,
               fontSize: 13,
             }}
           >
@@ -615,7 +1148,7 @@ function NextAnchor({ anchor, onEdit, onDone, onAdd }) {
           <Text
             style={{
               color: palette.accent,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: palette.fonts.bodySemi,
               fontSize: 13,
             }}
           >
@@ -680,7 +1213,7 @@ function ResumeReading({ document, onPress }) {
           <Text
             style={{
               color: withAlpha(palette.accent, 0.7),
-              fontFamily: "Inter_500Medium",
+              fontFamily: palette.fonts.bodyMedium,
               fontSize: 11,
               letterSpacing: 2,
             }}
@@ -692,7 +1225,7 @@ function ResumeReading({ document, onPress }) {
             numberOfLines={2}
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 16,
             }}
           >

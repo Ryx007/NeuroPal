@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The NeuroPal backend is plain HTTP on the owner's own machines
+  (Tailscale MagicDNS, the home LAN IP, or any address typed in Settings),
+  so cleartext traffic must be allowed. Personal tool: revisit (HTTPS via
+  Tailscale certificates) before any public release.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { useDispatch } from "react-redux";
 import Toast from "./toast";
 
 import {
   apiHost,
   getApiOverride,
   getApiStatus,
+  getHeaders,
   labelForCandidate,
   recheckApi,
   setApiOverride,
   subscribeApi,
 } from "../store/ApiLink";
+import { updateLogin } from "../store/slices/authSlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
@@ -83,7 +86,7 @@ export function ConnectionStatus() {
         <Text
           style={{
             color: palette.onSurface,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 15,
           }}
         >
@@ -95,7 +98,7 @@ export function ConnectionStatus() {
         <Text
           style={{
             color: palette.onSurfaceVariant,
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
             marginTop: 6,
           }}
@@ -130,7 +133,7 @@ export function ConnectionStatus() {
                 style={{
                   flex: 1,
                   color: active ? palette.accent : palette.onSurfaceVariant,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                 }}
               >
@@ -139,7 +142,7 @@ export function ConnectionStatus() {
               <Text
                 style={{
                   color: c.ok === false ? palette.error : palette.onSurfaceVariant,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: palette.fonts.bodyMedium,
                   fontSize: 11,
                   marginLeft: 10,
                 }}
@@ -180,7 +183,7 @@ export function ConnectionStatus() {
                 style={{
                   flex: 1,
                   color: palette.onSurfaceVariant,
-                  fontFamily: "JetBrainsMono_400Regular",
+                  fontFamily: palette.fonts.mono,
                   fontSize: 11,
                 }}
               >
@@ -189,7 +192,7 @@ export function ConnectionStatus() {
               <Text
                 style={{
                   color: d.up ? palette.onSurfaceVariant : palette.error,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: palette.fonts.bodyMedium,
                   fontSize: 11,
                 }}
               >
@@ -235,7 +238,7 @@ export function ConnectionStatus() {
         <Text
           style={{
             color: palette.accent,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: palette.fonts.bodySemi,
             fontSize: 13,
           }}
         >
@@ -246,18 +249,25 @@ export function ConnectionStatus() {
   );
 }
 
-function BackendAddressField({ onChanged }) {
+// Also used on the sign-in screen, so a wrong default address is never a
+// dead end.
+export function BackendAddressField({ onChanged }) {
   const palette = usePalette();
+  const dispatch = useDispatch();
   const [value, setValue] = useState(() => getApiOverride() || "");
   const [testing, setTesting] = useState(false);
 
   async function apply(url) {
     setTesting(true);
+    const before = apiHost;
     try {
       const st = await setApiOverride(url);
       onChanged?.();
       if (st.state === "ok") {
         Toast.show({ type: "success", text1: "Connected", text2: st.host });
+        // A different server has its own accounts: check the session again
+        // (a single-user server signs you straight back in).
+        if (st.host !== before) dispatch(updateLogin(null));
       } else {
         Toast.show({
           type: "error",
@@ -277,7 +287,7 @@ function BackendAddressField({ onChanged }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 11,
           letterSpacing: 2,
           marginBottom: 8,
@@ -291,7 +301,7 @@ function BackendAddressField({ onChanged }) {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        placeholder="http://192.168.3.229:4000 (blank = defaults)"
+        placeholder="https://api.ryx007.work (blank = default)"
         placeholderTextColor={palette.onSurfaceVariant}
         accessibilityLabel="Backend address override"
         style={{
@@ -300,7 +310,7 @@ function BackendAddressField({ onChanged }) {
           borderRadius: 12,
           backgroundColor: palette.surfaceLowest,
           color: palette.onSurface,
-          fontFamily: "JetBrainsMono_400Regular",
+          fontFamily: palette.fonts.mono,
           fontSize: 12,
         }}
       />
@@ -320,7 +330,7 @@ function BackendAddressField({ onChanged }) {
             opacity: testing ? 0.5 : 1,
           }}
         >
-          <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+          <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>
             {testing ? "Testing…" : "Save & test"}
           </Text>
         </Pressable>
@@ -343,7 +353,7 @@ function BackendAddressField({ onChanged }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: palette.fonts.bodySemi,
                 fontSize: 13,
               }}
             >
@@ -368,7 +378,10 @@ function ReingestAllButton() {
     }
     setArming(false);
     try {
-      const res = await fetch(`${apiHost}/api/documents/reingest-all`, { method: "POST" });
+      const res = await fetch(`${apiHost}/api/documents/reingest-all`, {
+        method: "POST",
+        headers: await getHeaders(),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       Toast.show({
@@ -402,7 +415,7 @@ function ReingestAllButton() {
       <Text
         style={{
           color: palette.tertiary,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: palette.fonts.bodySemi,
           fontSize: 13,
         }}
       >

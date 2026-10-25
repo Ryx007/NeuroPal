@@ -5,7 +5,8 @@
     "main": "src/server.js",
     "scripts": {
         "start": "node src/server.js",
-        "dev": "node --watch src/server.js"
+        "dev": "node --watch src/server.js",
+        "test": "node --test --test-concurrency=1 test/*.test.js"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.30.0",
@@ -32,6 +33,12 @@
         "node": ">=20"
     },
     "devDependencies": {
+        "mongodb-memory-server": "^11.3.0",
         "nodemon": "^3.1.14"
+    },
+    "config": {
+        "mongodbMemoryServer": {
+            "disablePostinstall": "1"
+        }
     }
 }

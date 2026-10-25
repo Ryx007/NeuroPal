@@ -3,10 +3,12 @@ import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../toast";
 
 import { getCurrentCoords } from "../../services/locationAnchors";
@@ -103,7 +105,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           borderRadius: 12,
           backgroundColor: palette.surfaceHigh,
           color: palette.onSurface,
-          fontFamily: "JetBrainsMono_400Regular",
+          fontFamily: palette.fonts.mono,
           fontSize: 26,
         }}
       />
@@ -119,18 +121,29 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge);
+          the scroll view keeps every field reachable when the dialog no
+          longer fits (large text, keyboard up) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      {/* the scrim: tap to close, but not a stop for screen readers (an
+          unlabelled "button" that throws the edit away; on iOS an
+          accessible parent would also hide the whole dialog) */}
       <Pressable
         onPress={onClose}
+        accessible={false}
+        importantForAccessibility="no"
         style={{
           flex: 1,
           backgroundColor: withAlpha("#000000", 0.6),
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
         }}
       >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 20 }}
+          keyboardShouldPersistTaps="handled"
+        >
         <Pressable
           onPress={() => {}}
+          accessible={false}
           style={{
             width: "100%",
             maxWidth: 400,
@@ -142,7 +155,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_600SemiBold",
+              fontFamily: palette.fonts.displaySemi,
               fontSize: 17,
             }}
           >
@@ -162,7 +175,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               borderRadius: 12,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 15,
             }}
           />
@@ -179,7 +192,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               borderRadius: 12,
               backgroundColor: palette.surfaceHigh,
               color: palette.onSurface,
-              fontFamily: "Inter_400Regular",
+              fontFamily: palette.fonts.body,
               fontSize: 14,
             }}
           />
@@ -197,7 +210,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
             <Text
               style={{
                 color: palette.onSurfaceVariant,
-                fontFamily: "JetBrainsMono_400Regular",
+                fontFamily: palette.fonts.mono,
                 fontSize: 26,
               }}
             >
@@ -246,7 +259,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: palette.fonts.bodyMedium,
                       fontSize: 12,
                     }}
                   >
@@ -290,7 +303,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               style={{
                 flex: 1,
                 color: location ? palette.accent : palette.onSurfaceVariant,
-                fontFamily: "Inter_500Medium",
+                fontFamily: palette.fonts.bodyMedium,
                 fontSize: 13,
               }}
             >
@@ -336,7 +349,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               <Text
                 style={{
                   color: palette.onSurfaceVariant,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -362,7 +375,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
               <Text
                 style={{
                   color: palette.accent,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: palette.fonts.bodySemi,
                   fontSize: 14,
                 }}
               >
@@ -371,7 +384,9 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
             </Pressable>
           </View>
         </Pressable>
+        </ScrollView>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

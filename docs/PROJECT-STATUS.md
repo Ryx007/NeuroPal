@@ -7,7 +7,17 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-08-04 (port split — web app on :8081, API on :4000, with
+_Last updated: 2026-10-24 — **v2 platform, round 2, on branch
+`v2-platform`**: the backend moves to the Contabo VPS behind a Cloudflare
+Tunnel (https://api.ryx007.work, `deploy/vps/`, written and tested, **not yet
+deployed** — waiting on SSH access), sign-in for the public server, the
+keyboard fix (react-native-keyboard-controller), the draggable check-in
+slider, Signal motion, the Pal assistant (bubble + sheet) and an Android
+home-screen widget. Expo 0.3.0, Flutter 0.2.0. Round 1 (2026-10-23): two
+skins, Make it yours, Signal Home, appearance sync, Flutter app, Next.js
+platform, iOS widgets, CI. Read `docs/PLATFORM-PLAN.md` and HANDOFF §0 first;
+everything below describes `main`.
+Previous update: 2026-08-04 (port split — web app on :8081, API on :4000, with
 a proxy that preserves the zero-baked-URL / any-domain property; adversarial
 proxy hardening; README/BRAIN de-staled for collaborators; `docs/HANDOFF.md`
 added. Prior line: 2026-07-08 reader/notes/visualizer overhaul. Full history
@@ -102,6 +112,27 @@ Ollama), all other devices are LAN clients. See
 
 > Full mid-flight context, established root causes (don't re-derive), and
 > rejected alternatives live in **`docs/HANDOFF.md`** — read it first.
+
+**v2 (branch `v2-platform`, PR to `main`):** milestone M1 per
+`docs/PLATFORM-PLAN.md` §5 is built: Expo app 0.2.0 and the Flutter app
+"NeuroPal F" (both APKs handed to the owner 2026-10-23), the Next.js
+platform site, iOS widgets (simulator-built in CI), CI for everything.
+Round 2 (2026-10-24, HANDOFF §0) adds the cloud server, sign-in, the
+keyboard fix, the check-in slider, the Pal assistant and the Android widget
+(Expo 0.3.0, Flutter 0.2.0).
+Next gates, in order:
+1. **Deploy the VPS stack** as soon as there is SSH access (HANDOFF §0
+   round 2): `install.sh`, then check `https://api.ryx007.work/healthz?deps=1`
+   and register the owner's account with the invite code from
+   `deploy/vps/.env`.
+2. Owner acceptance on the S24, the widget included.
+3. The AI-provider decision (HANDOFF §0).
+
+Then M2: Focus soundscapes in Expo, a Signal pass over
+Library/Notes/Toolbox, Flutter catch-up (Pal, Home, interpreters, two-way
+sync), and the evidence-ranked tools in the project doc
+`claude/nd-tools-research.md` (if-then planner, sleep coach, safety plan,
+Now/Next timeline first).
 
 0. **S24 on-device acceptance (the only real work left).** Everything is
    browser-verified; these paths exist only on the phone. **The APK on

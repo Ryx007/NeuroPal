@@ -102,7 +102,7 @@ export function TweaksSheet({ visible, onClose }) {
           <Text
             style={{
               color: palette.onSurface,
-              fontFamily: "SpaceGrotesk_700Bold",
+              fontFamily: palette.fonts.display,
               fontSize: 22,
               marginBottom: 20,
             }}
@@ -227,7 +227,7 @@ function SegmentRow({ label, value, entries, onChange }) {
       <Text
         style={{
           color: palette.onSurfaceVariant,
-          fontFamily: "Inter_500Medium",
+          fontFamily: palette.fonts.bodyMedium,
           fontSize: 11,
           letterSpacing: 2,
           marginLeft: 4,
@@ -261,8 +261,8 @@ function SegmentRow({ label, value, entries, onChange }) {
                 style={{
                   color: selected ? palette.accent : palette.onSurface,
                   fontFamily: selected
-                    ? "Inter_600SemiBold"
-                    : "Inter_500Medium",
+                    ? palette.fonts.bodySemi
+                    : palette.fonts.bodyMedium,
                   fontSize: 13,
                 }}
               >
@@ -301,7 +301,7 @@ function SliderRow({
           style={{
             flex: 1,
             color: palette.onSurfaceVariant,
-            fontFamily: "Inter_500Medium",
+            fontFamily: palette.fonts.bodyMedium,
             fontSize: 11,
             letterSpacing: 2,
           }}
@@ -310,7 +310,7 @@ function SliderRow({
         </Text>
         <Text
           style={{
-            fontFamily: "JetBrainsMono_400Regular",
+            fontFamily: palette.fonts.mono,
             fontSize: 12,
             color: palette.accent,
           }}

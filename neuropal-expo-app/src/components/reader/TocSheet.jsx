@@ -87,7 +87,7 @@ export function TocSheet({
                   <Text
                     style={{
                       color: selected ? palette.accent : palette.onSurfaceVariant,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: palette.fonts.bodySemi,
                       fontSize: 13,
                     }}
                   >
@@ -142,8 +142,8 @@ export function TocSheet({
                         flex: 1,
                         color: focused ? palette.accent : palette.onSurface,
                         fontFamily: focused
-                          ? "Inter_600SemiBold"
-                          : "Inter_400Regular",
+                          ? palette.fonts.bodySemi
+                          : palette.fonts.body,
                         fontSize: 14,
                       }}
                     >
@@ -152,7 +152,7 @@ export function TocSheet({
                     <Text
                       style={{
                         color: palette.onSurfaceVariant,
-                        fontFamily: "JetBrainsMono_400Regular",
+                        fontFamily: palette.fonts.mono,
                         fontSize: 10,
                         marginLeft: 8,
                       }}
@@ -172,7 +172,7 @@ export function TocSheet({
                 <Text
                   style={{
                     color: palette.onSurfaceVariant,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: palette.fonts.body,
                     fontSize: 13,
                     paddingHorizontal: 20,
                     paddingVertical: 16,
@@ -201,7 +201,7 @@ export function TocSheet({
                       numberOfLines={2}
                       style={{
                         color: palette.onSurface,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: palette.fonts.body,
                         fontSize: 13,
                         lineHeight: 18,
                       }}
@@ -211,7 +211,7 @@ export function TocSheet({
                     <Text
                       style={{
                         color: palette.onSurfaceVariant,
-                        fontFamily: "JetBrainsMono_400Regular",
+                        fontFamily: palette.fonts.mono,
                         fontSize: 10,
                         marginTop: 2,
                       }}

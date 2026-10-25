@@ -85,6 +85,12 @@ module.exports = async function requireAuth(req, res, next) {
         } catch (e) {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
+        // Session tokens carry only `sub`. Anything with a scope is a narrower
+        // pass (a document ticket, see services/docTicket.js) and must never
+        // work as a full session — tickets travel in URLs.
+        if (payload.scope) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
 
         const user = await User.findOne({
             _id: payload.sub,
@@ -93,7 +99,37 @@ module.exports = async function requireAuth(req, res, next) {
         if (!user) {
             return res.status(401).json({ error: 'Account no longer active' });
         }
+        // "Sign out everywhere" / a password change bumps tokenVersion.
+        if ((payload.v || 0) !== (user.tokenVersion || 0)) {
+            return res.status(401).json({ error: 'This session was signed out — please sign in again' });
+        }
 
+        req.user = user;
+        req.userId = user._id;
+        req.tokenClaims = payload;
+        next();
+    } catch (err) {
+        next(err);
+    }
+};
+
+// For the few GET routes a WebView or <Image> loads without headers: accept a
+// document ticket (path param `:ticket` or `?t=`) for THIS document, else fall
+// back to the normal session check. LOCAL_MODE ignores tickets entirely.
+module.exports.requireDocAccess = async function requireDocAccess(req, res, next) {
+    if (process.env.LOCAL_MODE === 'true') return module.exports(req, res, next);
+    const ticket = req.params.ticket || req.query.t;
+    if (!ticket) return module.exports(req, res, next);
+    try {
+        const { verifyDocTicket } = require('../services/docTicket');
+        const claims = verifyDocTicket(String(ticket), req.params.id);
+        if (!claims) {
+            return res.status(401).json({ error: 'Invalid or expired document ticket' });
+        }
+        const user = await User.findOne({ _id: claims.sub, deletedAt: null });
+        if (!user || (claims.v || 0) !== (user.tokenVersion || 0)) {
+            return res.status(401).json({ error: 'Account no longer active' });
+        }
         req.user = user;
         req.userId = user._id;
         next();
