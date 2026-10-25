@@ -1,10 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import Toast from "../components/toast";
 
 import { CanvasNoteEditor } from "../components/notes/CanvasNoteEditor";
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 import {
   clearPendingOpenNote,
   createNoteRemote,
@@ -21,6 +23,8 @@ import { usePalette } from "../theme/ThemeProvider";
 
 export function NotesScreen() {
   const dispatch = useDispatch();
+  const navigation = useNavigation();
+  const route = useRoute();
   const [openId, setOpenId] = useState(null);
   const notes = useSelector((s) => s.notes.items);
 
@@ -35,7 +39,18 @@ export function NotesScreen() {
   }, [pendingOpenId, dispatch]);
 
   const openNote = notes.find((n) => n.id === openId);
-  if (openId && openNote) {
+  const editing = Boolean(openId && openNote);
+  // While a note is open, Pal's bubble stays off the canvas and its toolbar
+  // (PalBuddyHost reads route.params.editing, as it skips the Reader).
+  // Checked against the live param, not just on change: a drawer tap on
+  // "Notes" replaces the params while the editor stays open. A layout
+  // effect, so the bubble never flashes over the editor first.
+  const editingParam = Boolean(route.params?.editing);
+  useLayoutEffect(() => {
+    if (editingParam !== editing) navigation.setParams({ editing });
+  }, [editing, editingParam, navigation]);
+
+  if (editing) {
     return (
       <CanvasNoteEditor
         key={openNote.id}
@@ -67,6 +82,7 @@ function noteSubtitle(note) {
 
 function NotesList({ onOpen }) {
   const palette = usePalette();
+  const palClear = usePalBubbleClearance();
   const dispatch = useDispatch();
   const notes = useSelector((s) => s.notes.items);
   const notesError = useSelector((s) => s.notes.error);
@@ -104,7 +120,7 @@ function NotesList({ onOpen }) {
     <View style={{ flex: 1 }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 110 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: Math.max(110, palClear) }}
       >
         <Text
           style={{

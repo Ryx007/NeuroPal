@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { usePalette, useTheme } from "../theme/ThemeProvider";
+import { PanelPressContext } from "./motion/pressContext";
 
 // ---------------------------------------------------------------------------
 // v2 primitives are SKIN-AWARE. Classic renders exactly as before (liquid
@@ -109,12 +110,45 @@ export function GlassPanel({ children, style, radius = 24, intensity = 40, tint,
 
 // Brutal glass. `radius === 0` marks edge-to-edge chrome (header, drawer):
 // no border box and no shadow there, just the smoked surface.
+// Inside a PressTile (components/motion/PressTile) the panel sinks into its
+// hard shadow while pressed; everywhere else it renders exactly as before.
 export function SignalPanel({ children, style, radius = 24, tintColor, flat = false, blurTint = "dark", intensity = 30 }) {
   const palette = usePalette();
+  const press = useContext(PanelPressContext);
   const chrome = radius === 0;
   const r = chrome ? 0 : skinRadius(palette, radius);
   const sh = chrome || flat ? 0 : palette.shape.shadow;
   const { outer, inner } = splitStyle(style);
+  const innerStyle = [
+    {
+      borderRadius: r,
+      overflow: "hidden",
+      borderWidth: chrome ? 0 : palette.shape.border,
+      borderColor: palette.line,
+    },
+    inner,
+  ];
+  const layers = (
+    <>
+      <BlurView
+        intensity={Math.min(intensity, 30)}
+        tint={blurTint}
+        experimentalBlurMethod="dimezisBlurView"
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: withAlpha(tintColor || palette.panelColor, Math.min(0.94, palette.panelAlpha + 0.16)) },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: withAlpha("#FFFFFF", 0.09) }}
+      />
+      {children}
+    </>
+  );
 
   return (
     <View style={outer}>
@@ -132,37 +166,25 @@ export function SignalPanel({ children, style, radius = 24, tintColor, flat = fa
           }}
         />
       ) : null}
-      <View
-        style={[
-          {
-            borderRadius: r,
-            overflow: "hidden",
-            borderWidth: chrome ? 0 : palette.shape.border,
-            borderColor: palette.line,
-          },
-          inner,
-        ]}
-      >
-        <BlurView
-          intensity={Math.min(intensity, 30)}
-          tint={blurTint}
-          experimentalBlurMethod="dimezisBlurView"
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: withAlpha(tintColor || palette.panelColor, Math.min(0.94, palette.panelAlpha + 0.16)) },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: withAlpha("#FFFFFF", 0.09) }}
-        />
-        {children}
-      </View>
+      {press ? (
+        // Only this panel answers the press, never panels nested inside it.
+        <PressedPanel press={press} shift={sh} style={innerStyle}>
+          <PanelPressContext.Provider value={null}>{layers}</PanelPressContext.Provider>
+        </PressedPanel>
+      ) : (
+        <View style={innerStyle}>{layers}</View>
+      )}
     </View>
   );
+}
+
+// The panel slides by the shadow offset, covering its shadow (no shadow →
+// nothing to sink into, so it stays put).
+function PressedPanel({ press, shift, style, children }) {
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ translateX: press.get() * shift }, { translateY: press.get() * shift }],
+  }));
+  return <Animated.View style={[style, animated]}>{children}</Animated.View>;
 }
 
 export function DataPulse({ size = 7 }) {

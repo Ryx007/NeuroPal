@@ -39,9 +39,16 @@ export const EPUB_RUNTIME_JS = String.raw`
       }
     } catch (e) {}
   }
-  // Uniform command channel: RN-native uses injectJavaScript, web-iframe
-  // calls this through contentWindow. Both eval strings WE authored.
+  // Uniform command channel: RN-native uses injectJavaScript; on web the
+  // chapter is a SANDBOXED iframe (opaque origin — a book's own scripts can't
+  // reach the app or its session), so the parent posts {__npExec: js} and
+  // only messages from the parent window are run. Both eval strings WE wrote.
   window.__npExec = function (js) { try { (0, eval)(js); } catch (e) {} };
+  window.addEventListener('message', function (e) {
+    if (e.source === window.parent && e.data && typeof e.data.__npExec === 'string') {
+      window.__npExec(e.data.__npExec);
+    }
+  });
 
   var BLOCK = /^(P|DIV|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|FIGCAPTION|TD|TH|DT|DD|PRE|SECTION|ARTICLE|ASIDE)$/;
   function blockOf(node) {
@@ -399,26 +406,78 @@ img, svg, video { max-width: 100% !important; height: auto !important; }
 `;
 }
 
-// Assemble the final chapter document. The chapter's own <head> (publisher
-// CSS links, meta) is preserved; <base> makes every relative asset resolve
-// against the backend's epub mount, and the runtime + theme land on top.
+// The origin a chapter's files come from (the API host). A relative base (the
+// same-origin web build) resolves against the page that hosts the reader.
+function resourceOrigin(href) {
+  const m = /^(https?:\/\/[^/?#]+)/i.exec(String(href || ''));
+  if (m) return m[1];
+  if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
+  return null;
+}
+
+// A tag with quoted attribute values that may themselves contain < or >.
+const META_TAG = /<meta\b(?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
+
+// Assemble the final chapter document. The chapter's own head content
+// (publisher CSS links, meta) is preserved; <base> makes every relative asset
+// resolve against the backend's epub mount, and the runtime + theme land on
+// top.
 export function buildChapterHtml({ chapterXhtml, baseHref, themeCss, pageAnchors }) {
+  // The book is untrusted. The boundary is a Content-Security-Policy that
+  // comes before any of the book's markup:
+  //   - only OUR two scripts run (they carry this chapter's random nonce);
+  //     the book's scripts, inline handlers and javascript: URLs never do;
+  //     'unsafe-eval' is for the web command channel (__npExec), which only
+  //     runs strings the app wrote, posted by the parent window;
+  //   - the book's CSS, images, fonts and media load only from the API host
+  //     (data:/blob: too) — nothing can beacon a ticket to another server;
+  //   - no forms, frames, fetches, or a <base> pointing elsewhere.
+  // Plus no Referer at all. The regex stripping below is a second layer.
+  const origin = resourceOrigin(baseHref);
+  const src = origin || "'self'";
+  const nonce = `${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+  const csp = [
+    "default-src 'none'",
+    `script-src 'nonce-${nonce}' 'unsafe-eval'`,
+    `style-src ${src} 'unsafe-inline'`,
+    `img-src ${src} data: blob:`,
+    `font-src ${src} data:`,
+    `media-src ${src} data: blob:`,
+    `base-uri ${src}`,
+    "form-action 'none'",
+    "frame-src 'none'",
+    "connect-src 'none'",
+    "object-src 'none'",
+  ].join('; ');
   const inject =
+    `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
+    `<meta name="referrer" content="no-referrer">` +
     `<base href="${baseHref}">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<style id="np-theme">${themeCss}</style>` +
-    `<script>window.__NP_PAGE_ANCHORS=${JSON.stringify(pageAnchors || [])};</script>` +
-    `<script>${EPUB_RUNTIME_JS}</script>`;
+    `<script nonce="${nonce}">window.__NP_PAGE_ANCHORS=${JSON.stringify(pageAnchors || [])};</script>` +
+    `<script nonce="${nonce}">${EPUB_RUNTIME_JS}</script>`;
 
   let html = String(chapterXhtml);
   // XHTML served as text/html parses fine in every WebView; strip the XML
-  // prolog so nothing renders it as a stray line.
-  html = html.replace(/^\s*<\?xml[^>]*\?>/i, '');
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head[^>]*>/i, (m) => `${m}${inject}`);
-  }
-  if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${inject}</head>`);
-  }
-  return `<!doctype html><html><head>${inject}</head><body>${html}</body></html>`;
+  // prolog and the doctype — ours comes first so the page renders in
+  // standards mode with the policy above already in force.
+  html = html.replace(/^\s*<\?xml[^>]*\?>/i, '').replace(/^\s*<!doctype[^>]*>/i, '');
+  // Second layer (the policy is the boundary): drop the book's scripts,
+  // inline event handlers, javascript: URLs, any <meta http-equiv> (refresh,
+  // its own policy…) or referrer meta, and any <base> of its own.
+  html = html
+    .replace(/<script\b[^<>]*>[\s\S]{0,1000000}?<\/script\s*>/gi, '')
+    .replace(/<script\b[^<>]*\/>/gi, '')
+    .replace(META_TAG, (tag) => (/http-equiv|name\s*=\s*["']?\s*referrer/i.test(tag) ? '' : tag))
+    .replace(/<base\b(?:[^<>"']|"[^"]*"|'[^']*')*>/gi, '')
+    // attributes only INSIDE tags — the chapter's text stays untouched
+    .replace(/<[a-zA-Z][^<>]*>/g, (tag) =>
+      tag
+        .replace(/[\s/]+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ' ')
+        .replace(/((?:xlink:)?href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1=$2#$2')
+    );
+  // Everything of ours goes first: the parser files it into <head> before it
+  // meets a single byte of the book (whose own <html>/<head> tags then merge).
+  return `<!doctype html>${inject}${html}`;
 }

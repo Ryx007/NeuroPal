@@ -19,6 +19,10 @@ const initialState = {
   // System TTS voice identifier (from Speech.getAvailableVoicesAsync).
   // null = platform default. Distinct from `voice` (the tone/pitch preset).
   voiceId: null,
+  // App-wide "Reduce motion" (Settings → Appearance), for either skin. On,
+  // every motion level becomes Still, exactly like the phone's own
+  // reduce-motion setting (ThemeProvider), so it works when that is off.
+  reduceMotion: false,
   tweaksOpen: false,
 };
 
@@ -68,6 +72,9 @@ const uiSlice = createSlice({
     setSpeakEquations(state, action) {
       state.speakEquations = action.payload;
     },
+    setReduceMotion(state, action) {
+      state.reduceMotion = Boolean(action.payload);
+    },
     setTweaksOpen(state, action) {
       state.tweaksOpen = action.payload;
     },
@@ -83,6 +90,7 @@ export const {
   setReaderFont,
   setReaderLayout,
   setReaderMargin,
+  setReduceMotion,
   setTheme,
   setTweaksOpen,
   setVoice,

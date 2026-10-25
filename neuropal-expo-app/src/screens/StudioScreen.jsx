@@ -2,7 +2,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
+
 import { useDispatch, useSelector } from "react-redux";
 
 import { Pal } from "../components/pal/Pal";
@@ -29,6 +30,7 @@ import {
   resolveClassicPalette,
   resolveSignalPalette,
 } from "../theme/tokens";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
 
 // "Make it yours" — the appearance studio (docs/PLATFORM-PLAN.md §5).
 // Direct edits apply at once; anything Pal proposes (Ask Pal, saved looks)
@@ -145,7 +147,7 @@ export function StudioScreen() {
   const examples = isSignal ? ["Calm it down", "More contrast", "Try orange"] : ["Warmer", "More contrast", "Make it funky"];
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView
+      <KeyboardSafeScrollView
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
@@ -431,7 +433,7 @@ export function StudioScreen() {
           <LinkCard icon="face" title="Build your Pal" sub={current.pal.name} onPress={() => navigation.getParent()?.navigate("PalBuilder")} />
           <LinkCard icon="dashboard-customize" title="Arrange home" sub="Order, size, day rules" onPress={() => navigation.getParent()?.navigate("HomeArrange")} />
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       {proposal ? (
         <ProposalSheet

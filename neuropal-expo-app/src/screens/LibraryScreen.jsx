@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../components/toast";
 
 import {
@@ -33,6 +34,8 @@ import {
 } from "../store/slices/librarySlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 
 // Backend → UI normalisation. Mongo gives us `_id` + ingest status; the
 // card renderer below reads `id`, `progress`, `subtitle`. One shared mapper
@@ -101,6 +104,7 @@ const FILTERS = [
 ];
 
 export function LibraryScreen() {
+  const palClear = usePalBubbleClearance();
   const palette = usePalette();
   const navigation = useNavigation();
   const dispatch = useDispatch();
@@ -240,12 +244,12 @@ export function LibraryScreen() {
 
   return (
     <View className="flex-1" style={{ flex: 1 }}>
-      <ScrollView
+      <KeyboardSafeScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 20,
-          paddingBottom: 40,
+          paddingBottom: Math.max(40, palClear),
         }}
       >
         <Text
@@ -525,7 +529,7 @@ export function LibraryScreen() {
             <UploadCard onPress={pickDocument} />
           </View>
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       <DocActionsSheet
         document={actionDoc}
@@ -647,6 +651,8 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable
         onPress={onClose}
         style={{
@@ -851,6 +857,7 @@ function DocActionsSheet({ document, onClose, onChanged, onEdit }) {
           </Pressable>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

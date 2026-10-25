@@ -2,7 +2,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -10,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../toast";
 
 import { fetchRawDocumentApi, saveRawDocumentApi } from "../../services/network";
@@ -70,7 +70,7 @@ export function MarkdownEditorModal({ document, onClose, onSaved }) {
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={{ flex: 1, backgroundColor: palette.surface }}
       >
         <View

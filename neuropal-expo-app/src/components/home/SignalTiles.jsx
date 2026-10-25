@@ -1,10 +1,28 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useId, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import Svg, { Circle, Defs, Line, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
+import Svg, { Circle, Defs, Line, Path, RadialGradient, Stop } from "react-native-svg";
 
-import { usePalette, useTheme } from "../../theme/ThemeProvider";
-import { GlassPanel, SignalLabel, withAlpha } from "../primitives";
+import { usePalette } from "../../theme/ThemeProvider";
+import { useHomeMotion } from "../motion/motion";
+import { PressTile } from "../motion/PressTile";
+import { StatePulse } from "../motion/StatePulse";
+import { GlassPanel, NpPrimaryButton, SignalLabel, withAlpha } from "../primitives";
+import { StateGlyph } from "./StateGlyph";
+import { StateSlider } from "./StateSlider";
+import { levelFor, stateTint } from "./stateScale";
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 // Home tiles in the Signal skin, after the approved S-Today board: brutal
 // panels, mono labels, a state dial, a countdown anchor, a focus scope.
@@ -28,7 +46,7 @@ function Mono({ children, style, color }) {
 export function SignalOneLine({ icon, label, value, onPress, accessibilityLabel }) {
   const palette = usePalette();
   return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined} accessibilityLabel={accessibilityLabel || `${label}: ${value}`}>
+    <PressTile onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined} accessibilityLabel={accessibilityLabel || `${label}: ${value}`}>
       <GlassPanel style={{ minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center" }}>
         <MaterialIcons name={icon} size={18} color={palette.accent} />
         <SignalLabel style={{ marginLeft: 10 }}>{label}</SignalLabel>
@@ -37,7 +55,7 @@ export function SignalOneLine({ icon, label, value, onPress, accessibilityLabel 
         </Text>
         {onPress ? <MaterialIcons name="chevron-right" size={20} color={palette.onSurfaceVariant} /> : null}
       </GlassPanel>
-    </Pressable>
+    </PressTile>
   );
 }
 
@@ -72,23 +90,15 @@ function SmallBtn({ icon, label, onPress, accessibilityLabel }) {
 const STATE_OPTS = [
   { id: "green", shape: "circle", label: "I feel okay", short: "Okay", a11y: "I feel okay" },
   { id: "yellow", shape: "triangle", label: "A bit off", short: "Bit off", a11y: "Feeling a bit off" },
-  { id: "red", shape: "square", label: "Overwhelmed", short: "Overwhelmed", a11y: "Help, I'm overwhelmed" },
+  { id: "red", shape: "square", label: "Overwhelmed", short: "Overwhelmed", a11y: "Help, I'm overwhelmed. Opens the calming steps" },
 ];
-// Dial pointer, degrees from 12 o'clock. Unset rests to the left.
+// Dial pointer, degrees from 12 o'clock. Unset rests to the left. With the
+// slider, the pointer follows the knob: 0–1 sweeps −75°…+75°, so each
+// region's middle lands exactly on the angles above (−50 / 0 / +50).
 const KNOB_ANGLE = { green: -50, yellow: 0, red: 50 };
+const REST_ANGLE = -110;
 
-// Shape cue next to every state, so the choice never relies on colour.
-function StateGlyph({ shape, color, size = 12 }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 12 12">
-      {shape === "circle" ? <Circle cx={6} cy={6} r={5} fill={color} /> : null}
-      {shape === "triangle" ? <Polygon points="6,1 11.5,11 0.5,11" fill={color} /> : null}
-      {shape === "square" ? <Rect x={1} y={1} width={10} height={10} fill={color} /> : null}
-    </Svg>
-  );
-}
-
-function Knob({ state, size = 104 }) {
+function Knob({ state, pos, engaged, size = 104 }) {
   const palette = usePalette();
   const gid = `knob-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const c = size / 2;
@@ -101,9 +111,15 @@ function Knob({ state, size = 104 }) {
       <Line key={i} x1={c + r1 * Math.sin(a)} y1={c - r1 * Math.cos(a)} x2={c + r2 * Math.sin(a)} y2={c - r2 * Math.cos(a)} stroke={palette.outline} strokeWidth={1.6} />
     );
   }
-  const ang = ((state in KNOB_ANGLE ? KNOB_ANGLE[state] : -110) * Math.PI) / 180;
   const R = c - 15;
   const pr = R - 9;
+  // Live pointer: drawn pointing up, the whole layer rotates on the UI thread.
+  const pointer = useAnimatedStyle(() => {
+    if (!pos || !engaged) return {};
+    const target = -75 + 150 * pos.get();
+    return { transform: [{ rotate: `${REST_ANGLE + (target - REST_ANGLE) * engaged.get()}deg` }] };
+  });
+  const ang = ((state in KNOB_ANGLE ? KNOB_ANGLE[state] : REST_ANGLE) * Math.PI) / 180;
   return (
     <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Svg width={size} height={size}>
@@ -117,8 +133,17 @@ function Knob({ state, size = 104 }) {
         <Circle cx={c + 3} cy={c + 3} r={R} fill={palette.shadowColor} />
         <Circle cx={c} cy={c} r={R} fill={`url(#${gid})`} stroke={palette.line} strokeWidth={2} />
         <Circle cx={c} cy={c} r={R - 7} fill="none" stroke={withAlpha(palette.onSurface, 0.08)} strokeWidth={1.5} />
-        <Line x1={c + 7 * Math.sin(ang)} y1={c - 7 * Math.cos(ang)} x2={c + pr * Math.sin(ang)} y2={c - pr * Math.cos(ang)} stroke={palette.accentFill} strokeWidth={4} strokeLinecap="round" />
+        {!pos ? (
+          <Line x1={c + 7 * Math.sin(ang)} y1={c - 7 * Math.cos(ang)} x2={c + pr * Math.sin(ang)} y2={c - pr * Math.cos(ang)} stroke={palette.accentFill} strokeWidth={4} strokeLinecap="round" />
+        ) : null}
       </Svg>
+      {pos ? (
+        <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width: size, height: size }, pointer]}>
+          <Svg width={size} height={size}>
+            <Line x1={c} y1={c - 7} x2={c} y2={c - pr} stroke={palette.accentFill} strokeWidth={4} strokeLinecap="round" />
+          </Svg>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -129,7 +154,7 @@ function StateButton({ opt, on, onPress, compact }) {
   const r = Math.round(palette.shape.radiusControl * 0.6);
   const fg = on ? palette.accentInk : palette.onSurface;
   return (
-    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={opt.a11y} style={{ flex: compact ? 1 : undefined }}>
+    <Pressable onPress={onPress} accessibilityRole="radio" aria-checked={on} accessibilityLabel={opt.a11y} style={{ flex: compact ? 1 : undefined }}>
       {sh ? <View pointerEvents="none" style={{ position: "absolute", top: sh, left: sh, right: -sh, bottom: -sh, borderRadius: r, backgroundColor: palette.shadowColor }} /> : null}
       <View
         style={{
@@ -150,7 +175,9 @@ function StateButton({ opt, on, onPress, compact }) {
         <Text
           numberOfLines={1}
           style={{
-            flex: compact ? 0 : 1,
+            // No `flex: 0` in compact: react-native-web turns it into a 0%
+            // basis and the word vanished on the web (native is unchanged).
+            flex: compact ? undefined : 1,
             marginLeft: compact ? 0 : 10,
             marginTop: compact ? 4 : 0,
             color: fg,
@@ -166,11 +193,28 @@ function StateButton({ opt, on, onPress, compact }) {
   );
 }
 
-export function SignalStateTile({ size, nervous, onPick, message }) {
+// The S-Today check-in, now with a working slider under the dial and the
+// buttons: drag or tap the ruler and the dial turns with it; the buttons stay
+// as the one-tap way in. `level` is the exact saved level (0–1); `onCommit`
+// gets (state, level, { viaSteps }) when a check-in is made on the slider.
+// While overwhelmed, `onCalm` (the calming steps) is a button in the tile.
+export function SignalStateTile({ size, nervous, level, onPick, onCommit, onCalm, message }) {
   const palette = usePalette();
+  const start = levelFor(nervous, level);
+  // Shared by the slider (which drives them) and the dial (which follows).
+  const pos = useSharedValue(start ?? 0.5);
+  const engaged = useSharedValue(start == null ? 0 : 1);
+  const tint = stateTint(palette, nervous);
+  const calm =
+    nervous === "red" && onCalm ? (
+      <View style={{ marginTop: 12 }}>
+        <NpPrimaryButton label="Open the calming steps" icon="spa" onPress={onCalm} />
+      </View>
+    ) : null;
   if (size === "L") {
     return (
       <GlassPanel style={{ padding: 14 }}>
+        <StatePulse state={nervous} color={tint} />
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <SignalLabel accessibilityRole="header" style={{ flex: 1 }}>
             How are you feeling right now?
@@ -178,64 +222,99 @@ export function SignalStateTile({ size, nervous, onPick, message }) {
           <Mono style={{ fontSize: 10.5 }}>CH·01</Mono>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
-          <Knob state={nervous} />
-          <View accessibilityRole="radiogroup" accessibilityLabel="How are you feeling right now?" style={{ flex: 1, marginLeft: 12, gap: 8 }}>
+          <Knob state={nervous} pos={pos} engaged={engaged} />
+          <View accessibilityRole="radiogroup" aria-label="How are you feeling right now?" style={{ flex: 1, marginLeft: 12, gap: 8 }}>
             {STATE_OPTS.map((o) => (
               <StateButton key={o.id} opt={o} on={nervous === o.id} onPress={() => onPick(o.id)} />
             ))}
           </View>
         </View>
+        <StateSlider style={{ marginTop: 12 }} nervous={nervous} level={level} onCommit={onCommit} pos={pos} engaged={engaged} legend />
         {message ? (
-          <View style={{ flexDirection: "row", marginTop: 12 }} accessibilityLiveRegion="polite">
+          <View style={{ flexDirection: "row", marginTop: 10 }} accessibilityLiveRegion="polite">
             <Text style={{ color: palette.accent, fontFamily: palette.fonts.label, fontSize: 14, lineHeight: 20 }}>{">"}</Text>
             <Text style={{ flex: 1, marginLeft: 8, color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: 14, lineHeight: 20 }}>{message}</Text>
           </View>
         ) : null}
+        {calm}
       </GlassPanel>
     );
   }
+  // M and S: the button row doubles as the slider's legend (same thirds).
   return (
     <GlassPanel style={{ padding: 12 }}>
+      <StatePulse state={nervous} color={tint} />
       {size === "M" ? (
         <SignalLabel accessibilityRole="header" style={{ marginBottom: 8 }}>
           How are you feeling?
         </SignalLabel>
       ) : null}
-      <View accessibilityRole="radiogroup" accessibilityLabel="How are you feeling right now?" style={{ flexDirection: "row", gap: 8 }}>
+      <View accessibilityRole="radiogroup" aria-label="How are you feeling right now?" style={{ flexDirection: "row", gap: 8 }}>
         {STATE_OPTS.map((o) => (
           <StateButton key={o.id} compact opt={o} on={nervous === o.id} onPress={() => onPick(o.id)} />
         ))}
       </View>
+      <StateSlider style={{ marginTop: 6 }} nervous={nervous} level={level} onCommit={onCommit} pos={pos} engaged={engaged} />
+      {calm}
     </GlassPanel>
   );
 }
 
 // ---------------------------------------------------------------- anchor ---
 
+const NOW_W = 2.5;
+
+// ±2 h around the anchor. The white "now" marker sits at the exact minute
+// (not snapped to a tick) and glides there on each update instead of
+// jumping a tick every ten minutes; Calm and Still just place it.
 function TickRuler({ mins, flex }) {
   const palette = usePalette();
+  const motion = useHomeMotion();
+  const [w, setW] = useState(0);
+  const x = useSharedValue(-1); // -1 = not placed yet
   const N = 25;
-  const span = 120; // ±2 h around the anchor
-  const nowIdx = Math.round(((span - mins) / (2 * span)) * (N - 1));
+  const span = 120;
+  const frac = (span - mins) / (2 * span);
+  const inRange = frac >= 0 && frac <= 1;
+
+  useEffect(() => {
+    if (!w || !inRange) return;
+    const target = frac * (w - NOW_W);
+    if (x.get() < 0 || !motion.travels) x.set(target);
+    else x.set(withTiming(target, { duration: motion.ruler.duration, easing: Easing.inOut(Easing.quad) }));
+  }, [frac, w, inRange, motion, x]);
+
+  const marker = useAnimatedStyle(() => ({ opacity: x.get() < 0 ? 0 : 1, transform: [{ translateX: Math.max(0, x.get()) }] }));
+
   const ticks = [];
   for (let i = 0; i < N; i += 1) {
     const offset = (i - (N - 1) / 2) * ((2 * span) / (N - 1));
     const inWin = Math.abs(offset) <= flex;
-    const isNow = i === nowIdx;
     ticks.push(
       <View
         key={i}
         style={{
-          width: isNow ? 2.5 : inWin ? 3 : 1.5,
-          height: isNow ? 18 : inWin ? 11 : 7,
-          backgroundColor: isNow ? palette.onSurface : inWin ? palette.accentFill : palette.outline,
+          width: inWin ? 3 : 1.5,
+          height: inWin ? 11 : 7,
+          backgroundColor: inWin ? palette.accentFill : palette.outline,
         }}
       />
     );
   }
   return (
-    <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: 18, marginTop: 10 }}>
+    <View
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: 18, marginTop: 10 }}
+    >
       {ticks}
+      {inRange ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[{ position: "absolute", left: 0, bottom: 0, width: NOW_W, height: 18, backgroundColor: palette.onSurface }, marker]}
+        />
+      ) : null}
     </View>
   );
 }
@@ -251,7 +330,7 @@ export function SignalAnchorTile({ size, half, anchor, onEdit, onDone, onAdd }) 
 
   if (!anchor) {
     return (
-      <Pressable onPress={onAdd} accessibilityRole="button" accessibilityLabel="Set your next anchor" style={{ flexGrow: half ? 1 : 0 }}>
+      <PressTile onPress={onAdd} accessibilityRole="button" accessibilityLabel="Set your next anchor" style={{ flexGrow: half ? 1 : 0 }}>
         <GlassPanel style={{ padding: 14, flexGrow: half ? 1 : 0 }}>
           <SignalLabel>Next anchor</SignalLabel>
           <Text style={{ marginTop: 8, color: palette.onSurface, fontFamily: palette.fonts.bodyBold, fontSize: 15 }}>Nothing set yet</Text>
@@ -261,7 +340,7 @@ export function SignalAnchorTile({ size, half, anchor, onEdit, onDone, onAdd }) 
             <Text style={{ marginLeft: 6, color: palette.accent, fontFamily: palette.fonts.bodyBold, fontSize: 13 }}>Add anchor</Text>
           </View>
         </GlassPanel>
-      </Pressable>
+      </PressTile>
     );
   }
   const mins = minutesUntil(anchor);
@@ -297,13 +376,45 @@ export function SignalAnchorTile({ size, half, anchor, onEdit, onDone, onAdd }) 
 
 // ----------------------------------------------------------------- focus ---
 
-function Scope({ phase }) {
-  const palette = usePalette();
-  const pts = [];
+const SCOPE_REST = 0.6;
+
+// The Lissajous trace for a phase (callable from JS and the UI thread).
+function scopePath(phase) {
+  "worklet";
+  let d = "";
   for (let k = 0; k <= 120; k += 1) {
     const t = (k / 120) * Math.PI * 2;
-    pts.push(`${(50 + 44 * Math.sin(3 * t + phase)).toFixed(2)},${(28 + 22 * Math.sin(2 * t)).toFixed(2)}`);
+    d += `${k === 0 ? "M" : " L"}${(50 + 44 * Math.sin(3 * t + phase)).toFixed(2)},${(28 + 22 * Math.sin(2 * t)).toFixed(2)}`;
   }
+  return d;
+}
+
+// The scope drifts slowly while a block runs. The phase now advances on the
+// UI thread every frame (it used to step once a second), and only while
+// Home is on screen; Still keeps it at rest, Calm drifts slower.
+function Scope({ running }) {
+  const palette = usePalette();
+  const motion = useHomeMotion();
+  const focused = useIsFocused();
+  const phase = useSharedValue(SCOPE_REST);
+  const speed = motion.scope.speed;
+
+  useEffect(() => {
+    if (!running || speed <= 0) {
+      cancelAnimation(phase);
+      phase.set(SCOPE_REST);
+      return undefined;
+    }
+    if (!focused) {
+      cancelAnimation(phase);
+      return undefined;
+    }
+    const from = phase.get() % (Math.PI * 2);
+    phase.set(withRepeat(withTiming(from + Math.PI * 2, { duration: ((Math.PI * 2) / speed) * 1000, easing: Easing.linear }), -1, false));
+    return () => cancelAnimation(phase);
+  }, [running, focused, speed, phase]);
+
+  const traceProps = useAnimatedProps(() => ({ d: scopePath(phase.get()) }));
   return (
     <View
       importantForAccessibility="no-hide-descendants"
@@ -317,7 +428,7 @@ function Scope({ phase }) {
         {[25, 50, 75].map((x) => (
           <Line key={`v${x}`} x1={x} y1={0} x2={x} y2={56} stroke={palette.grid} strokeOpacity={0.12} strokeWidth={0.5} />
         ))}
-        <Path d={`M${pts.join(" L")}`} fill="none" stroke={palette.accentFill} strokeOpacity={0.9} strokeWidth={1.4} />
+        <AnimatedPath d={scopePath(SCOPE_REST)} animatedProps={traceProps} fill="none" stroke={palette.accentFill} strokeOpacity={0.9} strokeWidth={1.4} />
       </Svg>
     </View>
   );
@@ -325,7 +436,6 @@ function Scope({ phase }) {
 
 export function SignalFocusTile({ size, half, focus, onOpen }) {
   const palette = usePalette();
-  const { motionLevel } = useTheme();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!focus.running) return undefined;
@@ -337,16 +447,14 @@ export function SignalFocusTile({ size, half, focus, onOpen }) {
   const title = focus.running ? (focus.phase === "work" ? "Focus block" : "Break") : "Ready";
   const sub = focus.running ? `${left} left` : `${focus.workMin} min block`;
   if (size === "S") return <SignalOneLine icon="timer" label="Focus" value={`${title} · ${sub}`} onPress={onOpen} />;
-  // The scope drifts slowly while a block runs (never when motion is Still).
-  const phase = focus.running && motionLevel !== "Still" ? (now / 1000) * 0.15 : 0.6;
   return (
-    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Focus: ${title}, ${sub}. Open the focus tools`} style={{ flexGrow: half ? 1 : 0 }}>
+    <PressTile onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Focus: ${title}, ${sub}. Open the focus tools`} style={{ flexGrow: half ? 1 : 0 }}>
       <GlassPanel style={{ padding: 14, flexGrow: half ? 1 : 0 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <SignalLabel style={{ flex: 1 }}>Focus</SignalLabel>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: focus.running ? palette.accentFill : palette.outline }} />
         </View>
-        <Scope phase={phase} />
+        <Scope running={Boolean(focus.running)} />
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.bodyBold, fontSize: 15 }}>{title}</Text>
@@ -367,7 +475,7 @@ export function SignalFocusTile({ size, half, focus, onOpen }) {
           </View>
         </View>
       </GlassPanel>
-    </Pressable>
+    </PressTile>
   );
 }
 
@@ -522,7 +630,7 @@ export function SignalReadingTile({ size, half, document, onPress }) {
   const filled = Math.round(pct * segs);
   const pages = document.pageCount ? `p. ${Math.max(1, Math.round(pct * document.pageCount))} / ${document.pageCount}` : `${Math.round(pct * 100)}%`;
   return (
-    <Pressable
+    <PressTile
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Resume reading ${document.title}, ${Math.round(pct * 100)} percent read`}
@@ -569,6 +677,6 @@ export function SignalReadingTile({ size, half, document, onPress }) {
           {!half ? <MaterialIcons name="chevron-right" size={22} color={palette.onSurface} style={{ marginLeft: 6 }} /> : null}
         </View>
       </GlassPanel>
-    </Pressable>
+    </PressTile>
   );
 }

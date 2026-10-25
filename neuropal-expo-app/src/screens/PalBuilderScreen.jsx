@@ -2,7 +2,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import * as Speech from "expo-speech";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -12,6 +13,7 @@ import { SignalBackdrop } from "../components/signal/Backdrop";
 import { patchPal } from "../store/slices/lookSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { PAL_OPTIONS, normalizePal, palLine } from "../theme/tokens";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
 
 // Build your Pal (docs/PLATFORM-PLAN.md §5). Every pick saves at once and
 // syncs with the rest of the appearance; Pal looks the same in both skins.
@@ -142,7 +144,7 @@ export function PalBuilderScreen() {
         <View style={{ width: 8 }} />
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      <KeyboardSafeScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         {/* stage */}
         <GlassPanel style={{ marginTop: 8, padding: 14, minHeight: 300 }}>
           <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
@@ -323,7 +325,7 @@ export function PalBuilderScreen() {
             </>
           )}
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
     </SafeAreaView>
   );
 }

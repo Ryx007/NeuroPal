@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+
 import Toast from "../components/toast";
 
 import { Linking } from "react-native";
@@ -41,22 +41,26 @@ import {
 import { usePalette } from "../theme/ThemeProvider";
 import { hexToRgb, inkFor, rgbToHex } from "../theme/tokens";
 import { withAlpha } from "../components/primitives";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 
 // The time tab: a pomodoro focus timer + reminders. Both schedule real OS
 // notifications (native), so they fire even with the app in the background.
 
 export function ToolboxScreen() {
+  const palClear = usePalBubbleClearance();
   const palette = usePalette();
 
   return (
-    <KeyboardAwareScrollView
-      className="flex-1"
-      enableOnAndroid
+    <KeyboardSafeScrollView
+      style={{ flex: 1 }}
+      bottomOffset={24}
+      keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         paddingHorizontal: 20,
         paddingTop: 20,
-        paddingBottom: 40,
+        paddingBottom: Math.max(40, palClear),
       }}
       showsVerticalScrollIndicator={false}
     >
@@ -85,7 +89,7 @@ export function ToolboxScreen() {
       <TodoCard />
       <PomodoroCard />
       <RemindersCard />
-    </KeyboardAwareScrollView>
+    </KeyboardSafeScrollView>
   );
 }
 

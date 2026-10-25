@@ -4,12 +4,12 @@ import { useDispatch } from "react-redux";
 import {
   Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
+
 import Svg, { Path } from "react-native-svg";
 import Toast from "../toast";
 
@@ -27,6 +27,7 @@ import {
 import { saveNote, updateNoteRemote } from "../../store/slices/notesSlice";
 import { usePalette } from "../../theme/ThemeProvider";
 import { withAlpha } from "../primitives";
+import { KeyboardSafeScrollView } from "../KeyboardSafeScrollView";
 
 // Issue 2 — ONE canvas for typed text and ink (Samsung Notes / GoodNotes
 // style). A note is { blocks:[{id,type:'text',x,y,w,content}], strokes }
@@ -461,7 +462,7 @@ export function CanvasNoteEditor({ note, onBack }) {
       </View>
 
       {/* page */}
-      <ScrollView
+      <KeyboardSafeScrollView
         style={{ flex: 1 }}
         scrollEnabled={!scrollLocked}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -532,7 +533,7 @@ export function CanvasNoteEditor({ note, onBack }) {
             />
           ))}
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       {/* toolbar row 1 — modes + undo */}
       <View

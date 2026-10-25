@@ -1,13 +1,15 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import Toast from "../components/toast";
 
 import { formatTime12 } from "../data/mockData";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
 import { AnchorEditor } from "../components/planner/AnchorEditor";
 import { Pal } from "../components/pal/Pal";
+import { openPalSheet, usePalBubbleClearance } from "../components/pal/openPalSheet";
 import {
   SignalAnchorTile,
   SignalFocusTile,
@@ -16,6 +18,11 @@ import {
   SignalStateTile,
   hhmm,
 } from "../components/home/SignalTiles";
+import { StateSlider } from "../components/home/StateSlider";
+import { middleOfState } from "../components/home/stateScale";
+import { Entrance } from "../components/motion/Entrance";
+import { MoodHop } from "../components/motion/MoodHop";
+import { announce } from "../services/announce";
 import { anchorsInRange } from "../services/locationAnchors";
 import { categoryForAnchor, scheduleAt } from "../services/notify";
 import {
@@ -28,6 +35,7 @@ import {
 import {
   addAnchor,
   addTask,
+  recordCheckin,
   removeAnchor,
   removeTask,
   setAnchorStatus,
@@ -38,7 +46,7 @@ import {
 import { setIntroSeen, setSkin } from "../store/slices/lookSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { effectiveTiles, homeForSkin, palLine } from "../theme/tokens";
-import { GlassPanel, SectionHeader, SignalLabel, withAlpha } from "../components/primitives";
+import { GlassPanel, NpPrimaryButton, SectionHeader, SignalLabel, withAlpha } from "../components/primitives";
 
 const MOOD = { green: "okay", yellow: "off", red: "over" };
 // In Signal, two consecutive M tiles of these kinds share a row (S-Today board).
@@ -57,10 +65,13 @@ export function HomeScreen() {
   const tasks = useSelector(selectTasks);
   const remaining = useSelector(selectRemainingTasks);
   const nervous = useSelector(selectNervousState);
+  const nervousLevel = useSelector((s) => s.home.nervousLevel);
   const nextAnchor = useSelector(selectNextAnchor);
   const resume = useSelector(selectResumeDocument);
   const look = useSelector((s) => s.look);
   const focus = useSelector((s) => s.focus);
+  // the last tile never sits under Pal's floating bubble
+  const palClear = usePalBubbleClearance();
   const [editingMvd, setEditingMvd] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [anchorEditor, setAnchorEditor] = useState(null); // null | {anchor?}
@@ -107,10 +118,28 @@ export function HomeScreen() {
   const name = userName || "Ryx";
   const palText = palLine(look.pal, firstOpenTask ? `“${firstOpenTask.title}”` : "your next task");
   const stateVisible = tiles.some((t) => t.id === "state");
+  // A state button: one tap, and the slider knob moves to that region's middle.
   const pickState = (v) => {
+    dispatch(recordCheckin({ state: v, level: middleOfState(v) }));
     dispatch(setNervousState(v));
     if (v === "red") navigation.getParent()?.navigate("Emergency");
   };
+  // The slider: its region decides the state, the exact level is kept too.
+  // A drag or tap INTO overwhelmed opens the calming steps (not every
+  // fine-tune inside it). Keys and screen-reader steps never do (WCAG
+  // 3.2.2): you may only be passing through on the way to 70–100, so Home
+  // says where the steps are and the tile shows the button instead.
+  const commitCheckin = (v, level, how) => {
+    const enteringRed = v === "red" && nervous !== "red";
+    dispatch(recordCheckin({ state: v, level }));
+    dispatch(setNervousState(v));
+    if (!enteringRed) return;
+    if (how && how.viaSteps) announce("Overwhelmed. The calming steps are one tap away.");
+    else navigation.getParent()?.navigate("Emergency");
+  };
+  const openCalm = () => navigation.getParent()?.navigate("Emergency");
+  // The trigger gets screen-reader focus back when the sheet closes.
+  const openPal = (ref) => openPalSheet(null, { returnFocusTo: ref });
   const stateMessage =
     nervous === "green"
       ? nextAnchor
@@ -125,7 +154,17 @@ export function HomeScreen() {
   const renderSignalTile = (tile, half) => {
     switch (tile.id) {
       case "state":
-        return <SignalStateTile size={tile.size} nervous={nervous} onPick={pickState} message={stateMessage} />;
+        return (
+          <SignalStateTile
+            size={tile.size}
+            nervous={nervous}
+            level={nervousLevel}
+            onPick={pickState}
+            onCommit={commitCheckin}
+            onCalm={openCalm}
+            message={stateMessage}
+          />
+        );
       case "mvd":
         return (
           <SignalMvdTile
@@ -167,6 +206,7 @@ export function HomeScreen() {
             mood={MOOD[nervous] || "okay"}
             line={palText}
             half={half}
+            onOpen={openPal}
             onBuild={() => navigation.getParent()?.navigate("PalBuilder")}
           />
         );
@@ -191,16 +231,7 @@ export function HomeScreen() {
   const renderTile = (tile) => {
     switch (tile.id) {
       case "state":
-        return (
-          <StateTile
-            size={tile.size}
-            nervous={nervous}
-            onPick={(v) => {
-              dispatch(setNervousState(v));
-              if (v === "red") navigation.getParent()?.navigate("Emergency");
-            }}
-          />
-        );
+        return <StateTile size={tile.size} nervous={nervous} level={nervousLevel} onPick={pickState} onCommit={commitCheckin} onCalm={openCalm} />;
       case "mvd":
         return (
           <MvdTile
@@ -242,6 +273,7 @@ export function HomeScreen() {
             pal={look.pal}
             mood={MOOD[nervous] || "okay"}
             line={palText}
+            onOpen={openPal}
             onBuild={() => navigation.getParent()?.navigate("PalBuilder")}
           />
         );
@@ -251,13 +283,15 @@ export function HomeScreen() {
   };
 
   return (
-    <ScrollView
-      className="flex-1"
+    // Keyboard-safe: the minimum-day "add a task" field can sit low on Home
+    // (any layout from Arrange home), so it scrolls above the keyboard.
+    <KeyboardSafeScrollView
+      style={{ flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         paddingHorizontal: isSignal ? 16 : 20,
         paddingTop: 20,
-        paddingBottom: 40,
+        paddingBottom: Math.max(40, palClear),
       }}
       showsVerticalScrollIndicator={false}
     >
@@ -337,20 +371,22 @@ export function HomeScreen() {
         </View>
       ) : null}
 
+      {/* Signal tiles fade and rise in one after another on mount (motion
+          constants: components/motion/motion.js). Classic is untouched. */}
       {isSignal
-        ? signalRows.map((row) =>
+        ? signalRows.map((row, k) =>
             row.length === 2 ? (
-              <View key={`${row[0].id}+${row[1].id}`} style={{ marginTop: 14, flexDirection: "row", gap: 12 }}>
+              <Entrance key={`${row[0].id}+${row[1].id}`} index={k} style={{ marginTop: 14, flexDirection: "row", gap: 12 }}>
                 {row.map((t) => (
                   <View key={t.id} style={{ flex: 1 }}>
                     {renderSignalTile(t, true)}
                   </View>
                 ))}
-              </View>
+              </Entrance>
             ) : (
-              <View key={row[0].id} style={{ marginTop: 14 }}>
+              <Entrance key={row[0].id} index={k} style={{ marginTop: 14 }}>
                 {renderSignalTile(row[0], false)}
-              </View>
+              </Entrance>
             )
           )
         : tiles.map((tile) => {
@@ -405,7 +441,7 @@ export function HomeScreen() {
           setAnchorEditor(null);
         }}
       />
-    </ScrollView>
+    </KeyboardSafeScrollView>
   );
 }
 
@@ -454,10 +490,24 @@ function OneLine({ icon, label, value, onPress, accessibilityLabel }) {
 const STATES = [
   { id: "green", icon: "sentiment-satisfied", label: "I feel okay", short: "Okay", tint: "secondary" },
   { id: "yellow", icon: "sentiment-neutral", label: "Feeling a bit off", short: "Bit off", tint: "tertiary" },
-  { id: "red", icon: "sentiment-very-dissatisfied", label: "Help, I'm overwhelmed", short: "Overwhelmed", tint: "error" },
+  // Choosing it opens the calming steps; screen readers hear that first.
+  { id: "red", icon: "sentiment-very-dissatisfied", label: "Help, I'm overwhelmed", short: "Overwhelmed", tint: "error", a11y: "Help, I'm overwhelmed. Opens the calming steps" },
 ];
 
-function StateTile({ size, nervous, onPick }) {
+// While overwhelmed, the calming steps are one tap away in the tile itself
+// (the slider's keys / screen-reader steps never open them on their own).
+function CalmButton({ nervous, onCalm }) {
+  if (nervous !== "red" || !onCalm) return null;
+  return (
+    <View style={{ marginTop: 14 }}>
+      <NpPrimaryButton label="Open the calming steps" icon="spa" onPress={onCalm} />
+    </View>
+  );
+}
+
+// The original three choices stay exactly as they were; the slider sits under
+// them (L) or under the row of three (M/S, where the row is its legend).
+function StateTile({ size, nervous, level, onPick, onCommit, onCalm }) {
   const palette = usePalette();
   const { isSignal } = useTheme();
   if (size === "L") {
@@ -471,11 +521,15 @@ function StateTile({ size, nervous, onPick }) {
           </Text>
         )}
         <View style={{ height: 14 }} />
-        {STATES.map((st, i) => (
-          <View key={st.id} style={{ marginTop: i ? 10 : 0 }}>
-            <StateOption selected={nervous === st.id} icon={st.icon} label={st.label} tint={palette[st.tint]} onPress={() => onPick(st.id)} />
-          </View>
-        ))}
+        <View accessibilityRole="radiogroup" aria-label="How are you feeling right now?">
+          {STATES.map((st, i) => (
+            <View key={st.id} style={{ marginTop: i ? 10 : 0 }}>
+              <StateOption selected={nervous === st.id} icon={st.icon} label={st.label} a11y={st.a11y} tint={palette[st.tint]} onPress={() => onPick(st.id)} />
+            </View>
+          ))}
+        </View>
+        <StateSlider style={{ marginTop: 16 }} nervous={nervous} level={level} onCommit={onCommit} legend />
+        <CalmButton nervous={nervous} onCalm={onCalm} />
       </>
     );
     return isSignal ? (
@@ -492,7 +546,7 @@ function StateTile({ size, nervous, onPick }) {
           How are you feeling?
         </Text>
       ) : null}
-      <View style={{ flexDirection: "row", gap: 8 }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: "row", gap: 8 }} accessibilityRole="radiogroup" aria-label="How are you feeling right now?">
         {STATES.map((st) => {
           const on = nervous === st.id;
           const tint = palette[st.tint];
@@ -501,8 +555,8 @@ function StateTile({ size, nervous, onPick }) {
               key={st.id}
               onPress={() => onPick(st.id)}
               accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={st.label}
+              aria-checked={on}
+              accessibilityLabel={st.a11y || st.label}
               style={{
                 flex: 1,
                 minHeight: 48,
@@ -521,6 +575,8 @@ function StateTile({ size, nervous, onPick }) {
           );
         })}
       </View>
+      <StateSlider style={{ marginTop: 6 }} nervous={nervous} level={level} onCommit={onCommit} />
+      <CalmButton nervous={nervous} onCalm={onCalm} />
     </TileFrame>
   );
 }
@@ -723,33 +779,53 @@ function FocusTile({ size, focus, onOpen }) {
   );
 }
 
-function PalTile({ size, pal, mood, line, onBuild, half = false }) {
+function PalTile({ size, pal, mood, line, onOpen, onBuild, half = false }) {
   const palette = usePalette();
   const { isSignal } = useTheme();
+  const openRef = useRef(null); // focus comes back here when the sheet closes
   const small = size === "S";
+  const said = mood === "over" ? "Nothing needed right now. Breathe with me if you like." : line;
   return (
     <TileFrame grow={half}>
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
           padding: isSignal ? 0 : 14,
           borderRadius: 22,
           backgroundColor: isSignal ? "transparent" : palette.surfaceContainer,
         }}
       >
-        <Pal pal={pal} size={small ? 44 : 78} mood={mood} />
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: small ? 13.5 : 15, lineHeight: small ? 19 : 21 }}>
-            <Text style={{ fontFamily: palette.fonts.bodyBold }}>{`${pal.name}: `}</Text>
-            {mood === "over" ? "Nothing needed right now. Breathe with me if you like." : line}
-          </Text>
-          {!small ? (
-            <Pressable onPress={onBuild} accessibilityRole="button" accessibilityLabel={`Build your Pal, ${pal.name}`} style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}>
-              <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>Build your Pal</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        {/* The tile opens Pal, the assistant — like the floating bubble. */}
+        <Pressable
+          ref={openRef}
+          onPress={() => onOpen(openRef)}
+          accessibilityRole="button"
+          accessibilityLabel={`${pal.name}: ${said}`}
+          accessibilityHint={`Opens ${pal.name}, your assistant`}
+          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", opacity: pressed ? 0.85 : 1 })}
+        >
+          {/* Signal: Pal reacts when your state changes. Classic: unchanged.
+              The button's label already says it: the picture is decorative. */}
+          <MoodHop mood={mood} enabled={isSignal}>
+            <Pal pal={pal} size={small ? 44 : 78} mood={mood} decorative />
+          </MoodHop>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: small ? 13.5 : 15, lineHeight: small ? 19 : 21 }}>
+              <Text style={{ fontFamily: palette.fonts.bodyBold }}>{`${pal.name}: `}</Text>
+              {said}
+            </Text>
+          </View>
+          {!half ? <MaterialIcons name="chevron-right" size={20} color={palette.outline} style={{ marginLeft: 6 }} /> : null}
+        </Pressable>
+        {!small ? (
+          <Pressable
+            onPress={onBuild}
+            accessibilityRole="button"
+            accessibilityLabel={`Build your Pal, ${pal.name}`}
+            style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start", marginLeft: half ? 0 : 78 + 12 }}
+          >
+            <Text style={{ color: palette.accent, fontFamily: palette.fonts.bodySemi, fontSize: 13 }}>Build your Pal</Text>
+          </Pressable>
+        ) : null}
       </View>
     </TileFrame>
   );
@@ -803,14 +879,15 @@ function IntroCard({ onTry, onStudio, onDismiss }) {
   );
 }
 
-function StateOption({ selected, icon, label, tint, onPress }) {
+function StateOption({ selected, icon, label, a11y, tint, onPress }) {
   const palette = usePalette();
 
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityRole="radio"
+      aria-checked={selected}
+      accessibilityLabel={a11y || label}
       style={{
         padding: 14,
         borderRadius: 18,

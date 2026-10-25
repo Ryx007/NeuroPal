@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -11,6 +12,7 @@ import { SignalBackdrop } from "../components/signal/Backdrop";
 import { setHome } from "../store/slices/lookSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { HOME_SIZES, HOME_TILES, effectiveTiles, homeForSkin, interpretHome, moveTile, ordinal, patchTile } from "../theme/tokens";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
 
 // Arrange home (docs/PLATFORM-PLAN.md §5): order, size and visibility of the
 // Home tiles, plus day rules ("reading first on weekdays") through Ask Pal.
@@ -103,7 +105,7 @@ export function HomeArrangeScreen() {
         <View style={{ width: 8 }} />
       </View>
 
-      <ScrollView
+      <KeyboardSafeScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: proposal ? 260 : 48 }}
         showsVerticalScrollIndicator={false}
@@ -347,7 +349,7 @@ export function HomeArrangeScreen() {
         <Text style={{ marginTop: 14, color: palette.onSurfaceVariant, fontFamily: palette.fonts.body, fontSize: 12.5, lineHeight: 18 }}>
           No streaks, ever. When a streak breaks, people tend to do the thing less afterwards (Silverman & Barasch, 2023). Home shows what is next, not a count of days.
         </Text>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       {proposal ? (
         <View style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>

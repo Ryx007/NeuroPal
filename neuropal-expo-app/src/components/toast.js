@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
+import { announce } from "../services/announce";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "./primitives";
 
@@ -15,14 +16,26 @@ import { withAlpha } from "./primitives";
 // Same call surface as before: Toast.show({type, text1, text2,
 // visibilityTime?}), Toast.hide(). Here the card owns its whole lifecycle:
 // its own 5s timer, its own ✕, its own swipe — nothing to fight with.
+// Every toast is also read out (WCAG 4.1.3): the card is never focused and
+// leaves by itself, so a screen reader would otherwise never hear it.
 
 const AUTO_HIDE_MS = 5000;
 
 let hostListener = null;
 let counter = 0;
 
+// Both lines, spoken as one message.
+function spokenText(opts) {
+  const first = String(opts?.text1 || "").trim();
+  const second = String(opts?.text2 || "").trim();
+  if (!first || !second) return first || second;
+  return /[.!?…]$/.test(first) ? `${first} ${second}` : `${first}. ${second}`;
+}
+
 const Toast = {
   show(opts) {
+    // Errors interrupt; everything else waits its turn.
+    announce(spokenText(opts), { assertive: opts?.type === "error" });
     hostListener?.({ ...opts, key: `toast-${++counter}` });
   },
   hide() {

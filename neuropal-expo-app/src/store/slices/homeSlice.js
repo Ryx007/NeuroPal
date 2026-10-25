@@ -8,8 +8,36 @@ function todayStamp() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Check-in history from the Home slider: newest last, capped. Adjustments
+// made within CHECKIN_MERGE_MS of the last entry refine that entry instead of
+// adding a new one (one check-in = one settled feeling, not every key press).
+export const CHECKIN_CAP = 200;
+export const CHECKIN_MERGE_MS = 60 * 1000;
+const CHECKIN_STATES = new Set(["green", "yellow", "red"]);
+
+function cleanLevel(value) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : undefined;
+}
+
+// Older saves have no checkins; anything malformed is dropped, never thrown.
+function cleanCheckins(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const c of list) {
+    if (!c || !CHECKIN_STATES.has(c.state) || typeof c.at !== "string" || Number.isNaN(Date.parse(c.at))) continue;
+    out.push({ state: c.state, level: cleanLevel(c.level) ?? null, at: c.at });
+  }
+  return out.slice(-CHECKIN_CAP);
+}
+
 const initialState = {
   nervousState: undefined,
+  // Exact level on the Home check-in slider, 0–1 (undefined until the first
+  // check-in). recordCheckin keeps it in step with nervousState; if the state
+  // is ever set on its own, the slider shows that state's middle instead.
+  nervousLevel: undefined,
+  // [{ state, level, at }] — see CHECKIN_CAP / CHECKIN_MERGE_MS above.
+  checkins: [],
   // Minimum viable day — 3-5 core items, re-set every morning.
   tasks: createMockTasks(),
   dayStamp: todayStamp(),
@@ -34,6 +62,9 @@ const homeSlice = createSlice({
       Object.assign(state, action.payload);
       if (!Array.isArray(state.todos)) state.todos = [];
       if (!Array.isArray(state.anchors)) state.anchors = [];
+      // Slider check-ins (saves from before the slider have neither field).
+      state.nervousLevel = cleanLevel(state.nervousLevel);
+      state.checkins = cleanCheckins(state.checkins);
       // New day → yesterday's checkmarks don't count anymore.
       const today = todayStamp();
       if (state.dayStamp !== today) {
@@ -51,6 +82,45 @@ const homeSlice = createSlice({
     },
     clearNervousState(state) {
       state.nervousState = undefined;
+      state.nervousLevel = undefined;
+    },
+    // One check-in from the Home slider or a state button: the state, its
+    // exact level, and a history entry, updated together so they never
+    // disagree. Home still dispatches setNervousState right after, so every
+    // existing listener sees the usual action.
+    recordCheckin: {
+      reducer(state, action) {
+        const { state: mood, level, at } = action.payload || {};
+        if (!CHECKIN_STATES.has(mood)) return;
+        const lv = cleanLevel(level);
+        if (!Array.isArray(state.checkins)) state.checkins = [];
+        const list = state.checkins;
+        const entry = { state: mood, level: lv ?? null, at };
+        const last = list[list.length - 1];
+        const t = Date.parse(at);
+        if (last && t < Date.parse(last.at)) {
+          // Older than the newest check-in (a widget tap the app hears about
+          // later): it joins the history in time order and the newer state
+          // stays as it is.
+          let i = list.length;
+          while (i > 0 && Date.parse(list[i - 1].at) > t) i -= 1;
+          list.splice(i, 0, entry);
+        } else {
+          state.nervousState = mood;
+          state.nervousLevel = lv;
+          if (last && t - Date.parse(last.at) < CHECKIN_MERGE_MS) list[list.length - 1] = entry;
+          else list.push(entry);
+        }
+        if (list.length > CHECKIN_CAP) list.splice(0, list.length - CHECKIN_CAP);
+      },
+      // `at` defaults to now. A check-in made elsewhere (a widget tap while
+      // the app was closed) keeps the time it was made, never a future one.
+      prepare(payload) {
+        const now = Date.now();
+        const given = payload && typeof payload.at === "string" ? Date.parse(payload.at) : NaN;
+        const at = Number.isFinite(given) && given <= now ? given : now;
+        return { payload: { ...payload, at: new Date(at).toISOString() } };
+      },
     },
     // ---- minimum viable day ----
     toggleTask(state, action) {
@@ -143,6 +213,7 @@ export const {
   clearNervousState,
   hydrateHome,
   setNervousState,
+  recordCheckin,
   toggleTask,
   addTask,
   removeTask,

@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+
 import Toast from "../components/toast";
 
 import { VizView } from "../components/VizView";
@@ -22,6 +22,8 @@ import {
 import { apiConfigured } from "../store/ApiLink";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
+import { KeyboardSafeScrollView } from "../components/KeyboardSafeScrollView";
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 
 // Physics visualizer: curated VERIFIED simulations (offline, hand-written
 // physics) plus an AI prompt box. The backend first tries to match a prompt
@@ -30,6 +32,7 @@ import { withAlpha } from "../components/primitives";
 // SPEC on the backend and re-render live on any device (§6.3).
 
 export function VisualizerScreen() {
+  const palClear = usePalBubbleClearance();
   const palette = usePalette();
   const [activeId, setActiveId] = useState(null);
   const [custom, setCustom] = useState(null); // AI-generated {title, html, spec}
@@ -224,9 +227,9 @@ export function VisualizerScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardSafeScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: Math.max(40, palClear) }}
       showsVerticalScrollIndicator={false}
     >
       <Text
@@ -512,6 +515,6 @@ export function VisualizerScreen() {
           </Pressable>
         ))}
       </View>
-    </ScrollView>
+    </KeyboardSafeScrollView>
   );
 }

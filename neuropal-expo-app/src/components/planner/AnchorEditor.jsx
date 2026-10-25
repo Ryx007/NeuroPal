@@ -3,10 +3,12 @@ import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../toast";
 
 import { getCurrentCoords } from "../../services/locationAnchors";
@@ -119,18 +121,29 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge);
+          the scroll view keeps every field reachable when the dialog no
+          longer fits (large text, keyboard up) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      {/* the scrim: tap to close, but not a stop for screen readers (an
+          unlabelled "button" that throws the edit away; on iOS an
+          accessible parent would also hide the whole dialog) */}
       <Pressable
         onPress={onClose}
+        accessible={false}
+        importantForAccessibility="no"
         style={{
           flex: 1,
           backgroundColor: withAlpha("#000000", 0.6),
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
         }}
       >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 20 }}
+          keyboardShouldPersistTaps="handled"
+        >
         <Pressable
           onPress={() => {}}
+          accessible={false}
           style={{
             width: "100%",
             maxWidth: 400,
@@ -371,7 +384,9 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
             </Pressable>
           </View>
         </Pressable>
+        </ScrollView>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

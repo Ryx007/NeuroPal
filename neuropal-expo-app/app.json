@@ -2,7 +2,7 @@
   "expo": {
     "name": "NeuroPal",
     "slug": "neuropal",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "scheme": "neuropal",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
           "audio"
         ]
       },
-      "buildNumber": "2"
+      "buildNumber": "3"
     },
     "android": {
       "package": "io.neuropal.app",
@@ -31,7 +31,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
       ],
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "bundler": "metro",
@@ -69,7 +69,34 @@
           "locationWhenInUsePermission": "NeuroPal uses your location to trigger place-based anchors while the app is open."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "react-native-android-widget",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
+            "./assets/fonts/Archivo-Bold.ttf",
+            "./assets/fonts/AtkinsonHyperlegibleNext-600.ttf",
+            "./assets/fonts/AtkinsonHyperlegibleMono-700.ttf"
+          ],
+          "widgets": [
+            {
+              "name": "Pal",
+              "label": "Pal",
+              "description": "Check in with Pal and see your next anchor.",
+              "minWidth": "140dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000,
+              "previewImage": "./assets/widget/pal-preview.png"
+            }
+          ]
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "reactCompiler": true

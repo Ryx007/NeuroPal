@@ -15,6 +15,7 @@ import Toast from "../toast";
 
 import {
   epubChapterBaseUrl,
+  fetchDocTicket,
   fetchEpubChapterApi,
   fetchEpubManifestApi,
   fetchReadingProgressApi,
@@ -115,6 +116,9 @@ export function EpubReader({ document: doc }) {
   const pendingAnchorRef = useRef(null); // element id to land on (TOC jump)
   const autoplayRef = useRef(false); // continue playback across a chapter turn
   const prefetchRef = useRef(new Map()); // href → chapter xhtml (next-chapter preload)
+  // Document ticket for the chapter's <base href> on a signed-in server — the
+  // WebView's relative css/image/font requests can't carry the session header.
+  const [ticket, setTicket] = useState(null);
 
   tokensRef.current = tokens;
   spineIndexRef.current = spineIndex;
@@ -136,8 +140,9 @@ export function EpubReader({ document: doc }) {
   // ---- command channel into the page --------------------------------------
   const sendCmd = useCallback((js) => {
     if (Platform.OS === "web") {
+      // the chapter iframe is sandboxed (opaque origin): talk by message
       try {
-        iframeRef.current?.contentWindow?.__npExec?.(js);
+        iframeRef.current?.contentWindow?.postMessage({ __npExec: js }, "*");
       } catch (e) {}
     } else {
       webviewRef.current?.injectJavaScript(`${js};true;`);
@@ -360,12 +365,16 @@ export function EpubReader({ document: doc }) {
     const load = async () => {
       try {
         const cached = prefetchRef.current.get(entry.href);
-        const xhtml = cached || (await fetchEpubChapterApi(doc.id, entry.href));
+        const [xhtml, docTicket] = await Promise.all([
+          cached || fetchEpubChapterApi(doc.id, entry.href),
+          fetchDocTicket(doc.id), // cached; null on a single-user server
+        ]);
         if (!active) return;
+        setTicket(docTicket);
         setChapterHtml(
           buildChapterHtml({
             chapterXhtml: xhtml,
-            baseHref: epubChapterBaseUrl(doc.id, entry.href),
+            baseHref: epubChapterBaseUrl(doc.id, entry.href, docTicket),
             themeCss: themeCssRef.current,
             pageAnchors: pageAnchorsFor(entry.href),
           })
@@ -475,6 +484,8 @@ export function EpubReader({ document: doc }) {
   useEffect(() => {
     if (Platform.OS !== "web") return undefined;
     const onMsg = (e) => {
+      // only our chapter frame speaks this protocol
+      if (e.source !== iframeRef.current?.contentWindow) return;
       if (e.data && e.data.__epub) handleMessageRef.current(e.data.__epub);
     };
     window.addEventListener("message", onMsg);
@@ -732,6 +743,8 @@ export function EpubReader({ document: doc }) {
         <iframe
           ref={iframeRef}
           key={`${doc.id}-${spineIndex}`}
+          // opaque origin: a book's HTML can't touch the app or its session
+          sandbox="allow-scripts"
           srcDoc={chapterHtml}
           title={doc.title || "Book chapter"}
           style={{ flex: 1, width: "100%", border: "none", backgroundColor: palette.surface }}
@@ -742,7 +755,7 @@ export function EpubReader({ document: doc }) {
           key={`${doc.id}-${spineIndex}`}
           source={{
             html: chapterHtml,
-            baseUrl: epubChapterBaseUrl(doc.id, manifest.spine[spineIndex]?.href || ""),
+            baseUrl: epubChapterBaseUrl(doc.id, manifest.spine[spineIndex]?.href || "", ticket),
           }}
           onMessage={(e) => {
             try {
@@ -755,10 +768,15 @@ export function EpubReader({ document: doc }) {
           setSupportMultipleWindows={false}
           // the runtime preventDefaults link clicks; anything that still
           // tries to navigate the WebView away is refused
+          // Only this book's own files may ever be the page: a link or a
+          // redirect inside the book can't swap the reader for a remote page
+          // (which could then message the app).
           onShouldStartLoadWithRequest={(req) =>
-            req.url === "about:blank" ||
-            req.url.startsWith("data:") ||
-            req.navigationType !== "click"
+            req.navigationType !== "click" &&
+            (req.url === "about:blank" ||
+              req.url.startsWith("data:") ||
+              // …/documents/<id>/epub/ — the ticketed …/epub/t/<ticket>/ too
+              req.url.startsWith(epubChapterBaseUrl(doc.id, "", null)))
           }
           style={{ flex: 1, backgroundColor: palette.surface }}
         />

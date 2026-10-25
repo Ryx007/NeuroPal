@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../components/toast";
 
 import { withAlpha } from "../components/primitives";
@@ -30,6 +31,7 @@ import { TocSheet } from "../components/reader/TocSheet";
 import { StudySheet } from "../components/StudySheet";
 import {
   documentPageUrl,
+  fetchDocTicket,
   fetchReadingProgressApi,
   reingestDocumentApi,
   saveReadingProgressApi,
@@ -1121,6 +1123,8 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge) */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable
         onPress={onClose}
         style={{
@@ -1204,6 +1208,7 @@ function GoToPageModal({ visible, pageCount, onClose, onGo }) {
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1707,6 +1712,17 @@ function MarginNote({ note }) {
 function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChange, onTapPage }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
+  // A signed-in server needs a document ticket on each page URL (an <Image>
+  // can't send the session header). undefined = still asking; null = the
+  // server needs none.
+  const [ticket, setTicket] = useState(undefined);
+  useEffect(() => {
+    let alive = true;
+    fetchDocTicket(documentId).then((t) => alive && setTicket(t));
+    return () => {
+      alive = false;
+    };
+  }, [documentId]);
   const pageWidth = Math.min(width - 16, 900);
   const pageHeight = Math.round(pageWidth * 1.35);
   const pages = useMemo(
@@ -1743,7 +1759,7 @@ function PdfPagesView({ listRef, documentId, pageCount, initialPage, onPageChang
       renderItem={({ item: n }) => (
         <Pressable onPress={onTapPage} style={{ marginTop: 8, alignItems: "center" }}>
           <Image
-            source={{ uri: documentPageUrl(documentId, n) }}
+            source={ticket === undefined ? undefined : { uri: documentPageUrl(documentId, n, ticket) }}
             style={{
               width: pageWidth,
               height: pageHeight,

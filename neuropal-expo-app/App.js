@@ -33,6 +33,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { OfflineBanner } from "./src/components/OfflineBanner";
@@ -45,12 +46,21 @@ import { appStore } from "./src/store";
 import { MuiProvider } from "./src/providers/MuiProvider";
 import { SIGNAL_FONT_ASSETS } from "./src/theme/fonts";
 import { ThemeProvider, usePalette, useTheme } from "./src/theme/ThemeProvider";
+import { useWidgetBridge } from "./src/widgets/useWidgetBridge";
+import { prepareAnnouncer } from "./src/services/announce";
 
 SplashScreen.preventAutoHideAsync();
 
 function AppChrome() {
+  // Android home-screen widget ↔ app (a no-op on iOS and web).
+  useWidgetBridge();
   const { isLight } = useTheme();
   const palette = usePalette();
+  // Screen-reader announcements on the web need their live regions in the
+  // page before the first message (services/announce.js).
+  useEffect(() => {
+    prepareAnnouncer();
+  }, []);
 
   return (
     <>
@@ -109,15 +119,20 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppProviders>
-          <AppErrorBoundary store={appStore}>
-            <ThemeProvider>
-              <MuiProvider>
-                <AppChrome />
-              </MuiProvider>
-            </ThemeProvider>
-          </AppErrorBoundary>
-        </AppProviders>
+        {/* Keyboard handling for every screen (react-native-keyboard-controller).
+            The app is edge-to-edge on Android and screens pad themselves with
+            safe-area insets, so the provider must not add bar padding too. */}
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+          <AppProviders>
+            <AppErrorBoundary store={appStore}>
+              <ThemeProvider>
+                <MuiProvider>
+                  <AppChrome />
+                </MuiProvider>
+              </ThemeProvider>
+            </AppErrorBoundary>
+          </AppProviders>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

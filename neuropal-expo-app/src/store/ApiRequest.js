@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import Toast from '../components/toast';
 
-import { baseUrl, clearSession, getHeaders, recheckApi, subscribeApi } from './ApiLink';
+import { baseUrl, clearSession, getHeaders, isCurrentSession401, recheckApi, subscribeApi } from './ApiLink';
 import { socket } from './Socket';
 import { updateLogin } from './slices/authSlice';
 
@@ -45,14 +45,24 @@ export const useApiRequest = () => {
         (error) => {
             const status = error?.response?.status;
             const serverMsg = error?.response?.data?.error;
+            // Sign-in calls answer 401 for a wrong password — that's the
+            // message to show, not "session expired".
+            const isAuthCall = /(^|\/)auth\//.test(String(error?.config?.url || ''));
 
-            if (status === 401) {
-                dispatch(updateLogin(false));
-                clearSession().catch(() => {});
-                Toast.show({ type: 'error', text1: 'Session expired' });
-                try {
-                    socket.disconnect();
-                } catch (e) {}
+            if (status === 401 && !isAuthCall) {
+                // Only when the 401 is about the session we hold now — a
+                // stale answer to an older request must not undo a sign-in.
+                isCurrentSession401(error)
+                    .catch(() => true)
+                    .then((current) => {
+                        if (!current) return;
+                        dispatch(updateLogin(false));
+                        clearSession().catch(() => {});
+                        Toast.show({ type: 'error', text1: 'Session expired' });
+                        try {
+                            socket.disconnect();
+                        } catch (e) {}
+                    });
                 return;
             }
 
@@ -79,7 +89,10 @@ export const useApiRequest = () => {
     const fetchData = useCallback(
         async (endpoint, opts = {}) => {
             try {
-                const response = await axiosInstance.get(endpoint);
+                const response = await axiosInstance.get(
+                    endpoint,
+                    opts.timeout ? { timeout: opts.timeout } : undefined,
+                );
                 return response.data;
             } catch (error) {
                 if (!opts.silent) handleError(error);

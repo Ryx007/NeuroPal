@@ -2,7 +2,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -12,7 +11,10 @@ import {
   View,
 } from "react-native";
 
-import { usePalette } from "../../theme/ThemeProvider";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { usePalette, useTheme } from "../../theme/ThemeProvider";
 import { withAlpha } from "../primitives";
 
 // Reader Q&A panel. The old Ask button silently fired one canned question
@@ -37,18 +39,21 @@ export function AskSheet({
   contextLabel, // short excerpt of the paragraph the cursor is on
 }) {
   const palette = usePalette();
+  const { motionLevel } = useTheme();
+  const insets = useSafeAreaInsets();
   const [question, setQuestion] = useState("");
   const scrollRef = useRef(null);
+  const still = motionLevel === "Still";
 
   // New answer or thinking state → keep the newest content in view.
   useEffect(() => {
     if (!visible) return;
     const t = setTimeout(
-      () => scrollRef.current?.scrollToEnd({ animated: true }),
+      () => scrollRef.current?.scrollToEnd({ animated: !still }),
       120
     );
     return () => clearTimeout(t);
-  }, [visible, messages.length, asking]);
+  }, [visible, messages.length, asking, still]);
 
   function submit(text) {
     const q = (text ?? question).trim();
@@ -61,26 +66,33 @@ export function AskSheet({
     <Modal
       transparent
       visible={visible}
-      animationType="slide"
+      animationType={still ? "none" : "slide"}
       onRequestClose={onClose}
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
-        <Pressable
-          onPress={onClose}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: withAlpha("#000000", 0.55),
-          }}
-        />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
+      {/* keyboard-controller's version lifts the sheet on Android too — the
+          app is edge-to-edge there, so the window never resizes for the
+          keyboard and RN's own KeyboardAvoidingView did nothing. The sheet
+          stops below the status bar and shrinks (its answers scroll) instead
+          of pushing its header and close button off the top (PalSheet's
+          pattern). */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top + 32 }}>
+          <Pressable
+            onPress={onClose}
+            accessible={false}
+            importantForAccessibility="no"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: withAlpha("#000000", 0.55),
+            }}
+          />
           <View
             style={{
+              flexShrink: 1,
               maxHeight: 560,
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
@@ -149,7 +161,7 @@ export function AskSheet({
 
             <ScrollView
               ref={scrollRef}
-              style={{ flexGrow: 0 }}
+              style={{ flexGrow: 0, flexShrink: 1 }}
               contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 8 }}
             >
               {messages.length === 0 && !asking ? (
@@ -278,7 +290,8 @@ export function AskSheet({
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 18 }}
-                style={{ flexGrow: 0, marginBottom: 10 }}
+                // only the answers give way when the sheet shrinks
+                style={{ flexGrow: 0, flexShrink: 0, marginBottom: 10 }}
               >
                 {STARTERS.map((s) => (
                   <Pressable
@@ -361,8 +374,8 @@ export function AskSheet({
               </Pressable>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

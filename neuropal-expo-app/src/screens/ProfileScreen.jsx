@@ -2,12 +2,14 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
 import { ScrollView, Text, View } from "react-native";
 
+import { usePalBubbleClearance } from "../components/pal/openPalSheet";
 import { SectionHeader, NpGhostButton } from "../components/primitives";
 import { selectOnboardingState } from "../store/selectors";
 import { usePalette } from "../theme/ThemeProvider";
 
 export function ProfileScreen() {
   const palette = usePalette();
+  const palClear = usePalBubbleClearance();
   const { conditions, energyPattern, primaryUse } =
     useSelector(selectOnboardingState);
 
@@ -18,7 +20,7 @@ export function ProfileScreen() {
       contentContainerStyle={{
         paddingHorizontal: 24,
         paddingTop: 20,
-        paddingBottom: 40,
+        paddingBottom: Math.max(40, palClear),
       }}
     >
       <Text

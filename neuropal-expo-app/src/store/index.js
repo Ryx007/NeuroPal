@@ -8,6 +8,7 @@ import libraryReducer from "./slices/librarySlice";
 import lookReducer from "./slices/lookSlice";
 import notesReducer from "./slices/notesSlice";
 import onboardingReducer from "./slices/onboardingSlice";
+import palReducer from "./slices/palSlice";
 import readerReducer from "./slices/readerSlice";
 import remindersReducer from "./slices/remindersSlice";
 import uiReducer from "./slices/uiSlice";
@@ -25,5 +26,8 @@ export const appStore = configureStore({
     reminders: remindersReducer,
     flashcards: flashcardsReducer,
     notes: notesReducer,
+    // Pal as a buddy (bubble + assistant sheet). The widget dispatches
+    // 'pal/openSheet' — see the contract in slices/palSlice.js.
+    pal: palReducer,
   },
 });

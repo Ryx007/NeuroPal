@@ -78,8 +78,11 @@ export function ThemeProvider({ children }) {
   const tweaks = useSelector(selectUiState);
   const look = useSelector((s) => s.look);
   const nervous = useSelector((s) => s.home.nervousState);
-  // The OS setting always wins over the user's motion pick (WCAG 2.3.3).
-  const reduceMotion = useLiveReduceMotion();
+  // The OS setting always wins over the user's motion pick (WCAG 2.3.3), and
+  // so does the app's own Reduce motion switch (Settings → Appearance), the
+  // in-app way to stop Pal, the slider glide and sliding sheets (WCAG 2.2.2).
+  const osReduceMotion = useLiveReduceMotion();
+  const reduceMotion = osReduceMotion || tweaks.reduceMotion === true;
 
   const value = useMemo(() => {
     const isSignal = look.skin === "signal";

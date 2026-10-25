@@ -5,7 +5,7 @@ import {
 } from "@react-navigation/native";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,16 +13,28 @@ import Toast from "../components/toast";
 
 import { DataPulse, GlassPanel, withAlpha } from "../components/primitives";
 import { useApiRequest } from "../store/ApiRequest";
-import { clearSession } from "../store/ApiLink";
-import { describeNetworkError, USE_MOCK } from "../services/network";
-import { hydrateUser, updateLogin } from "../store/slices/authSlice";
+import {
+  clearSession,
+  getApiStatus,
+  getSessionToken,
+  onUnauthorized,
+  saveSessionToken,
+  subscribeApi,
+  wasSignedOut,
+} from "../store/ApiLink";
+import { clearDocTickets, describeNetworkError, USE_MOCK } from "../services/network";
+import { hydrateUser, resetAuth, updateLogin } from "../store/slices/authSlice";
 import { selectOnboardingCompleted } from "../store/selectors";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { Pal } from "../components/pal/Pal";
+import { PalBuddyHost } from "../components/pal/PalBuddy";
+import { openPalSheet } from "../components/pal/openPalSheet";
 import { SignalBackdrop } from "../components/signal/Backdrop";
+import { flushPendingNavigation, getPendingRoute, navRef, subscribePendingRoute } from "./navRef";
 import { EmergencyScreen } from "../screens/EmergencyScreen";
 import { HomeArrangeScreen } from "../screens/HomeArrangeScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { LoginScreen } from "../screens/LoginScreen";
 import { LibraryScreen } from "../screens/LibraryScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
@@ -57,6 +69,7 @@ function AppHeader({ navigation }) {
   const { isSignal } = useTheme();
   const insets = useSafeAreaInsets();
   const pal = useSelector((s) => s.look.pal);
+  const palButton = useRef(null); // gets focus back when Pal's sheet closes
 
   return (
     <GlassPanel
@@ -99,12 +112,15 @@ function AppHeader({ navigation }) {
         </Text>
         <View style={{ flex: 1 }} />
         {isSignal ? (
-          // Signal: your own Pal sits in the header and opens its builder.
+          // Signal: your own Pal sits in the header. Like the floating
+          // bubble and the Home tile, it opens Pal, the assistant (whose
+          // sheet links on to the builder) — one face, one meaning.
           <Pressable
-            onPress={() => navigation.getParent()?.navigate("PalBuilder")}
+            ref={palButton}
+            onPress={() => openPalSheet(null, { returnFocusTo: palButton })}
             hitSlop={4}
             accessibilityRole="button"
-            accessibilityLabel={`${pal?.name || "Pal"} — build your Pal`}
+            accessibilityLabel={`Open ${pal?.name || "Pal"}, your assistant`}
             style={{ width: 44, height: 40, alignItems: "center", justifyContent: "center" }}
           >
             <Pal pal={pal} size={46} decorative />
@@ -343,17 +359,26 @@ function NavOverlay({ route, navigation, children }) {
           </Text>
         </Pressable>
       ) : null}
+      {/* Pal as a buddy: the floating bubble + the assistant sheet. Only the
+          focused screen's host draws, so there is one bubble at a time. */}
+      <PalBuddyHost />
     </View>
   );
 }
 
-// Boot pipeline — runs once on cold start.
-//   1. Call /api/auth/me with the persisted JWT (silent, no toast on 401)
-//   2. If it resolves → hydrate user into Redux + loggedIn=true
-//   3. If it 401s / 404s / no token  → clearSession + loggedIn=false
-//   4. If the backend never answered → loggedIn=false too, but keep the
-//      session and say so — landing on Login with no explanation is exactly
-//      the "built but disconnected" failure mode this build is removing.
+// Boot pipeline — runs on cold start, and again whenever loggedIn is reset to
+// null (a new backend address, a fresh sign-in).
+//   1. /api/auth/me with the saved session (silent). A single-user LOCAL_MODE
+//      server answers with no session at all.
+//   2. Answer → hydrate the user (and keep the refreshed session it may send).
+//   3. 401 → this server wants a sign-in: clear the session, show it.
+//   4. Anything else — no answer, or the edge answering for a server that's
+//      down or restarting (502/503/521/530…) — open the app offline (the
+//      banner says why): Home, check-ins, anchors, Pal and the tools all work
+//      on the phone. A saved session is kept, so a deploy or an outage never
+//      signs anyone out. Without one, the app still opens offline on a phone
+//      that never signed in (the first answer from the server, a 401, brings
+//      sign-in) — but never after a sign-out: then it waits for sign-in.
 function useAuthBootstrap(loggedIn) {
   const dispatch = useDispatch();
   const { fetchData } = useApiRequest();
@@ -368,21 +393,36 @@ function useAuthBootstrap(loggedIn) {
       return;
     }
     try {
-      const me = await fetchData("auth/me", { silent: true, rethrow: true });
+      // short timeout: the splash waits on this answer
+      const me = await fetchData("auth/me", { silent: true, rethrow: true, timeout: 9000 });
       if (me && (me.id || me._id)) {
+        if (me.token) await saveSessionToken(me.token).catch(() => {});
         dispatch(hydrateUser(me));
         return;
       }
-      await clearSession().catch(() => {});
+      // A 200 that isn't a user (a proxy's or the edge's own page) is no
+      // answer from NeuroPal: treat it like no answer, never as a sign-out.
+      throw new Error("The server's answer wasn't from NeuroPal");
     } catch (error) {
-      if (!error?.response) {
+      const status = error?.response?.status;
+      const session = await getSessionToken().catch(() => null);
+      if (status === 401) {
+        await clearSession().catch(() => {});
+      } else if (status === 404 && !session) {
+        // Nothing NeuroPal at this address: the sign-in screen shows it and
+        // lets the address be changed.
+      } else {
+        // Offline (or the server is down): the phone-side app still opens,
+        // unless someone signed out here and hasn't signed in since.
         Toast.show({
           type: "error",
-          text1: "Cannot reach the backend",
+          text1: "Cannot reach the server",
           text2: describeNetworkError(error),
         });
-      } else {
-        await clearSession().catch(() => {});
+        if (session || !(await wasSignedOut())) {
+          dispatch(updateLogin(true));
+          return;
+        }
       }
     }
     dispatch(updateLogin(false));
@@ -392,6 +432,69 @@ function useAuthBootstrap(loggedIn) {
     // Only run when we haven't determined login state yet (loggedIn=null).
     if (loggedIn === null) boot();
   }, [loggedIn, boot]);
+
+  // Opened offline: once the server answers again, load the account (name,
+  // Settings → Account, a refreshed session). A 401 there goes the usual way.
+  const email = useSelector((s) => s.auth.email);
+  const needsUser = loggedIn === true && !email && !USE_MOCK;
+  useEffect(() => {
+    if (!needsUser) return undefined;
+    let last = getApiStatus().state;
+    let busy = false;
+    const refresh = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const me = await fetchData("auth/me", { silent: true, rethrow: true, timeout: 9000 });
+        if (me && (me.id || me._id)) {
+          if (me.token) await saveSessionToken(me.token).catch(() => {});
+          dispatch(hydrateUser(me));
+        }
+      } catch {
+        // still offline, or a 401 the API layer already routes to sign-in
+      }
+      busy = false;
+    };
+    if (last === "ok") refresh();
+    return subscribeApi((st) => {
+      if (st.state === "ok" && last !== "ok") refresh();
+      last = st.state;
+    });
+  }, [needsUser, fetchData, dispatch]);
+
+  // Any data call that comes back 401 → the session is over on this server.
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        clearSession().catch(() => {});
+        clearDocTickets();
+        dispatch(resetAuth());
+      }),
+    [dispatch]
+  );
+}
+
+function BootSplash() {
+  const palette = usePalette();
+  return (
+    <View
+      style={{ flex: 1, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center" }}
+      accessible
+      accessibilityLabel="Connecting to your NeuroPal server"
+    >
+      <DataPulse />
+      <Text
+        style={{
+          marginTop: 12,
+          color: palette.onSurfaceVariant,
+          fontFamily: palette.fonts.bodyMedium,
+          fontSize: 13,
+        }}
+      >
+        Connecting…
+      </Text>
+    </View>
+  );
 }
 
 export function AppNavigator() {
@@ -416,15 +519,46 @@ export function AppNavigator() {
     };
   }, [palette]);
 
-  // No auth gate: this is a single-user local app (Build Brief §2.7 — "no
-  // login screen friction"). The bootstrap above hydrates the user's
-  // name/tweaks in the background when the backend answers; when it
-  // doesn't, the app still opens and the Library banner / boot toast say
-  // exactly what's wrong. (LoginScreen still exists in src/screens for a
-  // future LOCAL_MODE=false build — it's just never routed to.)
+  // The widget's "Overwhelmed" link waiting for the navigator: the calming
+  // steps must not wait behind "Connecting…". Once shown they stay, even
+  // after the waiting link is used up, until the connection check is done.
+  const pendingRoute = useSyncExternalStore(subscribePendingRoute, getPendingRoute, getPendingRoute);
+  const [calmDuringBoot, setCalmDuringBoot] = useState(false);
+  useEffect(() => {
+    if (loggedIn === null && pendingRoute === "Emergency") setCalmDuringBoot(true);
+    else if (loggedIn !== null) setCalmDuringBoot(false);
+  }, [loggedIn, pendingRoute]);
+  const bootWithCalm = loggedIn === null && (calmDuringBoot || pendingRoute === "Emergency");
+
+  // Sign-in gate. A single-user LOCAL_MODE server signs you in by itself, so
+  // the gate only ever shows for a server that wants an account. The crisis
+  // screen stays reachable when signed out — it must never sit behind a login.
+  if (loggedIn === null && !bootWithCalm) return <BootSplash />;
   return (
-    <NavigationContainer theme={navigationTheme}>
-      {completed ? (
+    <NavigationContainer theme={navigationTheme} ref={navRef} onReady={flushPendingNavigation}>
+      {loggedIn === null ? (
+        // Still connecting, but the calming steps were asked for: show them
+        // now. When the check finishes this same navigator gains the rest of
+        // its screens and the calming steps stay open.
+        <RootStack.Navigator
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.surface },
+          }}
+        >
+          <RootStack.Screen name="Emergency" component={EmergencyScreen} />
+        </RootStack.Navigator>
+      ) : loggedIn === false ? (
+        <RootStack.Navigator
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.surface },
+          }}
+        >
+          <RootStack.Screen name="Login" component={LoginScreen} />
+          <RootStack.Screen name="Emergency" component={EmergencyScreen} />
+        </RootStack.Navigator>
+      ) : completed ? (
         <RootStack.Navigator
           screenOptions={{
             headerShown: false,

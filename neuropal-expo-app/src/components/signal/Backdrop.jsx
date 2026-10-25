@@ -3,9 +3,12 @@ import { Asset } from "expo-asset";
 import { createElement, useId } from "react";
 import { Image, Platform, StyleSheet, View } from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
+import { useSelector } from "react-redux";
 
 import { usePalette, useTheme } from "../../theme/ThemeProvider";
 import { RED_STATE_FIELD } from "../../theme/tokens";
+import { stateTint } from "../home/stateScale";
+import { StatePulse } from "../motion/StatePulse";
 import { withAlpha } from "../primitives";
 import { SignalField } from "./SignalField";
 
@@ -32,12 +35,21 @@ function Grain({ opacity }) {
 //            Everywhere else: grid and texture only.
 // Screens use SignalBackdrop (pauses the field when the screen loses focus);
 // anything outside a navigator uses SignalBackdropView with `focused`.
+// The screen with the living field (Home) also gets a brief, faint wash of
+// the state colour when your check-in changes (statePulse).
 export function SignalBackdrop({ field = false }) {
   const focused = useIsFocused();
-  return <SignalBackdropView field={field} focused={focused} />;
+  return <SignalBackdropView field={field} focused={focused} statePulse={field && focused} />;
 }
 
-export function SignalBackdropView({ field = false, focused = true, paletteOverride }) {
+// Reads the check-in from the store; only mounted where statePulse is on.
+function StateWash() {
+  const palette = usePalette();
+  const nervous = useSelector((s) => s.home.nervousState);
+  return <StatePulse kind="backdrop" state={nervous} color={stateTint(palette, nervous)} />;
+}
+
+export function SignalBackdropView({ field = false, focused = true, paletteOverride, statePulse = false }) {
   const themePalette = usePalette();
   const { motionLevel: themeMotion, redState, reduceMotion } = useTheme();
   const palette = paletteOverride || themePalette;
@@ -75,6 +87,7 @@ export function SignalBackdropView({ field = false, focused = true, paletteOverr
         {palette.texture === "Scanlines" ? <Rect x={0} y={0} width="100%" height="100%" fill={`url(#np-scan-${uid})`} opacity={0.5} /> : null}
       </Svg>
       {palette.texture === "Grain" ? <Grain opacity={palette.dark ? 0.5 : 0.7} /> : null}
+      {statePulse && !paletteOverride ? <StateWash /> : null}
     </View>
   );
 }

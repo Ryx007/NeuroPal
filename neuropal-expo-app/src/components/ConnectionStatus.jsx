@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { useDispatch } from "react-redux";
 import Toast from "./toast";
 
 import {
   apiHost,
   getApiOverride,
   getApiStatus,
+  getHeaders,
   labelForCandidate,
   recheckApi,
   setApiOverride,
   subscribeApi,
 } from "../store/ApiLink";
+import { updateLogin } from "../store/slices/authSlice";
 import { usePalette } from "../theme/ThemeProvider";
 import { withAlpha } from "../components/primitives";
 
@@ -246,18 +249,25 @@ export function ConnectionStatus() {
   );
 }
 
-function BackendAddressField({ onChanged }) {
+// Also used on the sign-in screen, so a wrong default address is never a
+// dead end.
+export function BackendAddressField({ onChanged }) {
   const palette = usePalette();
+  const dispatch = useDispatch();
   const [value, setValue] = useState(() => getApiOverride() || "");
   const [testing, setTesting] = useState(false);
 
   async function apply(url) {
     setTesting(true);
+    const before = apiHost;
     try {
       const st = await setApiOverride(url);
       onChanged?.();
       if (st.state === "ok") {
         Toast.show({ type: "success", text1: "Connected", text2: st.host });
+        // A different server has its own accounts: check the session again
+        // (a single-user server signs you straight back in).
+        if (st.host !== before) dispatch(updateLogin(null));
       } else {
         Toast.show({
           type: "error",
@@ -291,7 +301,7 @@ function BackendAddressField({ onChanged }) {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        placeholder="http://192.168.3.229:4000 (blank = defaults)"
+        placeholder="https://api.ryx007.work (blank = default)"
         placeholderTextColor={palette.onSurfaceVariant}
         accessibilityLabel="Backend address override"
         style={{
@@ -368,7 +378,10 @@ function ReingestAllButton() {
     }
     setArming(false);
     try {
-      const res = await fetch(`${apiHost}/api/documents/reingest-all`, { method: "POST" });
+      const res = await fetch(`${apiHost}/api/documents/reingest-all`, {
+        method: "POST",
+        headers: await getHeaders(),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       Toast.show({

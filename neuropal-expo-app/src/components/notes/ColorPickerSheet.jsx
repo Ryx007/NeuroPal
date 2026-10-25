@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import WheelColorPicker from "react-native-wheel-color-picker";
 
 import { usePalette } from "../../theme/ThemeProvider";
@@ -49,18 +50,30 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      {/* lifts the dialog above the keyboard on Android too (edge-to-edge);
+          the scroll view keeps the hex field reachable when the dialog no
+          longer fits (large text, keyboard up). The wheel's own drag still
+          wins over the scroll (it blocks the native responder). */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      {/* the scrim: tap to close, but not a stop for screen readers (an
+          unlabelled "button"; on iOS an accessible parent would also hide
+          the whole dialog) */}
       <Pressable
         onPress={onClose}
+        accessible={false}
+        importantForAccessibility="no"
         style={{
           flex: 1,
           backgroundColor: withAlpha("#000000", 0.6),
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
         }}
       >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 20 }}
+          keyboardShouldPersistTaps="handled"
+        >
         <Pressable
           onPress={() => {}}
+          accessible={false}
           style={{
             width: "100%",
             maxWidth: 380,
@@ -197,7 +210,9 @@ export function ColorPickerSheet({ visible, initialColor, onPick, onClose }) {
             </Pressable>
           </View>
         </Pressable>
+        </ScrollView>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
