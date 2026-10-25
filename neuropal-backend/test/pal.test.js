@@ -245,6 +245,36 @@ test('a message that sounds like a crisis gets the careful reply, not the model'
     assert.equal(ok.crisis, false);
 });
 
+test('the crisis check covers common phrasings and other languages, not everyday talk', () => {
+    const { looksLikeCrisis } = require('../src/routes/pal');
+    for (const m of [
+        'i want to end it',
+        'honestly i might kms tonight',
+        'I took all my pills',
+        'nobody would miss me if I was gone',
+        'going to jump off the bridge tonight',
+        'everyone is better off without me',
+        'voglio morire',
+        'non voglio più vivere',
+        'quiero morirme',
+        'je veux mourir',
+        'ich will nicht mehr leben',
+        'khudkushi',
+    ]) {
+        assert.equal(looksLikeCrisis(m), true, m);
+    }
+    for (const m of [
+        'this bug is killing me',
+        'I walked 5 kms today',
+        "let's end it here for today",
+        'I take my meds at 8',
+        'I am dying to read this paper',
+        'killing time before class',
+    ]) {
+        assert.equal(looksLikeCrisis(m), false, m);
+    }
+});
+
 test('hourly caps: 30 breakdowns and 30 chats per user, separately; crisis replies are never capped', async () => {
     answer = async (opts) =>
         opts.geminiSchema.properties.steps
