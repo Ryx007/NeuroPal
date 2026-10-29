@@ -45,6 +45,22 @@ public struct WidgetGalleryView: View {
                     lockFrame(CGSize(width: 76, height: 76), circle: true) { StateAccessoryView(model: model) }
                     lockFrame(CGSize(width: 172, height: 76), circle: false) { AnchorAccessoryView(model: model) }
                 }
+                // What a locked device shows (Lock Screen, StandBy): the
+                // personal parts redacted, the buttons still there.
+                section("While locked") {
+                    frame(small) { CheckInWidgetView(model: model, size: .small, action: galleryAction) }
+                        .redacted(reason: .privacy)
+                    frame(medium) { CheckInWidgetView(model: model, size: .medium, action: galleryAction) }
+                        .redacted(reason: .privacy)
+                    frame(small) { NextAnchorWidgetView(model: model, size: .small) }
+                        .redacted(reason: .privacy)
+                    frame(small) { ReadingWidgetView(model: model, size: .small) }
+                        .redacted(reason: .privacy)
+                    lockFrame(CGSize(width: 76, height: 76), circle: true) { StateAccessoryView(model: model) }
+                        .redacted(reason: .privacy)
+                    lockFrame(CGSize(width: 172, height: 76), circle: false) { AnchorAccessoryView(model: model) }
+                        .redacted(reason: .privacy)
+                }
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)

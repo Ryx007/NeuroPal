@@ -6,7 +6,9 @@ import SwiftUI
 /// "Talk" — a short chat with Pal (POST /api/pal/chat), PalTalk.jsx.
 /// Safety first, and offline: a message that sounds like a crisis is never
 /// sent — Pal answers on the device with the careful reply, the calming
-/// steps and the help lines. A server reply marked `crisis` is shown the
+/// steps and the help lines. The check sees the message exactly as the
+/// server would (whitespace collapsed), so doubled spaces, tabs or no-break
+/// spaces don't hide anything. A server reply marked `crisis` is shown the
 /// same way. The check can miss phrasings, and the note under the chat says so.
 struct TalkPanel: View {
     @Environment(\.npTheme) private var theme
@@ -25,6 +27,8 @@ struct TalkPanel: View {
     final class Lifetime { var alive = true }
 
     private static let shownLines = 10
+    /// Mock screenshots: the -NPPalSay message is sent once per launch.
+    @MainActor private static var saidAtLaunch = false
     private var pal: Appearance.Pal { theme.appearance.pal }
 
     var body: some View {
@@ -74,18 +78,41 @@ struct TalkPanel: View {
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: day.chat.count) { _, _ in scrollToEnd(proxy) }
                 .onChange(of: sending) { _, _ in scrollToEnd(proxy) }
-                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+                .onAppear { scrollToLatest(proxy) }
             }
             inputBar
         }
-        .onAppear { lifetime.alive = true }
+        .onAppear {
+            lifetime.alive = true
+            sayAtLaunch()
+        }
         .onDisappear { lifetime.alive = false }
+    }
+
+    /// Mock screenshots only: -NPPalSay "…" types that message and sends it
+    /// through the real path (the crisis check included).
+    private func sayAtLaunch() {
+        guard !Self.saidAtLaunch, !day.isPersistent,
+              let text = UserDefaults.standard.string(forKey: "NPPalSay"), !text.isEmpty else { return }
+        Self.saidAtLaunch = true
+        draft = text
+        send()
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
-            withAnimation(theme.animates ? .easeOut(duration: 0.2) : nil) { proxy.scrollTo("end", anchor: .bottom) }
+            withAnimation(theme.animates ? .easeOut(duration: 0.2) : nil) { scrollToLatest(proxy) }
+        }
+    }
+
+    /// The end of the chat — but a careful crisis answer from its top, so
+    /// Pal's words and the calming steps are in view, not just the numbers.
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        if let last = day.chat.last, last.crisis {
+            proxy.scrollTo(last.id, anchor: .top)
+        } else {
+            proxy.scrollTo("end", anchor: .bottom)
         }
     }
 
@@ -129,14 +156,15 @@ struct TalkPanel: View {
     }
 
     private var inputBar: some View {
-        let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let empty = PalLogic.collapseWhitespace(draft).isEmpty
         return HStack(spacing: 8) {
             TextField("Message \(pal.name)", text: $draft)
                 .focused($focused)
                 .submitLabel(.send)
                 .onSubmit(send)
                 .onChange(of: draft) { _, t in
-                    if t.count > PalLogic.messageMaxChars { draft = String(t.prefix(PalLogic.messageMaxChars)) }
+                    // The server counts UTF-16 units (an emoji is two).
+                    if t.utf16.count > PalLogic.messageMaxChars { draft = PalLogic.capUTF16(t, PalLogic.messageMaxChars) }
                 }
                 .palField()
                 .accessibilityLabel("Message to \(pal.name)")
@@ -166,18 +194,26 @@ struct TalkPanel: View {
     // MARK: Sending
 
     private func send() {
-        let text = String(draft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(PalLogic.messageMaxChars))
-        guard !text.isEmpty, !sending else { return }
-        draft = ""
-        cleared = nil
-        day.appendChat(PalChatLine(role: .user, text: text))
-        // Safety first, and offline: the same careful answer every time,
-        // straight away, and nothing is sent anywhere.
-        if PalLogic.soundsLikeCrisis(text) {
+        guard !sending else { return }
+        let text: String
+        switch PalLogic.outgoing(draft, max: PalLogic.messageMaxChars) {
+        case .nothing:
+            return
+        case .crisis(let message):
+            // Safety first, and offline: the same careful answer every time,
+            // straight away, and nothing is sent anywhere.
+            draft = ""
+            cleared = nil
+            day.appendChat(PalChatLine(role: .user, text: message))
             day.appendChat(PalChatLine(role: .pal, text: PalLogic.crisisReply, crisis: true, local: true))
             AccessibilityNotification.Announcement("\(pal.name): \(PalLogic.crisisReply)").post()
             return
+        case .send(let message):
+            text = message
         }
+        draft = ""
+        cleared = nil
+        day.appendChat(PalChatLine(role: .user, text: text))
         sending = true
         AccessibilityNotification.Announcement("\(pal.name) is thinking…").post()
         let context = PalLogic.chatContext(state: day.day.state, now: Date(), anchors: day.day.anchors,

@@ -4,7 +4,9 @@ import NPCore
 /// Pal's offline brain — a port of neuropal-expo-app/src/services/palAssistant.js.
 /// Pure functions only, so every basic works without a server:
 ///   soundsLikeCrisis  the safety net that runs BEFORE any message leaves the device
+///   outgoing          a Talk message or a task, checked and cleaned the way the server does
 ///   suggestions       "What now?": one next step for this moment, with a reason
+///   breakdown         "Break it down": crisis check, then the server, then Pal's offline steps
 ///   offlineSteps      "Break it down" without the server (template steps)
 ///   cleanSteps        the same rules for steps that come from the server
 ///   chatContext       what Pal's chat may know about right now
@@ -16,9 +18,12 @@ public enum PalLogic {
     /// `crisisReply`, shows the calming steps and help lines, and never
     /// sends it to a model. A safety net, not a clinical test: it can miss
     /// things, and the app says so.
+    ///
+    /// The text is normalised exactly as the server does before its test
+    /// (pal.js: `raw.replace(/\s+/g, ' ').trim()`, then ’ ‘ → '), so "want
+    /// to  die", a tab or a pasted no-break space can't slip past it.
     public static func soundsLikeCrisis(_ text: String) -> Bool {
-        let s = text.replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "\u{2018}", with: "'")
-        return crisis.matches(s)
+        crisis.matches(crisisCheckText(text))
     }
 
     /// The same careful answer as the server's CRISIS_REPLY.
@@ -27,6 +32,89 @@ public enum PalLogic {
         + "now, or go to someone you trust. The calming steps in the app are one tap away."
 
     static let crisis = JSRegex(crisisPatternSource, fallback: #"\b(suicid\w*|kill(?:ing)? my ?self|want(?:ed)? to die|end(?:ing)? my life)\b"#)
+
+    /// What the server's crisis test sees: whitespace collapsed and trimmed,
+    /// then the curly apostrophes ’ ‘ made straight (one UTF-16 unit each,
+    /// mapped one by one like JavaScript's replace).
+    static func crisisCheckText(_ text: String) -> String {
+        var out = String.UnicodeScalarView()
+        for u in collapseWhitespace(text).unicodeScalars {
+            out.append(u == "\u{2019}" || u == "\u{2018}" ? "'" : u)
+        }
+        return String(out)
+    }
+
+    // MARK: - Text the way the server cleans it
+
+    /// JavaScript's `\s` (and what `String.prototype.trim` removes): tab,
+    /// line feed, vertical tab, form feed, carriage return, space, no-break
+    /// space, U+1680, U+2000–U+200A, the line and paragraph separators,
+    /// U+202F, U+205F, U+3000 and U+FEFF. An explicit set on purpose: Swift's
+    /// and ICU's notions of whitespace differ (U+0085 is whitespace there,
+    /// not in JavaScript).
+    static func isJavaScriptSpace(_ u: Unicode.Scalar) -> Bool {
+        switch u.value {
+        case 0x09...0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// JavaScript's `s.replace(/\s+/g, ' ').trim()` (how pal.js cleans a
+    /// message or a task): each run of whitespace becomes one space, and
+    /// none is left at either end.
+    public static func collapseWhitespace(_ text: String) -> String {
+        var out = String.UnicodeScalarView()
+        var gap = false
+        for u in text.unicodeScalars {
+            if isJavaScriptSpace(u) {
+                gap = true
+            } else {
+                if gap && !out.isEmpty { out.append(" ") }
+                gap = false
+                out.append(u)
+            }
+        }
+        return String(out)
+    }
+
+    /// At most `max` UTF-16 units — the server's `String.length` — cut
+    /// between characters, never through one (an emoji stays whole or goes).
+    public static func capUTF16(_ text: String, _ max: Int) -> String {
+        guard text.utf16.count > max else { return text }
+        var used = 0
+        var end = text.startIndex
+        for i in text.indices {
+            let n = text[i].utf16.count
+            if used + n > max { break }
+            used += n
+            end = text.index(after: i)
+        }
+        return String(text[..<end])
+    }
+
+    /// A Talk message or a task on its way to Pal's server.
+    public enum Outgoing: Equatable, Sendable {
+        /// Nothing to send (only whitespace).
+        case nothing
+        /// Sounds like a crisis: Pal answers on the device with
+        /// `crisisReply`, and nothing is sent anywhere.
+        case crisis(text: String)
+        /// Send this: whitespace collapsed like the server, within its cap.
+        case send(text: String)
+    }
+
+    /// Cleans `draft` the way the server will (`collapseWhitespace`, then at
+    /// most `max` UTF-16 units) and runs the crisis check on all of it first.
+    public static func outgoing(_ draft: String, max: Int) -> Outgoing {
+        let full = collapseWhitespace(draft)
+        guard !full.isEmpty else { return .nothing }
+        var text = capUTF16(full, max)
+        if text.hasSuffix(" ") { text.removeLast() } // a cut right after a space
+        if soundsLikeCrisis(full) { return .crisis(text: text) }
+        return text.isEmpty ? .nothing : .send(text: text)
+    }
 
     // MARK: - Time
 
@@ -255,6 +343,7 @@ public enum PalLogic {
     public static let stepMaxWords = 12
     public static let stepsMin = 3
     public static let stepsMax = 7
+    /// The server's TASK_MAX_CHARS, in UTF-16 units (its String.length).
     public static let taskMaxChars = 500
 
     private static let numbering = JSRegex(#"^\s*(?:step\s*)?(?:\d+|[a-z])[.):\]-]\s+"#)
@@ -365,6 +454,61 @@ public enum PalLogic {
         return cleanSteps(hit?.steps ?? generic) ?? generic
     }
 
+    /// What "Break it down" shows.
+    public enum BreakdownOutcome: Equatable, Sendable {
+        /// The steps, and why they are Pal's offline ones (nil: the server's).
+        case steps([String], note: String?)
+        /// The task sounds like a crisis: no steps — Pal's careful answer,
+        /// the calming steps and the help lines.
+        case crisis(reply: String)
+    }
+
+    /// "Break it down" (requestBreakdown in palApi.js). Safety first, and
+    /// offline: a task that sounds like a crisis is answered on the device
+    /// and never sent, whether or not there is a server. Then the server;
+    /// its own crisis answer (`crisis: true`) is shown the same way. When the
+    /// server can't help, Pal's offline steps, saying why. Nil for an empty task.
+    public static func breakdown(task draft: String,
+                                 server: @Sendable (String) async throws -> PalBreakdown) async -> BreakdownOutcome? {
+        let task: String
+        switch outgoing(draft, max: taskMaxChars) {
+        case .nothing: return nil
+        case .crisis: return .crisis(reply: crisisReply)
+        case .send(let text): task = text
+        }
+        do {
+            let answer = try await server(task)
+            if answer.crisis {
+                let reply = collapseWhitespace(answer.reply ?? "")
+                return .crisis(reply: reply.isEmpty ? crisisReply : reply)
+            }
+            if let steps = cleanSteps(answer.steps) { return .steps(steps, note: nil) }
+            return .steps(offlineSteps(for: task),
+                          note: "The server’s steps didn’t come out right, so these are Pal’s offline steps.")
+        } catch {
+            return .steps(offlineSteps(for: task), note: offlineNote(for: error))
+        }
+    }
+
+    /// "Use quick steps now": Pal's offline steps without waiting — after the
+    /// same crisis check.
+    public static func quickBreakdown(task draft: String) -> BreakdownOutcome {
+        if case .crisis = outgoing(draft, max: taskMaxChars) { return .crisis(reply: crisisReply) }
+        return .steps(offlineSteps(for: collapseWhitespace(draft)), note: "Quick steps, made on this device.")
+    }
+
+    /// Why the steps are Pal's offline ones, said plainly (SOURCE_NOTE in PalSheet.jsx).
+    public static func offlineNote(for error: Error) -> String {
+        switch error as? APIError {
+        case .offline?: return "No server right now, so these are Pal’s offline steps."
+        case .rateLimited?: return "Pal has done a lot of thinking for now, so these are offline steps."
+        case .unauthorized?: return "You’re signed out, so these are Pal’s offline steps."
+        default:
+            if (error as? URLError) != nil { return "No server right now, so these are Pal’s offline steps." }
+            return "The server didn’t answer well, so these are Pal’s offline steps."
+        }
+    }
+
     // MARK: - Talk
 
     /// Chat context for POST /api/pal/chat — only what helps a short reply.
@@ -387,8 +531,17 @@ public enum PalLogic {
             people: pal.people)
     }
 
-    /// Talk's message limit (the server's MESSAGE_MAX_CHARS).
+    /// Talk's message limit (the server's MESSAGE_MAX_CHARS), in UTF-16
+    /// units (its String.length), counted after whitespace is collapsed.
     public static let messageMaxChars = 1000
+
+    // MARK: - Sit with me
+
+    /// The notification at the end of a "Sit with me" block (startSit in
+    /// sitControl.js). No task words in it: it can show on a locked screen.
+    public static func sitEndNotice(minutes: Int, pal: Appearance.Pal) -> (title: String, body: String) {
+        ("\(pal.name): nice.", "That’s your \(minutes) \(minutes == 1 ? "minute" : "minutes"). Want to note what you did?")
+    }
 }
 
 /// A JavaScript regular expression (non-unicode mode, flag `i`) run with

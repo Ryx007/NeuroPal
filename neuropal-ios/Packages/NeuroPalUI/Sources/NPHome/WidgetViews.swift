@@ -8,6 +8,38 @@ import WidgetKit
 // NPHome) and the app's widget gallery (-NPScreen widgets) show exactly the
 // same thing. The extension adds the container background, the timeline
 // and the App Intent buttons; these views only draw.
+//
+// Privacy: on the Lock Screen and in StandBy a widget can show while the
+// device is locked. Everything personal — how you checked in, anchor
+// titles and times, what you're reading — is `.privacySensitive()`, so a
+// locked device redacts it (and VoiceOver says "hidden while locked"
+// instead). Redaction only blanks text and images, so what is drawn — the
+// state glyph, the gauge, the progress squares, Pal's mood — is left out
+// or neutral whenever `redactionReasons` holds `.privacy`. The check-in
+// buttons stay, without showing which one is current; Overwhelmed stays a
+// plain link to the calming steps. (The gallery's "While locked" row shows it.)
+
+private extension View {
+    /// The words VoiceOver hears for a private part: what it is, or that
+    /// it's hidden while the device is locked.
+    func privateLabel(_ hidden: Bool, _ what: String, _ label: String) -> some View {
+        accessibilityLabel(hidden ? "\(what), hidden while locked" : label)
+    }
+}
+
+/// A group VoiceOver reads as one: its words, or "hidden while locked".
+private struct PrivateGroup: ViewModifier {
+    let hidden: Bool
+    let what: String
+
+    func body(content: Content) -> some View {
+        if hidden {
+            content.accessibilityElement(children: .ignore).accessibilityLabel("\(what), hidden while locked")
+        } else {
+            content.accessibilityElement(children: .combine)
+        }
+    }
+}
 
 /// Everything a widget shows, from the shared container.
 public struct HomeWidgetModel: Sendable {
@@ -73,6 +105,7 @@ public struct CheckInWidgetView: View {
     let model: HomeWidgetModel
     let size: WidgetFamilySize
     let action: WidgetCheckInAction
+    @Environment(\.redactionReasons) private var redaction
 
     public init(model: HomeWidgetModel, size: WidgetFamilySize, action: @escaping WidgetCheckInAction) {
         self.model = model
@@ -82,6 +115,8 @@ public struct CheckInWidgetView: View {
 
     public var body: some View {
         let theme = model.theme
+        // Pal's face mirrors the check-in, so a locked device shows it calm.
+        let mood = redaction.contains(.privacy) ? PalMood.okay : PalMood(model.state)
         Group {
             if size == .small {
                 VStack(spacing: 6) {
@@ -93,7 +128,7 @@ public struct CheckInWidgetView: View {
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
-                            PalFigure(pal: model.appearance.pal, palette: theme.palette, mood: PalMood(model.state), size: 42)
+                            PalFigure(pal: model.appearance.pal, palette: theme.palette, mood: mood, size: 42)
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(model.appearance.pal.name)
@@ -122,15 +157,18 @@ public struct CheckInWidgetView: View {
 }
 
 /// One check-in button as drawn on a widget: glyph + word, the current
-/// one filled and ticked (never colour alone).
+/// one filled and ticked (never colour alone). On a locked device none is
+/// marked current: the buttons still work, the state stays private.
 struct StateWidgetButton: View {
     let state: NervousState
     let selected: Bool
     let compact: Bool
     let theme: NPTheme
+    @Environment(\.redactionReasons) private var redaction
 
     var body: some View {
-        let fg = selected ? theme.accentInk : theme.onSurface
+        let on = selected && !redaction.contains(.privacy)
+        let fg = on ? theme.accentInk : theme.onSurface
         let r: CGFloat = theme.isSignal ? max(3, theme.radiusControl * 0.5) : 12
         HStack(spacing: 7) {
             StateGlyph(state, color: fg, size: 10)
@@ -139,7 +177,7 @@ struct StateWidgetButton: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Spacer(minLength: 0)
-            if selected {
+            if on {
                 Image(systemName: "checkmark").font(.system(size: 11, weight: .bold))
             }
         }
@@ -147,23 +185,26 @@ struct StateWidgetButton: View {
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minHeight: 36)
-        .background(selected ? theme.accentFill : theme.surfaceContainer, in: RoundedRectangle(cornerRadius: r, style: .continuous))
+        .background(on ? theme.accentFill : theme.surfaceContainer, in: RoundedRectangle(cornerRadius: r, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: r, style: .continuous)
-            .strokeBorder(selected ? theme.shadowColor : theme.line, lineWidth: 1.5))
+            .strokeBorder(on ? theme.shadowColor : theme.line, lineWidth: 1.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(state == .red ? "\(state.spokenLabel). Opens the calming steps" : "Check in: \(state.spokenLabel)")
-        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
     }
 }
 
 private struct StateLine: View {
     let state: NervousState?
     let theme: NPTheme
+    @Environment(\.redactionReasons) private var redaction
 
     var body: some View {
+        let hidden = redaction.contains(.privacy)
         HStack(spacing: 5) {
             if let state {
-                StateGlyph(state, color: theme.homeTint(state), size: 9)
+                // A drawn shape isn't redacted like text: leave it out entirely.
+                if !hidden { StateGlyph(state, color: theme.homeTint(state), size: 9) }
                 Text(state.label)
             } else {
                 Text("How are you?")
@@ -172,14 +213,16 @@ private struct StateLine: View {
         .font(theme.font(.bodyMedium, size: 12, relativeTo: .caption))
         .foregroundStyle(theme.onSurfaceVariant)
         .lineLimit(1)
+        .privacySensitive()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(state.map { "Checked in as \($0.label)" } ?? "No check-in yet")
+        .privateLabel(hidden, "Check-in", state.map { "Checked in as \($0.label)" } ?? "No check-in yet")
     }
 }
 
 private struct AnchorLine: View {
     let model: HomeWidgetModel
     let theme: NPTheme
+    @Environment(\.redactionReasons) private var redaction
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -188,14 +231,17 @@ private struct AnchorLine: View {
                     .font(theme.isSignal ? theme.font(.label, size: 10, relativeTo: .caption2)
                           : theme.font(.bodyMedium, size: 11, relativeTo: .caption2))
                     .foregroundStyle(theme.onSurfaceVariant)
-                Text(a.title)
-                    .font(theme.font(.bodySemi, size: 13, relativeTo: .footnote))
-                    .foregroundStyle(theme.onSurface)
-                    .lineLimit(1)
-                Text("\(a.clock) · \(widgetRelative(m))")
-                    .font(theme.font(.mono, size: 11, relativeTo: .caption2))
-                    .foregroundStyle(theme.onSurfaceVariant)
-                    .lineLimit(1)
+                Group {
+                    Text(a.title)
+                        .font(theme.font(.bodySemi, size: 13, relativeTo: .footnote))
+                        .foregroundStyle(theme.onSurface)
+                        .lineLimit(1)
+                    Text("\(a.clock) · \(widgetRelative(m))")
+                        .font(theme.font(.mono, size: 11, relativeTo: .caption2))
+                        .foregroundStyle(theme.onSurfaceVariant)
+                        .lineLimit(1)
+                }
+                .privacySensitive()
             } else {
                 Text(model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day")
                     .font(theme.font(.bodyMedium, size: 12, relativeTo: .caption))
@@ -204,8 +250,9 @@ private struct AnchorLine: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.next.map { "Next anchor: \($0.title) at \($0.clock), \(widgetRelative(model.nextMinutes ?? 0, spoken: true))" }
-                            ?? (model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day"))
+        .privateLabel(redaction.contains(.privacy) && model.next != nil, "Next anchor",
+                      model.next.map { "Next anchor: \($0.title) at \($0.clock), \(widgetRelative(model.nextMinutes ?? 0, spoken: true))" }
+                          ?? (model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day"))
     }
 }
 
@@ -226,6 +273,7 @@ func widgetRelative(_ minutes: Int, spoken: Bool = false) -> String {
 public struct NextAnchorWidgetView: View {
     let model: HomeWidgetModel
     let size: WidgetFamilySize
+    @Environment(\.redactionReasons) private var redaction
 
     public init(model: HomeWidgetModel, size: WidgetFamilySize) {
         self.model = model
@@ -243,6 +291,7 @@ public struct NextAnchorWidgetView: View {
                         Image(systemName: a.kind.symbol)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(theme.accentText)
+                            .privacySensitive() // the kind says something too (meds)
                             .accessibilityHidden(true)
                     }
                 }
@@ -259,15 +308,19 @@ public struct NextAnchorWidgetView: View {
                         }
                     }
                     .padding(.top, 2)
+                    .privacySensitive()
                     Spacer(minLength: 0)
-                    Text(a.title)
-                        .font(theme.font(.bodySemi, size: 14, relativeTo: .footnote))
-                        .foregroundStyle(theme.onSurface)
-                        .lineLimit(2)
-                    Text(m >= 100 ? widgetRelative(m) : "\(a.clock) · \(windowLabel(a.flexMinutes))")
-                        .font(theme.font(.mono, size: 11, relativeTo: .caption2))
-                        .foregroundStyle(theme.onSurfaceVariant)
-                        .lineLimit(1)
+                    Group {
+                        Text(a.title)
+                            .font(theme.font(.bodySemi, size: 14, relativeTo: .footnote))
+                            .foregroundStyle(theme.onSurface)
+                            .lineLimit(2)
+                        Text(m >= 100 ? widgetRelative(m) : "\(a.clock) · \(windowLabel(a.flexMinutes))")
+                            .font(theme.font(.mono, size: 11, relativeTo: .caption2))
+                            .foregroundStyle(theme.onSurfaceVariant)
+                            .lineLimit(1)
+                    }
+                    .privacySensitive()
                 } else {
                     Spacer(minLength: 0)
                     Text(model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day")
@@ -282,7 +335,7 @@ public struct NextAnchorWidgetView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(spoken)
+            .privateLabel(redaction.contains(.privacy) && model.next != nil, "Next anchor", spoken)
             if size == .medium {
                 VStack(alignment: .leading, spacing: 8) {
                     WidgetLabel("Later", theme: theme)
@@ -297,11 +350,12 @@ public struct NextAnchorWidgetView: View {
                             Text(a.title).font(theme.font(.bodySemi, size: 13, relativeTo: .footnote)).foregroundStyle(theme.onSurface)
                                 .lineLimit(1)
                         }
+                        .privacySensitive()
                     }
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .accessibilityElement(children: .combine)
+                .modifier(PrivateGroup(hidden: redaction.contains(.privacy) && !model.later.isEmpty, what: "Later"))
             }
         }
         .environment(\.npTheme, theme)
@@ -320,6 +374,7 @@ public struct NextAnchorWidgetView: View {
 public struct ReadingWidgetView: View {
     let model: HomeWidgetModel
     let size: WidgetFamilySize
+    @Environment(\.redactionReasons) private var redaction
 
     public init(model: HomeWidgetModel, size: WidgetFamilySize) {
         self.model = model
@@ -347,16 +402,22 @@ public struct ReadingWidgetView: View {
                             .font(theme.font(.displaySemi, size: size == .small ? 15 : 17, relativeTo: .headline))
                             .foregroundStyle(theme.onSurface)
                             .lineLimit(size == .small ? 3 : 2)
+                            .privacySensitive()
                         Spacer(minLength: 0)
-                        Segments(progress: r.progress, count: size == .small ? 8 : 12, theme: theme)
-                        Text("\(pct)% read")
-                            .font(theme.font(.mono, size: 11, relativeTo: .caption2))
-                            .foregroundStyle(theme.onSurfaceVariant)
+                        Group {
+                            // Drawn squares aren't redacted like text: empty while locked.
+                            Segments(progress: redaction.contains(.privacy) ? 0 : r.progress, count: size == .small ? 8 : 12,
+                                     theme: theme)
+                            Text("\(pct)% read")
+                                .font(theme.font(.mono, size: 11, relativeTo: .caption2))
+                                .foregroundStyle(theme.onSurfaceVariant)
+                        }
+                        .privacySensitive()
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Continue reading \(r.title), \(pct) percent read")
+                .privateLabel(redaction.contains(.privacy), "Continue reading", "Continue reading \(r.title), \(pct) percent read")
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     WidgetLabel("Continue reading", theme: theme)
@@ -416,42 +477,54 @@ private struct WidgetLabel: View {
 
 // MARK: - Lock Screen
 
-/// Lock Screen, circular: the check-in as a gauge, with its glyph.
+/// Lock Screen, circular: the check-in as a gauge, with its glyph —
+/// private, so a locked device redacts it.
 public struct StateAccessoryView: View {
     let model: HomeWidgetModel
+    @Environment(\.redactionReasons) private var redaction
     public init(model: HomeWidgetModel) { self.model = model }
 
     public var body: some View {
+        let hidden = redaction.contains(.privacy)
         // The arc shows the slider level; the centre the state's shape (the
-        // slot is too small for the words — VoiceOver says them).
-        Gauge(value: model.level ?? 0) {
+        // slot is too small for the words — VoiceOver says them). The arc and
+        // the shape are drawn, not text, so redaction can't hide them: while
+        // locked the gauge is empty, with a lock.
+        Gauge(value: hidden ? 0 : model.level ?? 0) {
             EmptyView()
         } currentValueLabel: {
-            if let s = model.state {
+            if hidden {
+                Image(systemName: "lock.fill")
+            } else if let s = model.state {
                 StateGlyphShape(s.shape).fill(.primary).frame(width: 18, height: 18)
             } else {
                 Image(systemName: "questionmark")
             }
         }
         .gaugeStyle(.accessoryCircular)
+        .privacySensitive(!hidden) // private; while hidden, the lock above is all there is
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.state.map { "Checked in as \($0.label)" } ?? "No check-in yet")
+        .privateLabel(hidden, "Check-in", model.state.map { "Checked in as \($0.label)" } ?? "No check-in yet")
     }
 }
 
-/// Lock Screen, rectangular: the next anchor.
+/// Lock Screen, rectangular: the next anchor — its title and time private.
 public struct AnchorAccessoryView: View {
     let model: HomeWidgetModel
+    @Environment(\.redactionReasons) private var redaction
     public init(model: HomeWidgetModel) { self.model = model }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             if let a = model.next, let m = model.nextMinutes {
-                Label("Next anchor", systemImage: a.kind.symbol)
+                Label("Next anchor", systemImage: redaction.contains(.privacy) ? "clock" : a.kind.symbol)
                     .font(.system(size: 12, weight: .semibold))
                     .widgetAccentable()
-                Text(a.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                Text("\(a.clock) · \(widgetRelative(m))").font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                Group {
+                    Text(a.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                    Text("\(a.clock) · \(widgetRelative(m))").font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                .privacySensitive()
             } else {
                 Label("Anchors", systemImage: "checkmark.circle")
                     .font(.system(size: 12, weight: .semibold))
@@ -461,7 +534,8 @@ public struct AnchorAccessoryView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.next.map { "Next anchor: \($0.title) at \($0.clock)" }
-                            ?? (model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day"))
+        .privateLabel(redaction.contains(.privacy) && model.next != nil, "Next anchor",
+                      model.next.map { "Next anchor: \($0.title) at \($0.clock)" }
+                          ?? (model.synced ? "No more anchors today" : "Open NeuroPal once to sync your day"))
     }
 }
