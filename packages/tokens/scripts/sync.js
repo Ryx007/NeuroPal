@@ -12,6 +12,8 @@
 //   neuropal-flutter/test/fixtures/token_cases.json   …these JS-computed cases
 //   neuropal-flutter/ios/NeuroPalWidget/NeuroPalTokens.swift   widget fallbacks
 //   neuropal-platform/src/styles/tokens.css      CSS variables (no-flash defaults)
+//   neuropal-ios/Packages/NeuroPalCore/…/tokens-data.json + Tests/…/cases.json
+//                                               constant tables + fixtures for the Swift port
 //   packages/tokens/fixtures/cases.json          the canonical fixtures
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -291,6 +293,50 @@ ${["surface", "surfaceContainer", "onSurface", "onSurfaceVariant", "outline", "a
 }
 `;
 out("neuropal-flutter/ios/NeuroPalWidget/NeuroPalTokens.swift", swiftSrc, { optionalRoot: "neuropal-flutter" });
+
+// ---- native iOS app (neuropal-ios) ------------------------------------------
+// The Swift port (Packages/NeuroPalCore/Sources/NPTokens) decodes these
+// constant tables at launch and is proven against the same fixtures.
+const tokensData = {
+  generatedFrom: "packages/tokens/src/tokens.js",
+  tokensVersion: T.TOKENS_VERSION,
+  appearanceVersion: T.APPEARANCE_VERSION,
+  classicThemes: T.CLASSIC_THEMES,
+  classicAccentVariants: T.CLASSIC_ACCENT_VARIANTS,
+  classicThemeNames: T.CLASSIC_THEME_NAMES,
+  classicAccentNames: T.CLASSIC_ACCENT_NAMES,
+  classicShape: T.CLASSIC_SHAPE,
+  classicHomeDefault: T.CLASSIC_HOME_DEFAULT,
+  signalBases: T.SIGNAL_BASES,
+  signalAccents: T.SIGNAL_ACCENTS,
+  signalExtraAccentNames: T.SIGNAL_EXTRA_ACCENT_NAMES,
+  signalOptions: T.SIGNAL_OPTIONS,
+  signalCorners: T.SIGNAL_CORNERS,
+  signalBrutality: T.SIGNAL_BRUTALITY,
+  signalMotionSpeed: T.SIGNAL_MOTION_SPEED,
+  redStateField: T.RED_STATE_FIELD,
+  signalDefault: T.SIGNAL_DEFAULT,
+  signalPresets: T.SIGNAL_PRESETS,
+  looks: T.LOOKS,
+  typeRoles: T.TYPE_ROLES,
+  palOptions: T.PAL_OPTIONS,
+  palDefault: T.PAL_DEFAULT,
+  palLines: T.PAL_LINES,
+  homeTiles: T.HOME_TILES,
+  homeDefault: T.HOME_DEFAULT,
+  homeSizes: T.HOME_SIZES,
+  homeRuleScopes: T.HOME_RULE_SCOPES,
+  homeRuleActs: T.HOME_RULE_ACTS,
+};
+for (const [k, v] of Object.entries(tokensData)) {
+  if (v === undefined) throw new Error(`tokens-data: ${k} is missing from packages/tokens`);
+}
+out(
+  "neuropal-ios/Packages/NeuroPalCore/Sources/NPTokens/Resources/tokens-data.json",
+  `${JSON.stringify(tokensData, null, 2)}\n`,
+  { optionalRoot: "neuropal-ios" },
+);
+out("neuropal-ios/Packages/NeuroPalCore/Tests/NPTokensTests/Fixtures/cases.json", fixturesJson, { optionalRoot: "neuropal-ios" });
 
 // ---- CSS variables (web platform) -------------------------------------------
 const CSS_KEYS = [

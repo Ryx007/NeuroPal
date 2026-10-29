@@ -1,0 +1,146 @@
+# NeuroPal for iPhone and iPad — native SwiftUI.
+#
+# The Xcode project is GENERATED from this file (never commit the
+# .xcodeproj):   brew install xcodegen && xcodegen generate
+#
+# Code lives in two local Swift packages:
+#   Packages/NeuroPalCore  platform-neutral logic — NPTokens (the palette,
+#                          ported from packages/tokens), NPCore (models, API,
+#                          session), NPDay (check-ins, anchors, Pal's offline
+#                          logic; shared with the widgets) — `swift test` on a Mac
+#   Packages/NeuroPalUI    the SwiftUI features, iOS/iPadOS only
+# The app target only composes them; the widget extension reads the shared
+# App Group store (NPDay).
+name: NeuroPal
+options:
+  bundleIdPrefix: io.neuropal
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+packages:
+  NeuroPalCore:
+    path: Packages/NeuroPalCore
+  NeuroPalUI:
+    path: Packages/NeuroPalUI
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  NeuroPal:
+    type: application
+    platform: iOS
+    sources:
+      - path: NeuroPal
+      # The shared TTFs (also bundled by the Expo app), copied as one
+      # folder (with their LICENSES); UIAppFonts below registers them.
+      - path: ../packages/tokens/fonts
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.neuropal.ios
+        PRODUCT_NAME: NeuroPal
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_ENTITLEMENTS: NeuroPal/NeuroPal.entitlements
+    info:
+      path: NeuroPal/Info.plist
+      properties:
+        CFBundleDisplayName: NeuroPal
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes: [audio]
+        UIAppFonts:
+          - fonts/Archivo-Black.ttf
+          - fonts/Archivo-Bold.ttf
+          - fonts/Archivo-Condensed-ExtraBold.ttf
+          - fonts/Archivo-SemiExpanded-Black.ttf
+          - fonts/AtkinsonHyperlegible-400.ttf
+          - fonts/AtkinsonHyperlegible-700.ttf
+          - fonts/AtkinsonHyperlegibleMono-400.ttf
+          - fonts/AtkinsonHyperlegibleMono-700.ttf
+          - fonts/AtkinsonHyperlegibleNext-400.ttf
+          - fonts/AtkinsonHyperlegibleNext-500.ttf
+          - fonts/AtkinsonHyperlegibleNext-600.ttf
+          - fonts/AtkinsonHyperlegibleNext-700.ttf
+          - fonts/Fraunces-400.ttf
+          - fonts/Inter-400.ttf
+          - fonts/Inter-500.ttf
+          - fonts/Inter-600.ttf
+          - fonts/Inter-700.ttf
+          - fonts/JetBrainsMono-400.ttf
+          - fonts/Lora-400.ttf
+          - fonts/SpaceGrotesk-600.ttf
+          - fonts/SpaceGrotesk-700.ttf
+        CFBundleURLTypes:
+          - CFBundleURLName: io.neuropal.ios
+            CFBundleURLSchemes: [neuropal]
+        NSAppTransportSecurity:
+          # The cloud server is https. A home server (LAN IP, Tailscale) is
+          # plain http: allowed for local networking only.
+          NSAllowsLocalNetworking: true
+        NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
+    dependencies:
+      - package: NeuroPalCore
+        products: [NPCore, NPTokens, NPDay]
+      - package: NeuroPalUI
+        products: [NPTheme, NPAccount, NPReader, NPHome, NPPal, NPSettings]
+      - target: NeuroPalWidgets
+        embed: true
+        codeSign: false
+  NeuroPalWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NeuroPalWidgets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.neuropal.ios.widgets
+        PRODUCT_NAME: NeuroPalWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: NeuroPalWidgets/NeuroPalWidgets.entitlements
+        SKIP_INSTALL: YES
+    info:
+      path: NeuroPalWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: NeuroPal
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    dependencies:
+      - package: NeuroPalCore
+        products: [NPTokens, NPCore, NPDay]
+schemes:
+  NeuroPal:
+    build:
+      targets:
+        NeuroPal: all
+        NeuroPalWidgets: all
+    run:
+      config: Debug
+    archive:
+      config: Release
