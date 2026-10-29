@@ -20,6 +20,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import * as T from "../src/index.js";
+import { buildExtraCases } from "./extra-cases.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
@@ -337,6 +338,12 @@ out(
   { optionalRoot: "neuropal-ios" },
 );
 out("neuropal-ios/Packages/NeuroPalCore/Tests/NPTokensTests/Fixtures/cases.json", fixturesJson, { optionalRoot: "neuropal-ios" });
+// ~2 000 wider cases (garbage input, JS number/string quirks, Ask Pal phrases).
+out(
+  "neuropal-ios/Packages/NeuroPalCore/Tests/NPTokensTests/Fixtures/extra-cases.json",
+  `${JSON.stringify(buildExtraCases(T))}\n`,
+  { optionalRoot: "neuropal-ios" },
+);
 
 // ---- CSS variables (web platform) -------------------------------------------
 const CSS_KEYS = [

@@ -46,11 +46,30 @@ public protocol NeuroPalAPI: AnyObject, Sendable {
     /// Base URL for the files of an EPUB (chapter XHTML, css, images); the
     /// ticket sits in the path so every relative href inherits it.
     func epubBaseURL(documentID: String, ticket: String?) -> URL
+    /// The original PDF of a pdf/arxiv document (GET /api/documents/:id/file),
+    /// downloaded with the session to a temporary file the caller owns —
+    /// for PDFKit. 400 for other types.
+    func downloadOriginalFile(documentID: String) async throws -> URL
+    /// The original PDF's address, for loads that can't send the session
+    /// header (`ticket` from `ticket(documentID:)`).
+    func originalFileURL(documentID: String, ticket: String?) -> URL
 
     // MARK: Pal (HTTP/HTTPNeuroPalAPI+Pal.swift)
     func palBreakdown(task: String) async throws -> PalBreakdown
     func palChat(message: String, context: PalChatContext?) async throws -> PalChatReply
     func clearPalChat() async throws
+}
+
+public extension NeuroPalAPI {
+    /// Default (the fixtures have no PDF files): not found.
+    func downloadOriginalFile(documentID: String) async throws -> URL { throw APIError.notFound }
+
+    func originalFileURL(documentID: String, ticket: String?) -> URL {
+        var c = URLComponents(url: host, resolvingAgainstBaseURL: false)!
+        c.path = "/api/documents/\(documentID)/file"
+        if let ticket { c.queryItems = [URLQueryItem(name: "t", value: ticket)] }
+        return c.url ?? host
+    }
 }
 
 public enum APIError: Error, Equatable, Sendable, LocalizedError {
