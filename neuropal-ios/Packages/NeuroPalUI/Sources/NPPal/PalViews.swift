@@ -35,23 +35,35 @@ public struct PalAssistantView: View {
                 case .talk:
                     TalkPanel(onCalm: openCalm)
                 default:
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            switch tool {
-                            case .whatNow: WhatNowPanel(show: { tool = $0 }, openCalm: openCalm, openReader: openReader)
-                            case .breakdown: BreakdownPanel(model: breakdown, onSit: { tool = .sit })
-                            case .dump: DumpPanel()
-                            case .sit: SitPanel()
-                            case .talk: EmptyView()
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                switch tool {
+                                case .whatNow: WhatNowPanel(show: { tool = $0 }, openCalm: openCalm, openReader: openReader)
+                                case .breakdown: BreakdownPanel(model: breakdown, onSit: { tool = .sit }, onCalm: openCalm)
+                                case .dump: DumpPanel()
+                                case .sit: SitPanel()
+                                case .talk: EmptyView()
+                                }
+                            }
+                            .padding(.horizontal, 18)
+                            .padding(.top, 14)
+                            .padding(.bottom, 28)
+                            .frame(maxWidth: 680, alignment: .leading)
+                            .frame(maxWidth: .infinity)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .onChange(of: breakdown.outcome) { _, outcome in
+                            guard case .crisis? = outcome else { return }
+                            // Pal's careful answer and the calming steps in view, without scrolling.
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(80))
+                                withAnimation(theme.animates ? .easeOut(duration: 0.25) : nil) {
+                                    proxy.scrollTo(BreakdownPanel.crisisID, anchor: .top)
+                                }
                             }
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 14)
-                        .padding(.bottom, 28)
-                        .frame(maxWidth: 680, alignment: .leading)
-                        .frame(maxWidth: .infinity)
                     }
-                    .scrollDismissesKeyboard(.interactively)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -154,7 +166,7 @@ public struct PalAssistantView: View {
 
     /// Mock screenshots only: -NPPalTask "…" fills Break it down and runs it.
     private func launchTask() -> String? {
-        guard !day.isPersistent, let t = UserDefaults.standard.string(forKey: "NPPalTask"), !t.isEmpty else { return nil }
+        guard !day.isPersistent, let t = DebugLaunch.string("NPPalTask"), !t.isEmpty else { return nil }
         return t
     }
 }

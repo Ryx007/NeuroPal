@@ -143,19 +143,16 @@ struct WhatNowPanel: View {
 // MARK: - Break it down
 
 /// Kept by the assistant view, so switching tools doesn't lose the steps.
+/// Safety first, and offline: a task that sounds like a crisis is never
+/// sent and never becomes steps — Pal answers with the careful reply, the
+/// calming steps and the help lines, server or no server.
 @MainActor
 @Observable
 final class BreakdownModel {
-    struct Outcome {
-        var steps: [String]
-        /// Why these are Pal's offline steps (nil = the server's).
-        var note: String?
-    }
-
     var task = ""
     var loading = false
     var slow = false
-    var outcome: Outcome?
+    var outcome: PalLogic.BreakdownOutcome?
     var checked: Set<Int> = []
     var added: Set<Int> = []
     @ObservationIgnored private var request = 0
@@ -163,10 +160,21 @@ final class BreakdownModel {
     static let slowLine = "Still thinking. Quick steps are ready if you’d rather not wait."
 
     func run(api: any NeuroPalAPI) async {
-        let t = String(task.trimmingCharacters(in: .whitespacesAndNewlines).prefix(PalLogic.taskMaxChars))
-        guard !t.isEmpty, !loading else { return }
+        guard !loading else { return }
+        switch PalLogic.outgoing(task, max: PalLogic.taskMaxChars) {
+        case .nothing:
+            return
+        case .crisis:
+            // Answered here, at once: nothing is sent, no "making the steps".
+            request += 1
+            show(.crisis(reply: PalLogic.crisisReply))
+            return
+        case .send:
+            break
+        }
         request += 1
         let token = request
+        let draft = task
         loading = true
         slow = false
         outcome = nil
@@ -179,47 +187,31 @@ final class BreakdownModel {
             self.slow = true
             announce(Self.slowLine)
         }
-        var result: Outcome
-        do {
-            let b = try await api.palBreakdown(task: t)
-            if let steps = PalLogic.cleanSteps(b.steps) {
-                result = Outcome(steps: steps, note: nil)
-            } else {
-                result = Outcome(steps: PalLogic.offlineSteps(for: t),
-                                 note: "The server’s steps didn’t come out right, so these are Pal’s offline steps.")
-            }
-        } catch {
-            result = Outcome(steps: PalLogic.offlineSteps(for: t), note: Self.why(error))
-        }
+        // The crisis check runs again inside, and the server's own crisis
+        // answer (`crisis: true`) comes back as `.crisis` too.
+        let result = await PalLogic.breakdown(task: draft) { try await api.palBreakdown(task: $0) }
         timer.cancel()
         guard request == token else { return } // "Use quick steps now" won meanwhile
-        outcome = result
         loading = false
         slow = false
-        announce("\(result.steps.count) small steps")
+        if let result { show(result) } else { outcome = nil }
     }
 
-    /// Don't wait for the server.
+    /// Don't wait for the server (still checked for a crisis first).
     func quick() {
         request += 1
-        let steps = PalLogic.offlineSteps(for: task)
-        outcome = Outcome(steps: steps, note: "Quick steps, made on this device.")
         loading = false
         slow = false
-        checked = []
-        added = []
-        announce("\(steps.count) small steps")
+        show(PalLogic.quickBreakdown(task: task))
     }
 
-    /// The offline note, said plainly (SOURCE_NOTE in PalSheet.jsx).
-    static func why(_ error: Error) -> String {
-        switch error as? APIError {
-        case .offline?: return "No server right now, so these are Pal’s offline steps."
-        case .rateLimited?: return "Pal has done a lot of thinking for now, so these are offline steps."
-        case .unauthorized?: return "You’re signed out, so these are Pal’s offline steps."
-        default:
-            if (error as? URLError) != nil { return "No server right now, so these are Pal’s offline steps." }
-            return "The server didn’t answer well, so these are Pal’s offline steps."
+    private func show(_ result: PalLogic.BreakdownOutcome) {
+        outcome = result
+        checked = []
+        added = []
+        switch result {
+        case .crisis(let reply): announce(reply)
+        case .steps(let steps, _): announce("\(steps.count) small steps")
         }
     }
 }
@@ -232,8 +224,12 @@ struct BreakdownPanel: View {
     @Environment(AppSession.self) private var session
     @Bindable var model: BreakdownModel
     let onSit: () -> Void
+    let onCalm: () -> Void
     @FocusState private var fieldFocused: Bool
     @State private var autoRan = false
+
+    /// The careful answer's place in the panel (the sheet scrolls to it).
+    static let crisisID = "breakdown-crisis"
 
     private var pal: Appearance.Pal { theme.appearance.pal }
 
@@ -246,7 +242,8 @@ struct BreakdownPanel: View {
                 .submitLabel(.go)
                 .onSubmit(run)
                 .onChange(of: model.task) { _, t in
-                    if t.count > PalLogic.taskMaxChars { model.task = String(t.prefix(PalLogic.taskMaxChars)) }
+                    // The server counts UTF-16 units (an emoji is two).
+                    if t.utf16.count > PalLogic.taskMaxChars { model.task = PalLogic.capUTF16(t, PalLogic.taskMaxChars) }
                 }
                 .palField()
                 .accessibilityLabel("The task to break down")
@@ -256,7 +253,7 @@ struct BreakdownPanel: View {
                     Label("Break it down", systemImage: "arrow.triangle.branch")
                 }
                 .buttonStyle(.npPrimary)
-                .disabled(model.task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.loading)
+                .disabled(PalLogic.collapseWhitespace(model.task).isEmpty || model.loading)
                 if model.loading && model.slow {
                     Button("Use quick steps now") { model.quick() }.buttonStyle(.npSecondary)
                 }
@@ -272,7 +269,11 @@ struct BreakdownPanel: View {
                 .padding(.top, 12)
                 .accessibilityElement(children: .combine)
             }
-            if let out = model.outcome { steps(out).padding(.top, 14) }
+            switch model.outcome {
+            case .crisis(let reply)?: crisisCard(reply).padding(.top, 14).id(Self.crisisID)
+            case .steps(let list, let note)?: steps(list, note: note).padding(.top, 14)
+            case nil: EmptyView()
+            }
         }
         .onAppear {
             // Mock screenshots: a task given at launch runs once.
@@ -289,9 +290,28 @@ struct BreakdownPanel: View {
         Task { await model.run(api: api) }
     }
 
-    private func steps(_ out: BreakdownModel.Outcome) -> some View {
+    /// A task that sounds like a crisis: no steps — Pal's careful answer,
+    /// the calming steps one tap away, and people to call (all offline).
+    private func crisisCard(_ reply: String) -> some View {
         PalCard {
-            Text("\(out.steps.count) small \(out.steps.count == 1 ? "step" : "steps")")
+            Text(reply)
+                .font(theme.font(.body, size: 15, relativeTo: .body))
+                .foregroundStyle(theme.onSurface)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("\(pal.name): \(reply)")
+            Button(action: onCalm) {
+                Label("Open the calming steps", systemImage: "leaf")
+            }
+            .buttonStyle(.npPrimary)
+            .padding(.top, 14)
+            HelpLinesList().padding(.top, 12)
+        }
+    }
+
+    private func steps(_ steps: [String], note: String?) -> some View {
+        PalCard {
+            Text("\(steps.count) small \(steps.count == 1 ? "step" : "steps")")
                 .font(theme.font(.bodyBold, size: 15, relativeTo: .headline))
                 .foregroundStyle(theme.onSurface)
                 .accessibilityAddTraits(.isHeader)
@@ -300,7 +320,7 @@ struct BreakdownPanel: View {
                 .foregroundStyle(theme.onSurfaceVariant)
                 .padding(.top, 2)
             VStack(spacing: 0) {
-                ForEach(Array(out.steps.enumerated()), id: \.offset) { i, step in
+                ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
                     let done = model.checked.contains(i)
                     let added = model.added.contains(i)
                     HStack(spacing: 10) {
@@ -347,7 +367,7 @@ struct BreakdownPanel: View {
                 }
             }
             .padding(.top, 6)
-            if let note = out.note {
+            if let note {
                 Text(note)
                     .font(theme.font(.body, size: 12.5, relativeTo: .footnote))
                     .foregroundStyle(theme.onSurfaceVariant)
@@ -359,7 +379,7 @@ struct BreakdownPanel: View {
                     .foregroundStyle(theme.onSurfaceVariant)
                     .padding(.top, 6)
             }
-            if let first = out.steps.first {
+            if let first = steps.first {
                 Button {
                     day.startSit(minutes: 10, label: first)
                     announce(Tokens.palSay(pal, "sitStart"))
@@ -567,8 +587,13 @@ private struct SitRunning: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let left = sit.leftLabel(at: ctx.date)
+            let remindersOff = day.sitReminder == .off
             VStack(spacing: 0) {
-                PalAvatar(pal: pal, palette: theme.palette, mood: PalMood(day.day.state), size: 128, motion: theme.motionLevel)
+                // First, where it's seen: Pal steps back a little to make room,
+                // so the timer and the buttons stay in view.
+                if remindersOff { RemindersOffNote().padding(.bottom, 10) }
+                PalAvatar(pal: pal, palette: theme.palette, mood: PalMood(day.day.state), size: remindersOff ? 72 : 128,
+                          motion: theme.motionLevel)
                 Text(left)
                     .font(theme.font(.display, size: theme.isSignal ? 38 : 34, relativeTo: .largeTitle))
                     .tracking(theme.isSignal ? -0.4 : -0.6)
@@ -622,6 +647,50 @@ private struct SitRunning: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .onAppear { day.refreshSitReminder() }
+        .onChange(of: day.sitReminder) { _, state in
+            if state == .off { announce(RemindersOffNote.line) }
+        }
+    }
+}
+
+/// Said plainly while a block runs with notifications off: the app can't
+/// call time once it's closed (its own clock still does while it's open).
+private struct RemindersOffNote: View {
+    @Environment(\.npTheme) private var theme
+    @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    static let line = "Notifications are off, so I can’t call time while NeuroPal is closed."
+
+    var body: some View {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 10))
+        layout {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "bell.slash")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(theme.onSurfaceVariant)
+                    .accessibilityHidden(true)
+                Text(Self.line)
+                    .font(theme.font(.body, size: 13.5, relativeTo: .footnote))
+                    .foregroundStyle(theme.onSurface)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                Button("Settings") { openURL(url) }
+                    .buttonStyle(TextActionStyle())
+                    .accessibilityLabel("Notification settings")
+                    .accessibilityHint("Opens NeuroPal’s notification settings")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: theme.isSignal ? theme.radiusMedium : 14,
+                                                            style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: theme.isSignal ? theme.radiusMedium : 14, style: .continuous)
+            .strokeBorder(theme.isSignal ? theme.line : theme.outlineVariant.opacity(0.5), lineWidth: theme.isSignal ? 1.5 : 1))
     }
 }
 

@@ -61,7 +61,8 @@ extension HTTPNeuroPalAPI {
             throw APIError.staleAppearance(stored ?? .null)
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw mapError(status: http.statusCode, data: data, headers: http, sentAuthorization: sentAuthorization)
+            throw mapError(status: http.statusCode, data: data, headers: http, sentAuthorization: sentAuthorization,
+                           url: r.url)
         }
         guard let stored = try decode(AppearanceEnvelope.self, data).appearance else {
             throw APIError.decoding("AppearanceEnvelope")

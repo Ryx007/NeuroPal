@@ -19,6 +19,26 @@ struct EpubTokens: Equatable {
         var index: Int
     }
 
+    /// A "tokens" message from the runtime (nil when it doesn't add up).
+    init?(message body: [String: Any]) {
+        let anchors = (body["pageAnchors"] as? [[String: Any]] ?? []).compactMap { a -> PageAnchor? in
+            guard let page = a["page"] as? String, let index = (a["index"] as? NSNumber)?.intValue else { return nil }
+            return PageAnchor(page: page, index: index)
+        }
+        let words = body["words"] as? [String] ?? []
+        let kinds = body["kinds"] as? [String] ?? []
+        let pids = (body["pids"] as? [NSNumber] ?? []).map(\.intValue)
+        guard words.count == kinds.count, words.count == pids.count else { return nil }
+        self.init(words: words, kinds: kinds, pids: pids, pageAnchors: anchors)
+    }
+
+    init(words: [String], kinds: [String], pids: [Int], pageAnchors: [PageAnchor]) {
+        self.words = words
+        self.kinds = kinds
+        self.pids = pids
+        self.pageAnchors = pageAnchors
+    }
+
     var isEmpty: Bool { words.isEmpty }
 
     func clamp(_ i: Int) -> Int { min(max(0, i), max(0, words.count - 1)) }
@@ -114,26 +134,23 @@ enum EpubMessage {
 }
 
 /// Commands into the page and messages out of it (script message handler,
-/// isolated content world), plus the navigation policy: only the book's
-/// own files may ever be the page.
+/// isolated content world), plus the navigation policy: the page may only
+/// ever be the chapter the app loaded.
 @MainActor
 final class EpubBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     weak var webView: WKWebView?
     var onMessage: (@MainActor (EpubMessage) -> Void)?
+    /// The chapter the app loaded last: the only page allowed.
+    var loadedURL: URL?
+    /// That load's number: a message from an older page is ignored.
+    var load: Int?
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String,
+              Self.isCurrent(body, load: load) else { return }
         switch type {
         case "tokens":
-            let anchors = (body["pageAnchors"] as? [[String: Any]] ?? []).compactMap { a -> EpubTokens.PageAnchor? in
-                guard let page = a["page"] as? String, let index = (a["index"] as? NSNumber)?.intValue else { return nil }
-                return EpubTokens.PageAnchor(page: page, index: index)
-            }
-            let words = body["words"] as? [String] ?? []
-            let kinds = body["kinds"] as? [String] ?? []
-            let pids = (body["pids"] as? [NSNumber] ?? []).map(\.intValue)
-            guard words.count == kinds.count, words.count == pids.count else { return }
-            onMessage?(.tokens(EpubTokens(words: words, kinds: kinds, pids: pids, pageAnchors: anchors)))
+            if let tokens = EpubTokens(message: body) { onMessage?(.tokens(tokens)) }
         case "tap":
             if let i = (body["index"] as? NSNumber)?.intValue { onMessage?(.tap(i)) }
         case "anchor":
@@ -151,8 +168,32 @@ final class EpubBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
-        let ours = navigationAction.request.url?.scheme == EpubRuntime.scheme
-        decisionHandler(ours && navigationAction.navigationType != .linkActivated ? .allow : .cancel)
+        decisionHandler(Self.allows(navigationAction, loaded: loadedURL) ? .allow : .cancel)
+    }
+
+    /// The main frame, going to the very chapter the app loaded (a place in
+    /// it at most): never another file of the book (a refresh, a form, a
+    /// link that got past the runtime), never a frame, never anywhere else.
+    static func allows(_ action: WKNavigationAction, loaded: URL?) -> Bool {
+        guard action.targetFrame?.isMainFrame == true, action.navigationType != .linkActivated else { return false }
+        return allows(action.request.url, loaded: loaded)
+    }
+
+    static func allows(_ url: URL?, loaded: URL?) -> Bool {
+        guard let url, let loaded, url.scheme == EpubRuntime.scheme else { return false }
+        return withoutFragment(url) == withoutFragment(loaded)
+    }
+
+    static func withoutFragment(_ url: URL) -> String {
+        guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url.absoluteString }
+        c.fragment = nil
+        return c.string ?? url.absoluteString
+    }
+
+    /// The message came from the page of load `load` (any page when nil).
+    static func isCurrent(_ body: [String: Any], load: Int?) -> Bool {
+        guard let load else { return true }
+        return (body["load"] as? NSNumber)?.intValue == load
     }
 
     private func run(_ js: String) {
@@ -192,6 +233,12 @@ final class EpubSchemeHandler: NSObject, WKURLSchemeHandler {
     var themeCSS = ""
     /// PostScript name of the reading font.
     var fontName: String?
+    /// A fresh ticket's folder, when the server stops taking the current
+    /// one (it expired): nil when there's none to be had.
+    var renewBase: (@MainActor () async -> URL?)?
+    /// A chapter document (a page's main document) couldn't be loaded.
+    var onMainDocumentFailed: (@MainActor (WKWebView?, Error) -> Void)?
+    private var renewing: Task<URL?, Never>?
     private var running = Set<ObjectIdentifier>()
     private let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -209,7 +256,7 @@ final class EpubSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         let isMain = urlSchemeTask.request.mainDocumentURL == url
         running.insert(id)
-        Task {
+        Task { [weak webView] in
             do {
                 let (data, mime) = try await self.load(EpubRuntime.path(of: url), isMain: isMain)
                 guard self.running.contains(id) else { return }
@@ -224,6 +271,7 @@ final class EpubSchemeHandler: NSObject, WKURLSchemeHandler {
             } catch {
                 guard self.running.contains(id) else { return }
                 urlSchemeTask.didFailWithError(error)
+                if isMain, !(error is CancellationError) { self.onMainDocumentFailed?(webView, error) }
             }
             self.running.remove(id)
         }
@@ -235,25 +283,55 @@ final class EpubSchemeHandler: NSObject, WKURLSchemeHandler {
 
     private func load(_ path: String, isMain: Bool) async throws -> (Data, String) {
         if path.hasPrefix("__np__/font/") { return try readerFont() }
-        guard let base, let target = URL(string: path, relativeTo: base)?.absoluteURL.standardized,
-              target.absoluteString.hasPrefix(base.standardized.absoluteString) else {
-            throw URLError(.noPermissionsToReadFile)
-        }
+        guard let base, let target = Self.file(path, in: base) else { throw URLError(.noPermissionsToReadFile) }
         let data: Data
         if target.isFileURL {
             data = try await Task.detached { try Data(contentsOf: target) }.value
         } else {
-            let (body, response) = try await session.data(from: target)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                throw URLError(.badServerResponse)
+            var (body, status) = try await fetch(target)
+            if status == 401 || status == 403, let fresh = await freshBase(replacing: base),
+               let again = Self.file(path, in: fresh) {
+                (body, status) = try await fetch(again)
             }
+            guard (200..<300).contains(status) else { throw URLError(.badServerResponse) }
             data = body
         }
         if isMain {
-            let html = EpubRuntime.chapterHTML(String(decoding: data, as: UTF8.self), themeCSS: themeCSS)
+            // Big chapters take a while to clean: never on the main thread.
+            let css = themeCSS
+            let html = await Task.detached(priority: .userInitiated) {
+                EpubRuntime.chapterHTML(String(decoding: data, as: UTF8.self), themeCSS: css)
+            }.value
             return (Data(html.utf8), "text/html; charset=utf-8")
         }
         return (data, Self.mimeType(path))
+    }
+
+    /// The file at `path` inside the book's folder; nil for anything outside it.
+    static func file(_ path: String, in base: URL) -> URL? {
+        guard let target = URL(string: path, relativeTo: base)?.absoluteURL.standardized,
+              target.absoluteString.hasPrefix(base.standardized.absoluteString) else { return nil }
+        return target
+    }
+
+    private func fetch(_ url: URL) async throws -> (Data, Int) {
+        let (body, response) = try await session.data(from: url)
+        return (body, (response as? HTTPURLResponse)?.statusCode ?? 200)
+    }
+
+    /// The folder of a fresh ticket, asked for once however many files
+    /// were refused at the same time (and not at all when another refusal
+    /// already renewed it).
+    private func freshBase(replacing used: URL) async -> URL? {
+        if let base, base != used { return base }
+        if let renewing { return await renewing.value }
+        guard let renewBase else { return nil }
+        let task = Task { @MainActor in await renewBase() }
+        renewing = task
+        let fresh = await task.value
+        renewing = nil
+        if let fresh { base = fresh }
+        return fresh
     }
 
     private func readerFont() throws -> (Data, String) {
@@ -311,6 +389,8 @@ struct EpubWebView: UIViewRepresentable {
         web.allowsLinkPreview = false
         web.allowsBackForwardNavigationGestures = false
         model.bridge.webView = web
+        model.readAhead.host(in: web)
+        context.coordinator.readAhead = model.readAhead
         return web
     }
 
@@ -323,17 +403,22 @@ struct EpubWebView: UIViewRepresentable {
         context.coordinator.loadedID = model.loadID
         let controller = web.configuration.userContentController
         controller.removeAllUserScripts()
-        controller.addUserScript(WKUserScript(source: EpubRuntime.script(pageAnchorsJSON: model.pageAnchorsJSON),
+        controller.addUserScript(WKUserScript(source: EpubRuntime.script(pageAnchorsJSON: model.pageAnchorsJSON,
+                                                                         load: model.loadID),
                                               injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+        model.bridge.loadedURL = url
+        model.bridge.load = model.loadID
         web.load(URLRequest(url: url))
     }
 
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.stopLoading()
         web.configuration.userContentController.removeAllScriptMessageHandlers()
+        coordinator.readAhead?.close()
     }
 
     final class Coordinator {
         var loadedID = -1
+        weak var readAhead: EpubReadAhead?
     }
 }

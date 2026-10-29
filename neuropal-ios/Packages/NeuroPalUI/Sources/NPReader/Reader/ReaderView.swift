@@ -82,7 +82,10 @@ struct ReaderScreen: View {
                 ReaderInbox.shared.citations[documentID] = nil
                 model.show(citation)
             }
-            .onDisappear { Task { await model.saveNow(leaving: true) } }
+            .onDisappear {
+                model.stopWaiting()
+                Task { await model.saveNow(leaving: true) }
+            }
     }
 
     // MARK: Content
@@ -100,7 +103,11 @@ struct ReaderScreen: View {
             ProcessingView(document: model.document)
         case .failed(let reason):
             ReaderStateView(symbol: "exclamationmark.triangle", title: "This file couldn't be read",
-                            message: "\(reason) Uploading it again, or as an EPUB or text file, often helps.")
+                            message: "\(reason) Reading it again can help; so can uploading it as an EPUB or text file.") {
+                Button("Try again") { model.readAgain() }
+                    .buttonStyle(.npPrimary)
+                    .accessibilityHint("Reads this file again")
+            }
         case .unavailable(let reason):
             ReaderStateView(symbol: "wifi.exclamationmark", title: "Can't open this right now", message: reason) {
                 Button("Try again") { Task { await model.retry() } }
@@ -234,7 +241,7 @@ struct ReaderScreen: View {
                     .presentationBackground(theme.surfaceContainer)
             }
         case .options:
-            ReadingOptionsSheet()
+            ReadingOptionsSheet(language: model.language)
                 .environment(prefs)
                 .npTheme(theme)
                 .presentationDetents([.medium, .large])

@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import NPCore
 import Observation
 
@@ -37,6 +38,8 @@ final class ReaderModel {
     private(set) var phase: Phase = .loading
     private(set) var document: NPDocument?
     private(set) var text: ReadingText?
+    /// The text's language ("en"), when it's clear: its voices come first in the voice list.
+    private(set) var language: String?
     /// The reading position: the voice's word, or where reading starts next.
     private(set) var cursor = 0
     /// The position marker shows once there is a position worth marking.
@@ -54,6 +57,9 @@ final class ReaderModel {
     private(set) var original: Original = .idle
 
     @ObservationIgnored private var api: (any NeuroPalAPI)?
+    @ObservationIgnored private var again: Task<Void, Never>?
+    /// The downloaded original PDF: deleted when this reader goes away.
+    @ObservationIgnored private let downloaded = TemporaryFile()
     @ObservationIgnored private let saver = SaveScheduler()
     @ObservationIgnored private var savedWord = -1
     @ObservationIgnored private var counter = 0
@@ -109,6 +115,38 @@ final class ReaderModel {
         await open(api: api)
     }
 
+    /// The file couldn't be read: ask the server to read it again, then
+    /// wait for it here like any document still being processed (until the
+    /// reader closes: `stopWaiting()`).
+    func readAgain() {
+        guard let api, again == nil else { return }
+        let id = documentID
+        again = Task { [weak self] in
+            do {
+                try await api.reingestDocument(id: id)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.notice = "Couldn't start reading it again. \(ReaderCopy.problem(error))"
+                self?.again = nil
+                return
+            }
+            guard let self else { return }
+            self.document?.status = .pending
+            self.document?.progress = 0
+            self.document?.ingestError = nil
+            self.phase = .processing
+            await self.waitUntilReady(api)
+            self.again = nil
+        }
+    }
+
+    /// The reader closed: stop waiting for a document being read again.
+    func stopWaiting() {
+        again?.cancel()
+        again = nil
+    }
+
     private func waitUntilReady(_ api: any NeuroPalAPI) async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3))
@@ -134,10 +172,12 @@ final class ReaderModel {
             let progress = try? await progressRequest
             let id = documentID
             let fallback = document?.title ?? "Document"
-            let built = await Task.detached(priority: .userInitiated) {
-                ReadingText.build(source, documentID: id, fallbackTitle: fallback)
+            let (built, detected) = await Task.detached(priority: .userInitiated) {
+                let built = ReadingText.build(source, documentID: id, fallbackTitle: fallback)
+                return (built, Self.language(of: built))
             }.value
             text = built
+            language = detected
             guard !built.isEmpty else {
                 phase = .empty
                 return
@@ -149,6 +189,15 @@ final class ReaderModel {
         } catch {
             phase = .unavailable(ReaderCopy.problem(error))
         }
+    }
+
+    /// The dominant language of the first few thousand characters.
+    nonisolated static func language(of text: ReadingText) -> String? {
+        let sample = text.string.length > 4000 ? text.string.substring(to: 4000) : text.string as String
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(sample)
+        guard let language = recognizer.dominantLanguage, language != .undetermined else { return nil }
+        return language.rawValue
     }
 
     private func resume(_ t: ReadingText, _ progress: ReadingProgress?) {
@@ -255,7 +304,7 @@ final class ReaderModel {
 
     func jump(toChapter index: Int) {
         guard let text, text.chapters.indices.contains(index) else { return }
-        let w = text.blocks[text.chapters[index].block].words.lowerBound
+        let w = text.firstWord(ofBlock: text.chapters[index].block)
         move(to: w, play: isPlaying)
         if mode == .pages, let p = text.page(forWord: w) { page = p }
         scroll = ReaderScroll(id: nextID(), word: w, anchor: .top, animated: false)
@@ -303,7 +352,7 @@ final class ReaderModel {
         if target == nil, let heading = citation.sectionHeading {
             let key = ReadingText.searchKey(heading)
             if let chapter = text.chapters.first(where: { ReadingText.searchKey($0.title) == key }) {
-                target = text.blocks[chapter.block].words.lowerBound
+                target = text.firstWord(ofBlock: chapter.block)
             }
         }
         guard let target else {
@@ -332,7 +381,9 @@ final class ReaderModel {
         guard original == .idle, hasPages, let api else { return }
         original = .loading
         do {
-            original = .ready(try await api.downloadOriginalFile(documentID: documentID))
+            let file = try await api.downloadOriginalFile(documentID: documentID)
+            downloaded.hold(file)
+            original = .ready(file)
         } catch is CancellationError {
             original = .idle
         } catch {
@@ -424,5 +475,30 @@ final class ReaderModel {
         } catch {
             savedWord = -1 // try again with the next save
         }
+    }
+}
+
+/// A temporary file this reader downloaded (np-original-<id>.pdf): deleted
+/// when the reader that holds it goes away, so a document's original never
+/// lingers on the device after it's closed.
+final class TemporaryFile: @unchecked Sendable {
+    private let lock = NSLock()
+    private var url: URL?
+
+    func hold(_ file: URL) {
+        let old: URL? = lock.withLock {
+            defer { url = file }
+            return url
+        }
+        if let old, old != file { Self.remove(old) }
+    }
+
+    deinit {
+        if let url { Self.remove(url) }
+    }
+
+    private static func remove(_ file: URL) {
+        guard file.lastPathComponent.hasPrefix("np-original-") else { return }
+        try? FileManager.default.removeItem(at: file)
     }
 }

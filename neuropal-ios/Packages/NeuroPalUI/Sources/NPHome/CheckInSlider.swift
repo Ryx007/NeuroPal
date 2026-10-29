@@ -68,13 +68,17 @@ struct CheckInSlider: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("How you feel")
             .accessibilityValue(stored.map { NervousState.forLevel($0).label } ?? "Not checked in yet")
-            .accessibilityHint("Swipe up or down to move between Okay, Bit off and Overwhelmed.")
+            .accessibilityHint(day.day.state == nil ? "Swipe up to check in, starting at Okay."
+                               : "Swipe up or down to move between Okay, Bit off and Overwhelmed.")
             .accessibilityAdjustableAction { dir in
+                // A check-in is only ever an explicit choice: up from "not
+                // checked in yet" is the first stop (Okay); down has nowhere
+                // to go until there is a check-in, so it records nothing.
                 let now = day.day.state
                 if dir == .increment {
                     step(to: now.map { $0.next ?? $0 } ?? .green)
-                } else {
-                    step(to: now.map { $0.previous ?? $0 } ?? .green)
+                } else if dir == .decrement, let lower = now?.previous {
+                    step(to: lower)
                 }
             }
             .sensoryFeedback(.selection, trigger: live.map(NervousState.forLevel)) { old, new in

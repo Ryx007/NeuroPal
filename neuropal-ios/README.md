@@ -27,10 +27,18 @@ it the test runner never starts and `ui-test` stops after `NP_UITEST_TIMEOUT` se
 
 Screenshots without a server: `scripts/mac-build.sh shot <name> iphone|ipad -NPMock 1 -NPScreen reader`
 (launch arguments in `NeuroPal/LaunchOptions.swift`: `-NPSignedOut 1` for sign-in, with
-`-NPSignUp 1` / `-NPServerForm 1`; `-NPOffline 1` for the offline banner; `-NPSkin signal`;
+`-NPSignUp 1` / `-NPServerForm 1` (or `-NPServerForm http://192.168.1.20:4000` to show
+an address typed in); `-NPOffline 1` for the offline banner; `-NPSkin signal`;
 `-NPHost http://localhost:4100` for a backend running on the Mac, plus `-NPToken <jwt>`
-in debug builds to open signed in). `NP_TEXT_SIZE=accessibility-extra-large` for
+to open signed in). Launch arguments exist only in DEBUG builds and are read from the
+process arguments, never from saved settings: a Release build ignores them, and the
+feature-level ones work only with `-NPMock 1`. `NP_TEXT_SIZE=accessibility-extra-large` for
 Dynamic Type; `scripts/mac-build.sh reboot-sim iphone` clears a stuck system alert.
+
+The reader's word stream (`NPCore/ReaderWords.swift`) is a port of the web and Expo
+readers' tokenizers, so `lastWordIndex` means the same word on every client. Its
+fixture `NPCoreTests/Fixtures/reader-words.json` is GENERATED from their code by
+`scripts/make-reader-words.sh` (Node 22+); regenerate it when either tokenizer changes.
 
 Against a real backend (public mode, invite `np-e2e`, in-memory MongoDB):
 `NP_E2E_HOST=http://localhost:4100 scripts/mac-build.sh test` also runs the
@@ -47,13 +55,28 @@ A device build needs an Apple Developer team (set `DEVELOPMENT_TEAM` in
 ## Server and session
 
 - The address lives in UserDefaults (`np.apiHost`; default `https://api.ryx007.work`),
-  changeable on the sign-in screen ("Server") and in Settings → Account. Plain
-  `http://` is accepted only on the local network (localhost, private IPv4,
-  `*.local`, Tailscale 100.64.0.0/10) — `ServerAddress` in NPCore.
-- The session is ONE Keychain record `{host, token, user}`
+  changeable on the sign-in screen ("Server") and in Settings → Account. A new
+  address is used only after a NeuroPal server answers there (`GET /api/auth/config`,
+  else `/api/auth/me`), and saved only once it has. Plain `http://` is accepted only
+  on the local network (localhost, private IPv4, link-local, `*.local`, Tailscale
+  100.64.0.0/10) — `ServerAddress` in NPCore — and the form says, before it's saved,
+  that such a connection isn't encrypted.
+- The session is ONE Keychain record `{host, token, user, kind}`
   (`io.neuropal.ios.session`, after-first-unlock, this device only), bound to the
-  server origin it came from: a token is never sent to another host. A fresh
-  install starts signed out (Keychain items outlive an uninstall).
+  server origin it came from: a token is never sent to another host, never follows a
+  redirect to another origin, and goes over `http://` only to the kind of address it
+  was saved for (`StoredSession.kind`: loopback, private network, link-local, `.local`,
+  Tailscale). A fresh install starts signed out (Keychain items outlive an uninstall).
+- What's left over `http://`: the app can't tell which network it's on, or where a
+  local name really points. The same private address on another network (a café's
+  192.168.1.x), or a Tailscale address with Tailscale off, gets the token in the clear,
+  and anyone on that network can read it. Give the server an `https://` address
+  (Tailscale HTTPS, or a reverse proxy with a certificate) to close this.
+- Signing out (or the server ending the session) clears what the account left on
+  the device: the reading position and Pal's chat in the App Group, downloaded
+  originals and upload files in the temporary folder, cached responses (memory only),
+  read-aloud; the widgets reload. The day (check-ins, anchors) stays: it's the
+  person's, not the account's.
 - Boot (`AppSession`): saved session → `/api/auth/me` (200 signed in, a refreshed
   token swapped in; 401 sign-in; no answer → open offline with the cached user).
   No session → 200 is a single-user server; 401 sign-in; no answer opens offline

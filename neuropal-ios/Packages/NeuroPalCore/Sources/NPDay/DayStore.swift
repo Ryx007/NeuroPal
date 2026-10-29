@@ -14,7 +14,13 @@ import WidgetKit
 ///
 /// Every change saves at once. A widget's check-in (written straight into
 /// day.json by its intent) is picked up when the app returns to the
-/// foreground, and is never overwritten by a save in between.
+/// foreground, and is never overwritten by a save in between: saves are
+/// coordinated with the widget's writes (DayFile.update), and check-ins are
+/// merged by id, never replaced wholesale.
+///
+/// "Sit with me" also sets one local notification for the end of the block
+/// (permission is asked when the first block starts, never at launch), and
+/// takes it back when the block ends early or is put away.
 @MainActor
 @Observable
 public final class DayStore {
@@ -28,28 +34,40 @@ public final class DayStore {
     public private(set) var chat: [PalChatLine]
     /// The last thing the "Sit with me" clock did (views can react to it).
     public private(set) var sitEvent: SitEventStamp? = nil
+    /// Whether the running block's end will be announced while the app is
+    /// closed (`.off`: notifications are off, and the sit screen says so).
+    public private(set) var sitReminder: SitReminderState = .unknown
     /// Pal as the user built it — the name and talk style of what the store
     /// says out loud ("Still with it?"). Home and Pal keep it current.
     @ObservationIgnored public var pal = Appearance.Pal()
 
     @ObservationIgnored private let fileURL: URL?
     @ObservationIgnored private let chatURL: URL?
-    /// Check-in ids as last read from or written to disk: anything else on
-    /// disk was written by another process (a widget) and gets merged in.
+    /// Every check-in id this copy has read from or written to disk: any
+    /// other id on disk was written by another process (a widget) and gets
+    /// merged in. It only grows — an id this copy dropped (refined within a
+    /// minute, or past the cap) must never come back from an old file.
     @ObservationIgnored private var knownCheckinIDs: Set<UUID>
+    @ObservationIgnored private let reminders: (any SitReminderScheduling)?
+    /// The reminder being set or checked (tests wait for it).
+    @ObservationIgnored private(set) var reminderTask: Task<Void, Never>? = nil
+    /// The block whose reminder is being set up right now.
+    @ObservationIgnored private var schedulingSitID: String? = nil
     @ObservationIgnored private var sitClock: Task<Void, Never>? = nil
     @ObservationIgnored private var widgetReload: Task<Void, Never>? = nil
     @ObservationIgnored nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
     /// `persist: false` for previews, tests and the -NPMock screenshots
-    /// (nothing is read or written).
+    /// (nothing is read or written, and no notifications).
     public convenience init(day: DayData? = nil, persist: Bool = true) {
-        self.init(day: day, fileURL: persist ? DayFile.url : nil, chatURL: persist ? DayStore.defaultChatURL() : nil)
+        self.init(day: day, fileURL: persist ? DayFile.url : nil, chatURL: persist ? DayStore.defaultChatURL() : nil,
+                  reminders: persist ? DayStore.systemReminders() : nil)
     }
 
-    init(day: DayData?, fileURL: URL?, chatURL: URL?, now: Date = Date()) {
+    init(day: DayData?, fileURL: URL?, chatURL: URL?, reminders: (any SitReminderScheduling)? = nil, now: Date = Date()) {
         self.fileURL = fileURL
         self.chatURL = chatURL
+        self.reminders = reminders
         var d = day ?? fileURL.flatMap { DayFile.load(from: $0) } ?? .starter
         let rolled = d.rollOver(now: now)
         self.day = d
@@ -130,6 +148,9 @@ public final class DayStore {
 
     // MARK: Sit with me
 
+    /// Starts a block (replacing any other) and sets the notification for
+    /// its end — asking for permission the first time. The clock never waits
+    /// for that answer.
     @discardableResult
     public func startSit(minutes: Int, label: String = "", taskID: String? = nil, anchorID: String? = nil) -> SitSession {
         var d = day
@@ -140,18 +161,64 @@ public final class DayStore {
         sitClock?.cancel() // a clock left from an earlier block may be napping for 30 s
         sitClock = nil
         startSitClockIfNeeded()
+        scheduleSitReminder(for: s)
         return s
     }
 
     public func answerSitCheckIn(_ answer: SitSession.CheckIn) { mutate { $0.answerSitCheckIn(answer) } }
 
     /// "I’m done" or "Stop": the block ends now; Pal offers to note it.
-    public func endSit() { mutate { $0.endSit(.done) } }
+    public func endSit() {
+        mutate { $0.endSit(.done) }
+        cancelSitReminder()
+    }
 
     /// Over without a note ("Not now").
-    public func clearSit() { mutate { $0.clearSit() } }
+    public func clearSit() {
+        mutate { $0.clearSit() }
+        cancelSitReminder()
+    }
 
-    public func saveSitNote(_ note: String) { mutate { $0.saveSitNote(note) } }
+    public func saveSitNote(_ note: String) {
+        mutate { $0.saveSitNote(note) }
+        cancelSitReminder()
+    }
+
+    /// The sit screen appeared, or the app came back: is the running block's
+    /// end still going to be announced? Never asks for permission.
+    public func refreshSitReminder() {
+        guard let reminders, let s = day.sit, s.isRunning,
+              schedulingSitID != s.id // just started: still being set up (maybe asking)
+        else { return }
+        let notice = PalLogic.sitEndNotice(minutes: s.minutes, pal: pal)
+        reminderTask = Task { [weak self] in
+            let state = await reminders.refresh(s, title: notice.title, body: notice.body)
+            guard let self, self.day.sit?.id == s.id, self.day.sit?.isRunning == true else { return }
+            self.sitReminder = state
+        }
+    }
+
+    private func scheduleSitReminder(for s: SitSession) {
+        sitReminder = .unknown
+        guard let reminders else { return }
+        reminders.cancel() // the block this one replaces
+        let notice = PalLogic.sitEndNotice(minutes: s.minutes, pal: pal)
+        schedulingSitID = s.id
+        reminderTask = Task { [weak self] in
+            let state = await reminders.schedule(s, title: notice.title, body: notice.body) { [weak self] in
+                self?.day.sit?.id == s.id && self?.day.sit?.isRunning == true
+            }
+            guard let self else { return }
+            if self.schedulingSitID == s.id { self.schedulingSitID = nil }
+            guard self.day.sit?.id == s.id else { return }
+            self.sitReminder = state
+        }
+    }
+
+    private func cancelSitReminder() {
+        reminders?.cancel()
+        sitReminder = .unknown
+    }
 
     // MARK: Pal's chat
 
@@ -171,19 +238,26 @@ public final class DayStore {
 
     public func update(_ change: (inout DayData) -> Void) { mutate(change) }
 
-    /// The app came back: adopt day.json (a widget may have written a
-    /// check-in meanwhile) and roll the day over if the date changed.
+    /// The app came back: take in the check-ins a widget wrote into day.json
+    /// meanwhile — merged by id, never by replacing what this copy holds —
+    /// and roll the day over if the date changed. Only check-ins come from
+    /// other processes; everything else here is the app's own and stays.
     public func reloadFromDisk(now: Date = Date()) {
-        guard let url = fileURL, var disk = DayFile.load(from: url) else {
+        guard let url = fileURL, let disk = DayFile.load(from: url) else {
             rollOverIfNeeded(now: now)
             return
         }
-        let rolled = disk.rollOver(now: now)
-        if disk != day { day = disk }
-        knownCheckinIDs = Set(disk.checkins.map(\.id))
-        if rolled { save() }
+        var d = day
+        d.mergeCheckins(from: disk, known: knownCheckinIDs)
+        let rolled = d.rollOver(now: now)
+        if d != day { day = d }
+        knownCheckinIDs.formUnion(disk.checkins.map(\.id))
+        // The file lacks a check-in this copy has (or the day rolled): write
+        // the union. (Ids, not whole days: the file keeps dates to the millisecond.)
+        if rolled || Set(day.checkins.map(\.id)) != Set(disk.checkins.map(\.id)) { save() }
         startSitClockIfNeeded()
         tickSit(now: now)
+        refreshSitReminder()
     }
 
     /// Midnight passed while the app was open.
@@ -208,18 +282,18 @@ public final class DayStore {
     private func save() {
         guard let url = fileURL else { return }
         // A widget may have written check-ins since we last touched the file:
-        // merge them in (same rule, same ids) instead of overwriting them.
-        if let disk = DayFile.load(from: url) {
-            let mine = Set(day.checkins.map(\.id))
-            let theirs = disk.checkins.filter { !knownCheckinIDs.contains($0.id) && !mine.contains($0.id) }
-            if !theirs.isEmpty {
-                var d = day
-                for c in theirs.sorted(by: { $0.at < $1.at }) { d.record(c) }
-                day = d
-            }
+        // merge them in (same rule, same ids) instead of overwriting them —
+        // read, merge and write under the file coordinator, so the widget
+        // can't write in between.
+        let known = knownCheckinIDs
+        let mine = day
+        let written = DayFile.update(at: url) { disk in
+            var d = mine
+            if let disk { d.mergeCheckins(from: disk, known: known) }
+            return d
         }
-        DayFile.save(day, to: url)
-        knownCheckinIDs = Set(day.checkins.map(\.id))
+        if written != day { day = written }
+        knownCheckinIDs.formUnion(written.checkins.map(\.id))
         reloadWidgets()
     }
 
@@ -246,6 +320,15 @@ public final class DayStore {
             .appending(path: "NeuroPal", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         return support.appending(path: chatFileName)
+    }
+
+    /// The system's notifications (the app); none on macOS (the tests).
+    private static func systemReminders() -> (any SitReminderScheduling)? {
+        #if os(iOS)
+        return SystemSitReminders()
+        #else
+        return nil
+        #endif
     }
 
     private func reloadWidgets() {
@@ -288,6 +371,11 @@ public final class DayStore {
         day = d
         save()
         sitEvent = SitEventStamp(event: event, at: now)
+        switch event {
+        case .ended: sitReminder = .unknown // the notification (if any) says it by itself
+        case .forgotten: cancelSitReminder() // nothing left to note: clear it from Notification Center too
+        case .checkInAsked: break
+        }
         say(event)
     }
 
@@ -329,11 +417,11 @@ public final class DayStore {
     /// arguments that put the day in a state worth a screenshot.
     ///   -NPCheckIn green|yellow|red   a check-in now (and two earlier today)
     ///   -NPSitMinutes 25              a "Sit with me" block running for 6 min
+    ///   -NPSitReminder off|scheduled  with it: notifications off (the sit says so) or set
     ///   -NPPalChat 1 | crisis         a short chat with Pal (or one the safety net answered)
     ///   -NPPalDump 1                  a few brain-dump lines
     private func applyLaunchDemo(now: Date) {
-        let defaults = UserDefaults.standard
-        if let raw = defaults.string(forKey: "NPCheckIn"), let state = NervousState(rawValue: raw) {
+        if let raw = DebugLaunch.string("NPCheckIn"), let state = NervousState(rawValue: raw) {
             var d = day
             let cal = Calendar.current
             let morning = cal.date(bySettingHour: 8, minute: 5, second: 0, of: now) ?? now
@@ -343,25 +431,30 @@ public final class DayStore {
             d.recordCheckIn(state, level: state.middleLevel + 0.03, at: now, now: now)
             day = d
         }
-        let minutes = defaults.integer(forKey: "NPSitMinutes")
+        let minutes = DebugLaunch.int("NPSitMinutes") ?? 0
         if minutes > 0 {
             var d = day
             d.startSit(minutes: minutes, label: "Intro of the thesis", taskID: nil, now: now.addingTimeInterval(-6 * 60))
             day = d
+            switch DebugLaunch.string("NPSitReminder") {
+            case "off": sitReminder = .off
+            case "scheduled": sitReminder = .scheduled
+            default: break
+            }
         }
-        if defaults.bool(forKey: "NPPalDump") {
+        if DebugLaunch.bool("NPPalDump") {
             var d = day
             d.addDump("Email the lab about the SPAD array time slot", now: now.addingTimeInterval(-3600))
             d.addDump("Buy coffee filters", now: now.addingTimeInterval(-1800))
             d.addDump("That idea about correlation imaging with two cameras", now: now.addingTimeInterval(-300))
             day = d
         }
-        if defaults.string(forKey: "NPPalChat") == "crisis" {
+        if DebugLaunch.string("NPPalChat") == "crisis" {
             chat = [
                 PalChatLine(role: .user, text: "I don’t want to be here anymore", at: now.addingTimeInterval(-60)),
                 PalChatLine(role: .pal, text: PalLogic.crisisReply, at: now.addingTimeInterval(-59), crisis: true, local: true),
             ]
-        } else if defaults.bool(forKey: "NPPalChat") {
+        } else if DebugLaunch.bool("NPPalChat") {
             chat = [
                 PalChatLine(role: .user, text: "Everything feels loud today and I can’t start the paper.",
                             at: now.addingTimeInterval(-120)),

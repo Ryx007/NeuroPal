@@ -1,3 +1,4 @@
+import NPDay
 import NPTheme
 import NPTokens
 import SwiftUI
@@ -21,8 +22,8 @@ struct PalSettingsView: View {
         Form {
             Section {
                 HStack(alignment: .center, spacing: 14) {
-                    PalFigure(pal: pal, size: 96)
-                        .accessibilityLabel("Your Pal, \(Tokens.palDescription(pal))")
+                    PalAvatar(pal: Tokens.normalizePal(pal), palette: theme.palette, size: 96, motion: theme.motionLevel,
+                              accessibilityLabel: "Your Pal, \(Tokens.palDescription(pal))")
                     VStack(alignment: .leading, spacing: 6) {
                         NPLabel("\(pal.name) says")
                         Text(Tokens.palSay(pal, "focus", ["task": "your notes"]))
@@ -145,6 +146,7 @@ struct PalSettingsView: View {
         .sheet(isPresented: $lookOpen) {
             PalLookSheet()
                 .npTheme(theme)
+                .contentMargins(.bottom, nil, for: .scrollContent) // the bubble's room is the tab's, not the sheet's
                 .presentationDetents([.medium, .large])
         }
     }
@@ -181,8 +183,8 @@ struct PalLookSheet: View {
                 Section {
                     HStack {
                         Spacer()
-                        PalFigure(pal: pal, size: 160)
-                            .accessibilityLabel("Your Pal, \(Tokens.palDescription(pal))")
+                        PalAvatar(pal: Tokens.normalizePal(pal), palette: theme.palette, size: 160, motion: theme.motionLevel,
+                                  accessibilityLabel: "Your Pal, \(Tokens.palDescription(pal))")
                         Spacer()
                     }
                     .padding(.vertical, 8)

@@ -65,8 +65,16 @@ public final class AppNavigator {
     public var openDocumentID: String?
     /// Ask is showing alongside the reader.
     public var askOpen = false
-    /// The calming steps are up (full screen over everything).
-    public var calmOpen = false
+    /// The calming steps are up (full screen over everything). Opening them
+    /// posts `AppNavigator.calmingStepsOpened` (read-aloud pauses for it).
+    public var calmOpen = false {
+        didSet {
+            if calmOpen && !oldValue { NotificationCenter.default.post(name: Self.calmingStepsOpened, object: self) }
+        }
+    }
+
+    /// Posted on the main thread when the calming steps open.
+    public nonisolated static let calmingStepsOpened = Notification.Name("io.neuropal.calmingStepsOpened")
     /// Pal's sheet is up, on this tool.
     public var palOpen = false
     public var palTool: PalTool?

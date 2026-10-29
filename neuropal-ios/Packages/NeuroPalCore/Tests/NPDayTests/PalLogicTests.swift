@@ -82,6 +82,130 @@ func everydayTalkIsNotACrisis(_ message: String) {
     #expect(!PalLogic.soundsLikeCrisis(message), "\(message)")
 }
 
+// MARK: - Whitespace can't hide a crisis
+
+/// The review's variants and more. Each one is a crisis on the server too:
+/// pal.js tests `raw.replace(/\s+/g, ' ').trim()` (then ’ ‘ → ') — checked
+/// with Node against the real pattern.
+@Test(arguments: [
+    "I want to  die", "kill  myself", "i want\tto die", "non voglio  vivere", "farla  finita", "wish i was dead",
+    "I want to\u{A0}die", "kill\u{A0}myself", "I want\nto die", "kill\r\nmyself", "want\u{3000}to\u{3000}die",
+    "end\u{2009}my\u{2009}life", "kill\u{FEFF}myself", "I\u{2028}want to die", "want\u{0B}to\u{0C}die",
+    "  \t I want to die \n", "I don’t  want to live", "I don‘t\u{A0}want to be here", "take my\u{202F}own life",
+    "can’t\u{205F}go on", "hang\u{1680}myself", "better off\u{200A}dead",
+])
+func whitespaceVariantsAreStillACrisis(_ message: String) {
+    #expect(PalLogic.soundsLikeCrisis(message), "\(message.debugDescription)")
+    if case .crisis = PalLogic.outgoing(message, max: PalLogic.messageMaxChars) {} else {
+        Issue.record("Talk would send \(message.debugDescription)")
+    }
+}
+
+@Test func onlyJavaScriptWhitespaceCollapses() {
+    // The same expressions in Node give these (pal.js's cleaning).
+    #expect(PalLogic.collapseWhitespace("  a \t\n b\u{3000}") == "a b")
+    #expect(PalLogic.collapseWhitespace("\u{A0}x\u{A0}\u{A0}y\u{A0}") == "x y")
+    #expect(PalLogic.collapseWhitespace("one\r\ntwo") == "one two")
+    #expect(PalLogic.collapseWhitespace("x\u{2028}\u{2029}y") == "x y")
+    #expect(PalLogic.collapseWhitespace("\u{FEFF}").isEmpty)
+    #expect(PalLogic.collapseWhitespace("a\u{85}b") == "a\u{85}b", "U+0085 is not \\s in JavaScript")
+    #expect(PalLogic.collapseWhitespace("a\u{200B}b") == "a\u{200B}b", "nor is a zero-width space")
+    // …so these stay apart on the server too: not a crisis there, not here.
+    #expect(!PalLogic.soundsLikeCrisis("kill\u{200B}myself"))
+    #expect(!PalLogic.soundsLikeCrisis("kill\u{85}myself"))
+    #expect(!PalLogic.soundsLikeCrisis("want to\u{180E}die"))
+}
+
+@Test func talkSendsWhatTheServerWouldSee() {
+    let max = PalLogic.messageMaxChars
+    #expect(PalLogic.outgoing(" \t\u{FEFF}\u{A0} ", max: max) == .nothing)
+    #expect(PalLogic.outgoing("  hello\u{A0}\u{A0}there \n", max: max) == .send(text: "hello there"))
+    #expect(PalLogic.outgoing("I want to  die", max: max) == .crisis(text: "I want to die"))
+    // The cap counts UTF-16 units, like the server's String.length: 600 emoji are 1,200.
+    #expect(PalLogic.outgoing(String(repeating: "😀", count: 600), max: max)
+        == .send(text: String(repeating: "😀", count: 500)))
+    // …it never cuts a character in half…
+    #expect(PalLogic.outgoing(String(repeating: "a", count: 999) + "😀", max: max)
+        == .send(text: String(repeating: "a", count: 999)))
+    #expect(PalLogic.capUTF16("👩‍👩‍👧‍👦 and more", 5).isEmpty, "11 units: the family doesn't fit")
+    #expect(PalLogic.outgoing("👩‍👩‍👧‍👦", max: 5) == .nothing, "never an empty message")
+    // …and counts after collapsing: 2,000 spaces are one.
+    #expect(PalLogic.outgoing("a" + String(repeating: " ", count: 2000) + "b", max: max) == .send(text: "a b"))
+    // A cut never ends on the space before the next word.
+    #expect(PalLogic.outgoing(String(repeating: "a", count: 999) + " b", max: max)
+        == .send(text: String(repeating: "a", count: 999)))
+    // The crisis check reads everything, even past the cap.
+    if case .crisis = PalLogic.outgoing(String(repeating: "x", count: 1200) + " kill\tmyself", max: max) {} else {
+        Issue.record("a crisis after the cap was missed")
+    }
+}
+
+// MARK: - "Break it down" and a crisis
+
+/// What reached "the server".
+private final class ServerCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tasks: [String] = []
+    func record(_ task: String) { lock.withLock { tasks.append(task) } }
+    var all: [String] { lock.withLock { tasks } }
+}
+
+@Test(arguments: ["I want to end my life", "I want to  end my life", "kill\tmyself", "voglio\u{A0}morire",
+                  "I don’t want to be here anymore"])
+func aCrisisTaskIsNeverSentNorTurnedIntoSteps(_ task: String) async {
+    let calls = ServerCalls()
+    let out = await PalLogic.breakdown(task: task) { t in
+        calls.record(t)
+        return PalBreakdown(steps: ["Open it", "Do the first part", "Stop there"])
+    }
+    #expect(out == .crisis(reply: PalLogic.crisisReply))
+    #expect(calls.all.isEmpty, "never sent")
+    // Offline, or with the server failing, it's the same careful answer.
+    let offline = await PalLogic.breakdown(task: task) { _ in throw APIError.offline }
+    #expect(offline == .crisis(reply: PalLogic.crisisReply))
+    let failing = await PalLogic.breakdown(task: task) { _ in throw APIError.server(status: 502, message: "no") }
+    #expect(failing == .crisis(reply: PalLogic.crisisReply))
+    #expect(PalLogic.quickBreakdown(task: task) == .crisis(reply: PalLogic.crisisReply))
+}
+
+@Test func theServersCrisisAnswerIsShownTheSameWay() async {
+    let worded = await PalLogic.breakdown(task: "a task the server worries about") { _ in
+        PalBreakdown(steps: [], crisis: true, reply: "  Careful\nwords.  ")
+    }
+    #expect(worded == .crisis(reply: "Careful words."))
+    let bare = await PalLogic.breakdown(task: "another one") { _ in PalBreakdown(steps: [], crisis: true) }
+    #expect(bare == .crisis(reply: PalLogic.crisisReply))
+}
+
+@Test func breakdownUsesTheServerThenSaysWhyItDidnt() async {
+    let calls = ServerCalls()
+    let good = await PalLogic.breakdown(task: "  write   the\tintro ") { t in
+        calls.record(t)
+        return PalBreakdown(steps: ["1. Open the file", "2) Write a line", "- Stop"])
+    }
+    #expect(good == .steps(["Open the file", "Write a line", "Stop"], note: nil))
+    #expect(calls.all == ["write the intro"], "sent the way the server cleans it")
+    let offlineSteps = PalLogic.offlineSteps(for: "write the intro")
+    let bad = await PalLogic.breakdown(task: "write the intro") { _ in PalBreakdown(steps: ["One"]) }
+    #expect(bad == .steps(offlineSteps, note: "The server’s steps didn’t come out right, so these are Pal’s offline steps."))
+    let offline = await PalLogic.breakdown(task: "write the intro") { _ in throw APIError.offline }
+    #expect(offline == .steps(offlineSteps, note: "No server right now, so these are Pal’s offline steps."))
+    let signedOut = await PalLogic.breakdown(task: "write the intro") { _ in throw APIError.unauthorized }
+    #expect(signedOut == .steps(offlineSteps, note: "You’re signed out, so these are Pal’s offline steps."))
+    let empty = await PalLogic.breakdown(task: " \u{A0}\t") { _ in PalBreakdown(steps: []) }
+    #expect(empty == nil)
+    #expect(PalLogic.quickBreakdown(task: "write the intro") == .steps(offlineSteps, note: "Quick steps, made on this device."))
+}
+
+@Test func theSitNoticeKeepsTheTaskPrivate() {
+    var pal = Appearance.Pal()
+    pal.name = "Quark"
+    let n = PalLogic.sitEndNotice(minutes: 25, pal: pal)
+    #expect(n.title == "Quark: nice.")
+    #expect(n.body == "That’s your 25 minutes. Want to note what you did?")
+    #expect(PalLogic.sitEndNotice(minutes: 1, pal: pal).body == "That’s your 1 minute. Want to note what you did?")
+}
+
 @Test func javascriptMeaningsSurviveTheTranslation() {
     // \w and \b are ASCII in JavaScript: "ù" is not a word character there.
     #expect(!JSRegex(#"^\w+$"#).matches("più"))

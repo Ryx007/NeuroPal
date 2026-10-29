@@ -80,7 +80,7 @@ public struct CalmStepsView: View {
         .onChange(of: step) { _, _ in announceStep() }
         .onAppear {
             // Mock screenshots only: -NPCalmStep 3 starts on that step.
-            if !day.isPersistent, let n = Int(UserDefaults.standard.string(forKey: "NPCalmStep") ?? ""), (1...4).contains(n) {
+            if !day.isPersistent, let n = DebugLaunch.int("NPCalmStep"), (1...4).contains(n) {
                 step = n - 1
             }
             announceStep()

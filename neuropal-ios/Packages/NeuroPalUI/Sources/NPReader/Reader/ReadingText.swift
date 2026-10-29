@@ -144,12 +144,22 @@ struct ReadingText: @unchecked Sendable {
         let b = block(ofWord: word)
         let start = blocks[b].words.lowerBound
         if word - start > 1 || b == 0 { return start }
-        return blocks[b - 1].words.lowerBound
+        // Chapter titles hold no words: step over them.
+        var p = b - 1
+        while p > 0, blocks[p].words.isEmpty { p -= 1 }
+        return blocks[p].words.lowerBound
     }
 
     func blockStart(after word: Int) -> Int? {
         let b = block(ofWord: word)
-        return b + 1 < blocks.count ? blocks[b + 1].words.lowerBound : nil
+        guard let next = blocks[(b + 1)...].first(where: { !$0.words.isEmpty }) else { return nil }
+        return next.words.lowerBound
+    }
+
+    /// The first word at or after a block (a chapter title has none of its own).
+    func firstWord(ofBlock block: Int) -> Int {
+        guard blocks.indices.contains(block) else { return clamp(0) }
+        return clamp(blocks[block].words.lowerBound)
     }
 
     /// The first word of the passage a citation quotes (nil when the excerpt isn't found).
@@ -159,7 +169,7 @@ struct ReadingText: @unchecked Sendable {
         let keys = paragraphs.map(Self.searchKey)
         for length in [needle.count, 90, 48, 24] where length <= needle.count {
             let probe = String(needle.prefix(length))
-            for (index, key) in keys.enumerated() {
+            for (index, key) in keys.enumerated() where !blocks[index].words.isEmpty {
                 guard let r = key.range(of: probe) else { continue }
                 let before = key[..<r.lowerBound].split(separator: " ").count
                 let block = blocks[index]
@@ -186,8 +196,12 @@ struct ReadingText: @unchecked Sendable {
 
     // MARK: Building
 
+    /// The words come from `ReaderWords` (NPCore), which counts them exactly
+    /// as the Expo app and the web do: the saved `lastWordIndex` is the same
+    /// word on every device. Display and speech are this app's own.
     static func build(_ doc: DocumentText, documentID: String, fallbackTitle: String) -> ReadingText {
-        let paragraphs = splitParagraphs(doc.text)
+        let stream = ReaderWords.build(text: doc.text, toc: doc.toc, pageMap: doc.pageMap, pageCount: doc.pageCount)
+        let paragraphs = stream.map(\.text)
         let title = doc.title.isEmpty ? fallbackTitle : doc.title
         let tocStarts = Set(doc.toc.compactMap(\.startParagraph))
         let string = NSMutableString()
@@ -195,30 +209,35 @@ struct ReadingText: @unchecked Sendable {
         var words: [Word] = []
         var speech: [String] = []
         var shown: [String] = []
-        blocks.reserveCapacity(paragraphs.count)
+        blocks.reserveCapacity(stream.count)
 
-        for (index, paragraph) in paragraphs.enumerated() {
+        for (index, para) in stream.enumerated() {
             if index > 0 { string.append("\n") }
-            let kind = classify(paragraph, index: index, tocStarts: tocStarts, title: title, hasToc: !doc.toc.isEmpty)
+            let paragraph = para.text
+            let equation = para.tokens.count == 1 && para.tokens[0].kind == .equation
+            var kind: Kind = equation ? .equation : classify(paragraph, index: index, tocStarts: tocStarts, title: title,
+                                                             hasToc: !doc.toc.isEmpty)
+            // A chapter title of a document without a toc: shown, but not a
+            // word (the other clients show it as the chapter's name).
+            if para.isChapterTitle { kind = index == 0 ? .title : .heading }
             let start = string.length
             let first = words.count
-            if kind == .equation {
-                let display = equationDisplay(paragraph)
+            if equation {
+                let display = render(para.tokens[0]).display
                 string.append(display)
                 words.append(Word(location: start, length: string.length - start, block: index, isMath: true))
                 speech.append("Equation.")
                 shown.append(display)
+            } else if para.tokens.isEmpty {
+                string.append(paragraph)
             } else {
-                var firstToken = true
-                for raw in tokens(paragraph) {
-                    let t = MathText.token(raw)
-                    let display = t.display.isEmpty ? raw : t.display
-                    if !firstToken { string.append(" ") }
-                    firstToken = false
+                for (k, token) in para.tokens.enumerated() {
+                    let (display, spoken, isMath) = render(token)
+                    if k > 0, token.spaceBefore { string.append(" ") }
                     let location = string.length
                     string.append(display)
-                    words.append(Word(location: location, length: string.length - location, block: index, isMath: t.isMath))
-                    speech.append(t.isMath ? t.speech : display)
+                    words.append(Word(location: location, length: string.length - location, block: index, isMath: isMath))
+                    speech.append(spoken)
                     shown.append(display)
                 }
             }
@@ -299,92 +318,29 @@ struct ReadingText: @unchecked Sendable {
                            paragraphs: paragraphs)
     }
 
-    /// Paragraphs exactly as the Expo reader splits them: on two or more
-    /// newlines, whitespace collapsed, empties dropped.
-    static func splitParagraphs(_ text: String) -> [String] {
-        var out: [String] = []
-        var current = String.UnicodeScalarView()
-        var newlines = 0
-        func flush() {
-            let p = normalise(current)
-            if !p.isEmpty { out.append(p) }
-            current = String.UnicodeScalarView()
+    /// How a word of the stream is shown and spoken: maths through
+    /// MathText (never read out as LaTeX), a piece of PDF maths as written.
+    static func render(_ token: ReaderWords.Token) -> (display: String, speech: String, isMath: Bool) {
+        switch token.kind {
+        case .word:
+            return (token.text, token.text, false)
+        case .math:
+            guard !token.text.isEmpty else { return ("…", "", true) }
+            let shown = MathText.display(token.text)
+            return (shown.isEmpty ? token.text : shown, MathText.tidySpeech(MathText.speech(token.text)), true)
+        case .equation:
+            let shown = token.text.isEmpty ? "" : MathText.display(token.text)
+            return (shown.isEmpty ? token.source : shown, "Equation.", true)
         }
-        for s in text.unicodeScalars {
-            if s == "\n" {
-                newlines += 1
-                continue
-            }
-            if newlines >= 2 { flush() } else if newlines == 1 { current.append(" ") }
-            newlines = 0
-            current.append(s)
-        }
-        flush()
-        return out
     }
 
-    static func normalise(_ scalars: String.UnicodeScalarView) -> String {
-        var out = String.UnicodeScalarView()
-        var space = false
-        for s in scalars {
-            if s.properties.isWhitespace {
-                space = !out.isEmpty
-                continue
-            }
-            if space {
-                out.append(" ")
-                space = false
-            }
-            out.append(s)
-        }
-        return String(out)
-    }
-
-    /// Words of a normalised paragraph; a `$…$` island stays one word even with spaces inside.
-    static func tokens(_ p: String) -> [String] {
-        guard p.contains("$") else { return p.split(separator: " ").map(String.init) }
-        let c = Array(p)
-        var out: [String] = []
-        var i = 0
-        while i < c.count {
-            while i < c.count, c[i] == " " { i += 1 }
-            guard i < c.count else { break }
-            var j = i
-            while j < c.count, c[j] != " " {
-                if c[j] == "\\" {
-                    j += 2
-                    continue
-                }
-                if c[j] == "$", let found = MathText.island(c, from: j) {
-                    j = found.1
-                    continue
-                }
-                j += 1
-            }
-            let end = min(j, c.count)
-            out.append(String(c[i..<end]))
-            i = end
-        }
-        return out
-    }
-
+    /// Title and heading lines, for display (equations come from the word stream).
     static func classify(_ p: String, index: Int, tocStarts: Set<Int>, title: String, hasToc: Bool) -> Kind {
-        if isEquation(p) { return .equation }
         let headingShaped = p.count <= 120 && !(p.last.map { ".!?,;:".contains($0) } ?? true)
         if index == 0, headingShaped, searchKey(p) == searchKey(title) { return .title }
         if tocStarts.contains(index), headingShaped { return .heading }
         if !hasToc, looksLikeHeading(p) { return index == 0 ? .title : .heading }
         return .paragraph
-    }
-
-    static func isEquation(_ p: String) -> Bool {
-        (p.count > 4 && p.hasPrefix("$$") && p.hasSuffix("$$")) || (p.count > 4 && p.hasPrefix("\\[") && p.hasSuffix("\\]"))
-    }
-
-    static func equationDisplay(_ p: String) -> String {
-        let inner = String(p.dropFirst(2).dropLast(2))
-        let shown = MathText.display(inner)
-        return shown.isEmpty ? p : shown
     }
 
     /// Expo's heading heuristic, for documents without a table of contents.

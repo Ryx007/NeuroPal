@@ -389,6 +389,145 @@ private func tempURL(_ name: String = "day.json") -> URL {
 }
 
 @MainActor
+@Test func reloadMergesCheckInsByIDAndMendsTheFile() {
+    let url = tempURL()
+    let store = DayStore(day: .starter, fileURL: url, chatURL: nil)
+    store.checkIn(.green, level: 0.1, at: Date().addingTimeInterval(-900))
+    // Another writer left a copy that lost the app's check-in but has one of
+    // its own (a lost update): replacing wholesale would drop the green one.
+    var other = DayData.starter
+    other.recordCheckIn(.yellow, at: Date().addingTimeInterval(-300))
+    DayFile.save(other, to: url)
+    store.reloadFromDisk()
+    #expect(store.day.checkins.map(\.state) == [.green, .yellow], "both kept, joined by id")
+    #expect(store.day.state == .yellow, "the newer one is the state")
+    #expect(DayFile.load(from: url)?.checkins.map(\.state) == [.green, .yellow], "and the file holds both again")
+}
+
+@MainActor
+@Test func aCheckInTheAppRefinedNeverComesBack() {
+    let url = tempURL()
+    let store = DayStore(day: .starter, fileURL: url, chatURL: nil)
+    let t = Date().addingTimeInterval(-600)
+    store.checkIn(.green, level: 0.1, at: t)
+    let old = DayFile.load(from: url)!
+    store.checkIn(.yellow, level: 0.4, at: t.addingTimeInterval(30)) // within a minute: refines the green one
+    #expect(store.day.checkins.map(\.state) == [.yellow])
+    DayFile.save(old, to: url) // an old copy of the file turns up
+    store.reloadFromDisk()
+    #expect(store.day.checkins.map(\.state) == [.yellow])
+    store.addTask("Water the plant")
+    #expect(store.day.checkins.map(\.state) == [.yellow], "nor on the next save")
+    #expect(DayFile.load(from: url)?.checkins.map(\.state) == [.yellow])
+}
+
+@Test func coordinatedWritesLoseNothing() {
+    // Many writers at once (as the app and a widget can be): every check-in
+    // lands, because each read-modify-write runs under the file coordinator.
+    let url = tempURL()
+    let start = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 - 24 * 3600).rounded(.down)) // the file keeps ms
+    let n = 24
+    DispatchQueue.concurrentPerform(iterations: n) { i in
+        DayFile.recordCheckIn(i.isMultiple(of: 2) ? .green : .yellow, at: start.addingTimeInterval(TimeInterval(i * 120)),
+                              url: url)
+    }
+    let day = DayFile.load(from: url)
+    #expect(day?.checkins.count == n)
+    #expect(day?.checkins.map(\.at) == (0..<n).map { start.addingTimeInterval(TimeInterval($0 * 120)) }, "in time order")
+}
+
+// MARK: - The end-of-sit notification
+
+/// Records what the store asks of the notifications.
+@MainActor
+private final class FakeReminders: SitReminderScheduling {
+    var answer: SitReminderState = .scheduled
+    var scheduled: [(id: String, title: String, body: String)] = []
+    var refreshed: [String] = []
+    var cancels = 0
+    /// Hold `schedule` (the permission question still open) until released.
+    var hold = false
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    func schedule(_ sit: SitSession, title: String, body: String,
+                  stillWanted: @escaping @MainActor () -> Bool) async -> SitReminderState {
+        scheduled.append((sit.id, title, body))
+        if hold { await withCheckedContinuation { waiting = $0 } }
+        return stillWanted() ? answer : .unknown
+    }
+
+    func refresh(_ sit: SitSession, title: String, body: String) async -> SitReminderState {
+        refreshed.append(sit.id)
+        return answer
+    }
+
+    func cancel() { cancels += 1 }
+
+    var isWaiting: Bool { waiting != nil }
+    func release() {
+        waiting?.resume()
+        waiting = nil
+    }
+}
+
+@MainActor
+@Test func aSitSetsItsEndNoticeAndTakesItBack() async {
+    let fake = FakeReminders()
+    let store = DayStore(day: .starter, fileURL: nil, chatURL: nil, reminders: fake)
+    var pal = Appearance.Pal()
+    pal.name = "Quark"
+    store.pal = pal
+    let s = store.startSit(minutes: 25, label: "Thesis intro")
+    await store.reminderTask?.value
+    #expect(fake.scheduled.map(\.id) == [s.id])
+    #expect(fake.scheduled.first?.title == "Quark: nice.")
+    #expect(fake.scheduled.first?.body.contains("Thesis") == false, "no task words on a locked screen")
+    #expect(store.sitReminder == .scheduled)
+    // Stopping early takes it back; so does putting the finished block away.
+    store.endSit()
+    #expect(fake.cancels == 2, "one for the block it replaced (none), one for the stop")
+    #expect(store.sitReminder == .unknown)
+    store.clearSit()
+    #expect(fake.cancels == 3)
+    store.startSit(minutes: 10)
+    await store.reminderTask?.value
+    store.endSit()
+    store.saveSitNote("Wrote the outline")
+    #expect(fake.cancels == 6)
+}
+
+@MainActor
+@Test func withNotificationsOffTheSitSaysSo() async {
+    let fake = FakeReminders()
+    fake.answer = .off
+    let store = DayStore(day: .starter, fileURL: nil, chatURL: nil, reminders: fake)
+    store.startSit(minutes: 10)
+    await store.reminderTask?.value
+    #expect(store.sitReminder == .off)
+    // The sit screen checks again (never asking): still off.
+    store.refreshSitReminder()
+    await store.reminderTask?.value
+    #expect(fake.refreshed.count == 1)
+    #expect(store.sitReminder == .off)
+}
+
+@MainActor
+@Test func aSitStoppedWhilePalWasAskingGetsNoNotice() async {
+    let fake = FakeReminders()
+    fake.hold = true
+    let store = DayStore(day: .starter, fileURL: nil, chatURL: nil, reminders: fake)
+    store.startSit(minutes: 25)
+    while !fake.isWaiting { await Task.yield() }
+    store.refreshSitReminder()
+    #expect(fake.refreshed.isEmpty, "no second request while the first is still asking")
+    store.endSit()
+    fake.release()
+    await store.reminderTask?.value
+    #expect(store.sitReminder == .unknown)
+    #expect(fake.cancels == 2)
+}
+
+@MainActor
 @Test func thePersistentStoreStartsFromTheFile() {
     let url = tempURL()
     var saved = DayData.starter

@@ -219,6 +219,118 @@ struct UnauthorizedTests {
         await #expect(throws: APIError.server(status: 401, message: "Missing token")) { _ = try await api.me() }
         #expect(calls.all.isEmpty)
     }
+
+    @Test func aTokenlessDataCall401MeansTheServerWantsAnAccount() async throws {
+        let server = StubServer(always: .json(401, #"{"error":"Missing token"}"#))
+        let api = server.api(token: nil)
+        let calls = Calls()
+        let tokenless = Calls()
+        api.onUnauthorized = { calls.add($0) }
+        api.onUnauthorizedWithoutToken = { tokenless.add("401") }
+        await #expect(throws: APIError.unauthorized) { _ = try await api.documents(query: nil) }
+        #expect(tokenless.all.count == 1)
+        #expect(calls.all.isEmpty)
+        // The /auth/ calls' 401s are answers (a password, a missing session).
+        await #expect(throws: APIError.server(status: 401, message: "Missing token")) { _ = try await api.me() }
+        await #expect(throws: APIError.server(status: 401, message: "Missing token")) { _ = try await api.authConfig() }
+        await #expect(throws: APIError.server(status: 401, message: "Missing token")) {
+            _ = try await api.login(email: "a@b.c", password: "x")
+        }
+        #expect(tokenless.all.count == 1)
+    }
+
+    @Test func aTokenless401ThatCrossedASignInIsStale() async throws {
+        // The request left without a token just before a sign-in finished.
+        let box = APIBox()
+        let server = StubServer { _ in
+            box.api?.token = "tok-new"
+            return .json(401, #"{"error":"Missing token"}"#)
+        }
+        let api = server.api(token: nil)
+        box.api = api
+        let tokenless = Calls()
+        api.onUnauthorizedWithoutToken = { tokenless.add("401") }
+        await #expect(throws: APIError.server(status: 401, message: "Missing token")) { _ = try await api.documents(query: nil) }
+        #expect(tokenless.all.isEmpty)
+    }
+
+    @Test func authCallsAreSpottedUnderAPathPrefix() async throws {
+        let server = StubServer(path: "/neuropal", handler: { _ in .json(401, #"{"error":"Missing token"}"#) })
+        let api = server.api(token: nil)
+        let tokenless = Calls()
+        api.onUnauthorizedWithoutToken = { tokenless.add("401") }
+        _ = try? await api.me()
+        #expect(tokenless.all.isEmpty)
+        _ = try? await api.documents(query: nil)
+        #expect(tokenless.all.count == 1)
+        #expect(api.isAuthCall(URL(string: "https://x.test/neuropal/api/auth/me")))
+        #expect(!api.isAuthCall(URL(string: "https://x.test/neuropal/api/documents/auth/me")))
+    }
+}
+
+@Suite("Where the token goes")
+struct TokenRoutingTests {
+    @Test func overPlainHttpOnlyToTheLocalNetwork() throws {
+        let lan = HTTPNeuroPalAPI(host: URL(string: "http://192.168.3.169:4000")!, token: "t")
+        #expect(try lan.request("GET", "/documents").value(forHTTPHeaderField: "Authorization") == "Bearer t")
+        let tailnet = HTTPNeuroPalAPI(host: URL(string: "http://100.80.166.68:4000")!, token: "t")
+        #expect(try tailnet.request("GET", "/documents").value(forHTTPHeaderField: "Authorization") == "Bearer t")
+        let open = HTTPNeuroPalAPI(host: URL(string: "http://example.com")!, token: "t")
+        #expect(try open.request("GET", "/documents").value(forHTTPHeaderField: "Authorization") == nil)
+        let secure = HTTPNeuroPalAPI(host: URL(string: "https://example.com")!, token: "t")
+        #expect(try secure.request("GET", "/documents").value(forHTTPHeaderField: "Authorization") == "Bearer t")
+    }
+
+    @Test func redirectsAreFollowedOnlyOnTheSameServer() {
+        let origin = AppSession.origin(URL(string: "https://api.example.org")!)
+        #expect(ReplyCollector.follows(URL(string: "https://api.example.org/api/documents/")!, from: origin))
+        #expect(ReplyCollector.follows(URL(string: "https://API.example.org:443/x")!, from: AppSession.origin(URL(string: "https://api.example.org:443")!)))
+        #expect(!ReplyCollector.follows(URL(string: "http://api.example.org/api/documents")!, from: origin))
+        #expect(!ReplyCollector.follows(URL(string: "https://evil.example/api/documents")!, from: origin))
+        #expect(!ReplyCollector.follows(URL(string: "https://api.example.org:8443/api/documents")!, from: origin))
+        #expect(!ReplyCollector.follows(nil, from: origin))
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aRedirectToAnotherServerIsNotFollowed() async throws {
+        let other = StubServer(always: .json(200, "[]"))
+        let server = StubServer(always: .redirect(to: other.host.appending(path: "/api/documents")))
+        _ = try? await server.api(token: "tok-1").documents(query: nil)
+        #expect(other.requests.isEmpty)
+    }
+}
+
+@Suite("Reply size")
+struct ReplySizeTests {
+    static let big = "{\"steps\":[\"" + String(repeating: "x", count: 4096) + "\"]}"
+
+    @Test func aReplyOverTheCapIsRefusedAsItStreams() async throws {
+        let api = StubServer(always: .json(200, Self.big)).api(token: "t")
+        api.maxReplyBytes = 1024
+        await #expect(throws: APIError.decoding("a reply too large to read")) { _ = try await api.palBreakdown(task: "x") }
+    }
+
+    @Test func aReplyAnnouncedOverTheCapIsRefusedAtOnce() async throws {
+        let api = StubServer(always: .json(200, Self.big, headers: ["Content-Length": "\(Self.big.utf8.count)"])).api(token: "t")
+        api.maxReplyBytes = 1024
+        await #expect(throws: APIError.decoding("a reply too large to read")) { _ = try await api.palBreakdown(task: "x") }
+    }
+
+    @Test func repliesUnderTheCapAreRead() async throws {
+        let api = StubServer(always: .json(200, Self.big)).api(token: "t")
+        api.maxReplyBytes = 8192
+        let reply = try await api.palBreakdown(task: "x")
+        #expect(reply.steps.first?.count == 4096)
+    }
+
+    @Test func aFailedDownloadsBodyIsOnlyReadInPart() throws {
+        let file = FileManager.default.temporaryDirectory.appending(path: "np-test-\(UUID().uuidString)")
+        try Data(repeating: 65, count: 200_000).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(HTTPNeuroPalAPI.head(of: file).count == 64 << 10)
+        #expect(HTTPNeuroPalAPI.head(of: file, limit: 10) == Data(repeating: 65, count: 10))
+        #expect(HTTPNeuroPalAPI.head(of: file.appending(path: "missing")).isEmpty)
+    }
 }
 
 final class APIBox: @unchecked Sendable {
@@ -427,6 +539,38 @@ struct UploadTests {
         if let body = r.body {
             #expect(body.count > 300_000)
         }
+    }
+
+    @Test func aBodyThatCantBeWrittenLeavesNothingBehind() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "np-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let api = HTTPNeuroPalAPI(host: URL(string: "https://api.example.org")!, token: "t")
+        let missing = folder.appending(path: "gone.pdf")
+        #expect(throws: (any Error).self) { _ = try api.uploadRequest(fileURL: missing, title: nil, in: folder) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).isEmpty)
+    }
+
+    @Test func reingestAsksTheServerToReadItAgain() async throws {
+        let server = StubServer(always: .json(200, #"{"ok":true,"status":"pending"}"#))
+        try await server.api(token: "tok-1").reingestDocument(id: "d 1")
+        let r = try #require(server.last)
+        #expect(r.method == "POST")
+        #expect(r.path == "/api/documents/d%201/reingest")
+        #expect(r.header("Authorization") == "Bearer tok-1")
+        await #expect(throws: APIError.notFound) {
+            try await StubServer(always: .json(404, #"{"error":"document not found"}"#)).api(token: "t").reingestDocument(id: "x")
+        }
+    }
+
+    @Test func theMockReadsAFailedDocumentAgain() async throws {
+        let mock = MockNeuroPalAPI(latency: .zero)
+        #expect(try await mock.document(id: MockFixtures.failedID).status == .failed)
+        try await mock.reingestDocument(id: MockFixtures.failedID)
+        let doc = try await mock.document(id: MockFixtures.failedID)
+        #expect(doc.status == .pending)
+        #expect(doc.ingestError == nil)
+        await #expect(throws: APIError.notFound) { try await mock.reingestDocument(id: "nope") }
     }
 
     @Test func tooLargeSaysSoPlainly() async throws {

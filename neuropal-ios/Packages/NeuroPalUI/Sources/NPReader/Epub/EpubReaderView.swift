@@ -40,7 +40,11 @@ struct EpubReaderView: View {
     var body: some View {
         ZStack {
             if let problem = model.problem {
-                ReaderStateView(symbol: "book.closed", title: "This book won't open right now", message: problem)
+                ReaderStateView(symbol: "book.closed", title: "This book won't open right now", message: problem) {
+                    Button("Try again") { Task { await model.retry() } }
+                        .buttonStyle(.npPrimary)
+                        .accessibilityHint("Opens the book again")
+                }
             } else {
                 EpubWebView(model: model, background: page.uiBackground)
                     .ignoresSafeArea(edges: .bottom)

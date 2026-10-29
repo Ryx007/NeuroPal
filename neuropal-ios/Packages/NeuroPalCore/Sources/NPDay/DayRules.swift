@@ -61,6 +61,19 @@ public extension DayData {
         return entry
     }
 
+    /// Check-ins in `other` (day.json as another process — a widget — left
+    /// it) that this copy has never seen: not here and not in `known`, the
+    /// ids this copy last read or wrote (so one it refined away or capped
+    /// stays gone). They join by id with the usual rule: time order, and a
+    /// newer one becomes the state. Returns how many joined.
+    @discardableResult
+    mutating func mergeCheckins(from other: DayData, known: Set<UUID>) -> Int {
+        let mine = Set(checkins.map(\.id))
+        let theirs = other.checkins.filter { !known.contains($0.id) && !mine.contains($0.id) }
+        for c in theirs.sorted(by: { $0.at < $1.at }) { record(c) }
+        return theirs.count
+    }
+
     /// Today's check-ins (oldest first), for the history strip.
     func checkins(on date: Date, calendar: Calendar = .current) -> [CheckIn] {
         checkins.filter { calendar.isDate($0.at, inSameDayAs: date) }

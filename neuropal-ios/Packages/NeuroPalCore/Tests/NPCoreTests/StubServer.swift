@@ -10,6 +10,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var headers: [String: String] = ["Content-Type": "application/json; charset=utf-8"]
         /// Fail at the transport level instead of answering.
         var error: URLError?
+        /// Answer 302 to this address (the request goes along, headers and all).
+        var redirect: URL?
 
         static func json(_ status: Int, _ text: String, headers: [String: String] = [:]) -> Reply {
             var r = Reply(status: status, body: Data(text.utf8))
@@ -18,6 +20,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         }
 
         static func fail(_ code: URLError.Code) -> Reply { Reply(error: URLError(code)) }
+
+        static func redirect(to url: URL) -> Reply { Reply(status: 302, redirect: url) }
     }
 
     struct Recorded: Sendable {
@@ -74,6 +78,17 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         let reply = handler?(recorded) ?? .fail(.cannotConnectToHost)
         if let error = reply.error {
             client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
+        if let location = reply.redirect {
+            let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1",
+                                           headerFields: ["Location": location.absoluteString])!
+            var next = request
+            next.url = location
+            client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+            // Not followed: the 3xx itself is the answer.
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
             return
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1",

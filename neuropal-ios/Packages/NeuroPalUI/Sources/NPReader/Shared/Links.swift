@@ -29,17 +29,18 @@ final class ReaderInbox {
     private init() {}
 }
 
-/// Switches for screenshots and UI checks. They only ever act in mock
-/// mode (`-NPMock 1`), never on a real server.
+/// Switches for screenshots and UI checks: this launch's arguments, in
+/// debug builds, and only in mock mode (`-NPMock 1`) — never on a real
+/// server, never from saved settings, never in a Release build.
 enum ReaderLaunch {
     /// `-NPReadAloud 1`: start reading aloud (muted) when the reader opens.
-    static var readAloud: Bool { UserDefaults.standard.bool(forKey: "NPReadAloud") }
+    static var readAloud: Bool { DebugLaunch.mock && DebugLaunch.bool("NPReadAloud") }
     /// `-NPReaderSheet chapters|options`: open that sheet over the reader.
-    static var sheet: String? { UserDefaults.standard.string(forKey: "NPReaderSheet") }
+    static var sheet: String? { DebugLaunch.mock ? DebugLaunch.string("NPReaderSheet") : nil }
     /// `-NPLibrarySearch <text>`: start the library with this search.
-    static var librarySearch: String? { UserDefaults.standard.string(forKey: "NPLibrarySearch") }
+    static var librarySearch: String? { DebugLaunch.mock ? DebugLaunch.string("NPLibrarySearch") : nil }
     /// `-NPReaderMode pages`: open pdf documents on their original pages.
-    static var readerMode: String? { UserDefaults.standard.string(forKey: "NPReaderMode") }
+    static var readerMode: String? { DebugLaunch.mock ? DebugLaunch.string("NPReaderMode") : nil }
 
     static func isMock(_ api: any NeuroPalAPI) -> Bool { api is MockNeuroPalAPI }
 }

@@ -1,4 +1,5 @@
 import NPCore
+import NPDay
 import NPHome
 import NPPal
 import NPReader
@@ -66,6 +67,8 @@ private struct ShellChrome: ViewModifier {
     let tab: NPTab
     @Environment(AppNavigator.self) private var nav
     @Environment(AppSession.self) private var session
+    @Environment(AppPreferences.self) private var prefs
+    @Environment(DayStore.self) private var day
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     func body(content: Content) -> some View {
@@ -73,11 +76,22 @@ private struct ShellChrome: ViewModifier {
             .safeAreaInset(edge: bannerEdge, spacing: 0) {
                 if session.phase == .offline { OfflineBanner(edge: bannerEdge) }
             }
+            // The last row can scroll clear of the bubble (52 pt + its 12 pt
+            // margin above the tab bar, and a little air). nil: the system's.
+            .contentMargins(.bottom, bubbleClearance, for: .scrollContent)
             .overlay {
                 // PalBubble places itself from the safe area, follows
                 // "Hide the bubble", and stays up during "Sit with me".
                 if showsBubble { PalBubble() }
             }
+    }
+
+    /// Room under the scrolling content while the bubble is there (at its
+    /// resting place by the tab bar; a bubble dragged higher is the
+    /// person's choice and can be moved back).
+    private var bubbleClearance: CGFloat? {
+        guard showsBubble, !prefs.palBubbleHidden || day.day.sit != nil else { return nil }
+        return 72
     }
 
     /// The iPad's floating tab bar sits at the top of the content: there the
