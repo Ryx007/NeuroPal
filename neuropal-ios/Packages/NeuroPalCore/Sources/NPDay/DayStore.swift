@@ -1,53 +1,403 @@
 import Foundation
+import NPCore
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
+#if os(iOS) && canImport(WidgetKit)
+import WidgetKit
+#endif
 
-/// Today's data, persisted to the shared container (day.json) so the
-/// widgets read the same state. SKELETON: saves on every change; the Home
-/// agent owns the rules (check-in merging/cap, day rollover, anchors).
+/// Today's data (check-ins, anchors, the minimum day, Pal's brain dump and
+/// "Sit with me"), saved to day.json in the shared container so the widgets
+/// read the same day. Pal's chat lives beside it in pal-chat.json (app-only).
+///
+/// Every change saves at once. A widget's check-in (written straight into
+/// day.json by its intent) is picked up when the app returns to the
+/// foreground, and is never overwritten by a save in between.
 @MainActor
 @Observable
 public final class DayStore {
     public nonisolated static let fileName = "day.json"
+    public nonisolated static let chatFileName = "pal-chat.json"
+    /// Chat lines kept on the device (the sheet shows the last 10).
+    public nonisolated static let chatKeep = 30
 
     public private(set) var day: DayData
-    @ObservationIgnored private let persist: Bool
+    /// Pal's chat on this device, oldest first.
+    public private(set) var chat: [PalChatLine]
+    /// The last thing the "Sit with me" clock did (views can react to it).
+    public private(set) var sitEvent: SitEventStamp? = nil
+    /// Pal as the user built it — the name and talk style of what the store
+    /// says out loud ("Still with it?"). Home and Pal keep it current.
+    @ObservationIgnored public var pal = Appearance.Pal()
 
-    /// `persist: false` for previews and tests.
-    public init(day: DayData? = nil, persist: Bool = true) {
-        self.persist = persist
-        self.day = day ?? (persist ? SharedContainer.read(DayData.self, from: Self.fileName) : nil) ?? .starter
+    @ObservationIgnored private let fileURL: URL?
+    @ObservationIgnored private let chatURL: URL?
+    /// Check-in ids as last read from or written to disk: anything else on
+    /// disk was written by another process (a widget) and gets merged in.
+    @ObservationIgnored private var knownCheckinIDs: Set<UUID>
+    @ObservationIgnored private var sitClock: Task<Void, Never>? = nil
+    @ObservationIgnored private var widgetReload: Task<Void, Never>? = nil
+    @ObservationIgnored nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+    /// `persist: false` for previews, tests and the -NPMock screenshots
+    /// (nothing is read or written).
+    public convenience init(day: DayData? = nil, persist: Bool = true) {
+        self.init(day: day, fileURL: persist ? DayFile.url : nil, chatURL: persist ? DayStore.defaultChatURL() : nil)
     }
 
-    /// A check-in from the slider (with its level) or a button/widget (no level).
+    init(day: DayData?, fileURL: URL?, chatURL: URL?, now: Date = Date()) {
+        self.fileURL = fileURL
+        self.chatURL = chatURL
+        var d = day ?? fileURL.flatMap { DayFile.load(from: $0) } ?? .starter
+        let rolled = d.rollOver(now: now)
+        self.day = d
+        self.knownCheckinIDs = Set(d.checkins.map(\.id))
+        self.chat = chatURL.flatMap(Self.loadChat) ?? []
+        if fileURL == nil { applyLaunchDemo(now: now) }
+        if rolled { save() }
+        startSitClockIfNeeded()
+        observeApp()
+    }
+
+    deinit {
+        for o in observers { NotificationCenter.default.removeObserver(o) }
+    }
+
+    /// False for previews and mock screenshots.
+    public var isPersistent: Bool { fileURL != nil }
+
+    /// Where the slider knob rests (nil before the first check-in).
+    public var sliderLevel: Double? { day.sliderLevel }
+
+    // MARK: Check-ins
+
+    /// A check-in from the slider (with its level) or a button (no level).
     public func checkIn(_ state: NervousState, level: Double? = nil, at: Date = Date()) {
-        day.state = state
-        day.level = level ?? state.middleLevel
-        day.checkins.append(CheckIn(state: state, level: level, at: at))
-        save()
+        mutate { $0.recordCheckIn(state, level: level, at: at, now: Date()) }
     }
 
-    public func toggleTask(_ id: String) {
-        guard let i = day.tasks.firstIndex(where: { $0.id == id }) else { return }
-        day.tasks[i].done.toggle()
-        save()
+    // MARK: Minimum viable day
+
+    public func toggleTask(_ id: String) { mutate { $0.toggleTask(id) } }
+
+    public func setTask(_ id: String, done: Bool) { mutate { $0.setTask(id, done: done) } }
+
+    /// False when the title is empty or the day already holds five things.
+    @discardableResult
+    public func addTask(_ title: String) -> Bool {
+        var added = false
+        mutate { added = $0.addTask(title) }
+        return added
     }
 
-    public func update(_ change: (inout DayData) -> Void) {
-        change(&day)
-        save()
-    }
+    public func removeTask(_ id: String) { mutate { $0.removeTask(id) } }
+
+    public func renameTask(_ id: String, to title: String) { mutate { $0.renameTask(id, to: title) } }
+
+    // MARK: Anchors
+
+    /// Adds a new anchor or updates one with the same id.
+    public func saveAnchor(_ anchor: DayAnchor) { mutate { $0.saveAnchor(anchor) } }
+
+    public func removeAnchor(_ id: String) { mutate { $0.removeAnchor(id) } }
+
+    public func setAnchor(_ id: String, status: DayAnchor.Status) { mutate { $0.setAnchor(id, status: status) } }
 
     /// The next anchor still to come today, if any.
     public func nextAnchor(after now: Date = Date(), calendar: Calendar = .current) -> DayAnchor? {
-        let c = calendar.dateComponents([.hour, .minute], from: now)
-        let minutes = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-        return day.anchors
-            .filter { $0.status == .upcoming && $0.hour * 60 + $0.minute + $0.flexMinutes >= minutes }
-            .min { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
+        day.nextAnchor(now: now, calendar: calendar)
+    }
+
+    // MARK: Brain dump
+
+    @discardableResult
+    public func addDump(_ text: String) -> DumpItem? {
+        var item: DumpItem?
+        mutate { item = $0.addDump(text) }
+        return item
+    }
+
+    @discardableResult
+    public func removeDump(_ id: String) -> DumpItem? {
+        var item: DumpItem?
+        mutate { item = $0.removeDump(id) }
+        return item
+    }
+
+    public func restoreDump(_ item: DumpItem) { mutate { $0.restoreDump(item) } }
+
+    // MARK: Sit with me
+
+    @discardableResult
+    public func startSit(minutes: Int, label: String = "", taskID: String? = nil, anchorID: String? = nil) -> SitSession {
+        var d = day
+        d.rollOver(now: Date())
+        let s = d.startSit(minutes: minutes, label: label, taskID: taskID, anchorID: anchorID)
+        day = d
+        save()
+        sitClock?.cancel() // a clock left from an earlier block may be napping for 30 s
+        sitClock = nil
+        startSitClockIfNeeded()
+        return s
+    }
+
+    public func answerSitCheckIn(_ answer: SitSession.CheckIn) { mutate { $0.answerSitCheckIn(answer) } }
+
+    /// "I’m done" or "Stop": the block ends now; Pal offers to note it.
+    public func endSit() { mutate { $0.endSit(.done) } }
+
+    /// Over without a note ("Not now").
+    public func clearSit() { mutate { $0.clearSit() } }
+
+    public func saveSitNote(_ note: String) { mutate { $0.saveSitNote(note) } }
+
+    // MARK: Pal's chat
+
+    public func appendChat(_ line: PalChatLine) {
+        guard !line.text.isEmpty else { return }
+        chat.append(line)
+        if chat.count > Self.chatKeep { chat.removeFirst(chat.count - Self.chatKeep) }
+        saveChat()
+    }
+
+    public func clearChat() {
+        chat = []
+        saveChat()
+    }
+
+    // MARK: Anything else
+
+    public func update(_ change: (inout DayData) -> Void) { mutate(change) }
+
+    /// The app came back: adopt day.json (a widget may have written a
+    /// check-in meanwhile) and roll the day over if the date changed.
+    public func reloadFromDisk(now: Date = Date()) {
+        guard let url = fileURL, var disk = DayFile.load(from: url) else {
+            rollOverIfNeeded(now: now)
+            return
+        }
+        let rolled = disk.rollOver(now: now)
+        if disk != day { day = disk }
+        knownCheckinIDs = Set(disk.checkins.map(\.id))
+        if rolled { save() }
+        startSitClockIfNeeded()
+        tickSit(now: now)
+    }
+
+    /// Midnight passed while the app was open.
+    public func rollOverIfNeeded(now: Date = Date()) {
+        var d = day
+        guard d.rollOver(now: now) else { return }
+        day = d
+        save()
+    }
+
+    // MARK: - Saving
+
+    private func mutate(_ change: (inout DayData) -> Void) {
+        var d = day
+        d.rollOver(now: Date())
+        change(&d)
+        guard d != day else { return }
+        day = d
+        save()
     }
 
     private func save() {
-        guard persist else { return }
-        SharedContainer.write(day, to: Self.fileName)
+        guard let url = fileURL else { return }
+        // A widget may have written check-ins since we last touched the file:
+        // merge them in (same rule, same ids) instead of overwriting them.
+        if let disk = DayFile.load(from: url) {
+            let mine = Set(day.checkins.map(\.id))
+            let theirs = disk.checkins.filter { !knownCheckinIDs.contains($0.id) && !mine.contains($0.id) }
+            if !theirs.isEmpty {
+                var d = day
+                for c in theirs.sorted(by: { $0.at < $1.at }) { d.record(c) }
+                day = d
+            }
+        }
+        DayFile.save(day, to: url)
+        knownCheckinIDs = Set(day.checkins.map(\.id))
+        reloadWidgets()
     }
+
+    private func saveChat() {
+        guard let url = chatURL, let data = try? JSONEncoder.neuropal.encode(chat) else { return }
+        #if os(iOS)
+        try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        #else
+        try? data.write(to: url, options: [.atomic])
+        #endif
+    }
+
+    private nonisolated static func loadChat(_ url: URL) -> [PalChatLine]? {
+        guard let data = try? Data(contentsOf: url),
+              let lines = try? JSONDecoder.neuropal.decode([Lenient<PalChatLine>].self, from: data)
+        else { return nil }
+        return Array(lines.compactMap(\.value).suffix(chatKeep))
+    }
+
+    /// pal-chat.json in the app's own Application Support folder: the chat
+    /// never goes to the App Group (the widgets have no use for it).
+    private nonisolated static func defaultChatURL() -> URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "NeuroPal", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        return support.appending(path: chatFileName)
+    }
+
+    private func reloadWidgets() {
+        #if os(iOS) && canImport(WidgetKit)
+        widgetReload?.cancel()
+        widgetReload = Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        #endif
+    }
+
+    // MARK: - The "Sit with me" clock
+
+    private func startSitClockIfNeeded() {
+        guard day.sit != nil else {
+            sitClock?.cancel()
+            sitClock = nil
+            return
+        }
+        guard sitClock == nil else { return }
+        sitClock = Task { [weak self] in
+            while !Task.isCancelled {
+                let running = self?.day.sit?.isRunning ?? false
+                try? await Task.sleep(for: .seconds(running ? 1 : 30))
+                guard let self, !Task.isCancelled else { return }
+                self.tickSit(now: Date())
+                if self.day.sit == nil {
+                    self.sitClock = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func tickSit(now: Date) {
+        var d = day
+        guard let event = d.tickSit(now: now) else { return }
+        day = d
+        save()
+        sitEvent = SitEventStamp(event: event, at: now)
+        say(event)
+    }
+
+    /// VoiceOver hears the check-in and the end, wherever the user is.
+    private func say(_ event: SitEvent) {
+        let line: String
+        switch event {
+        case .checkInAsked: line = "\(pal.name): \(Tokens.palSay(pal, "sitCheck"))"
+        case .ended: line = "\(pal.name): \(Tokens.palSay(pal, "sitEnd"))"
+        case .forgotten: return
+        }
+        #if canImport(UIKit)
+        UIAccessibility.post(notification: .announcement, argument: line)
+        #else
+        _ = line
+        #endif
+    }
+
+    // MARK: - App lifecycle
+
+    private func observeApp() {
+        #if canImport(UIKit)
+        guard fileURL != nil else { return }
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil,
+                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reloadFromDisk() }
+        })
+        observers.append(center.addObserver(forName: UIApplication.significantTimeChangeNotification, object: nil,
+                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rollOverIfNeeded() }
+        })
+        #endif
+    }
+
+    // MARK: - Screenshots
+
+    /// Mock launches only (-NPMock 1, nothing persisted): optional launch
+    /// arguments that put the day in a state worth a screenshot.
+    ///   -NPCheckIn green|yellow|red   a check-in now (and two earlier today)
+    ///   -NPSitMinutes 25              a "Sit with me" block running for 6 min
+    ///   -NPPalChat 1 | crisis         a short chat with Pal (or one the safety net answered)
+    ///   -NPPalDump 1                  a few brain-dump lines
+    private func applyLaunchDemo(now: Date) {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: "NPCheckIn"), let state = NervousState(rawValue: raw) {
+            var d = day
+            let cal = Calendar.current
+            let morning = cal.date(bySettingHour: 8, minute: 5, second: 0, of: now) ?? now
+            let noon = cal.date(bySettingHour: 12, minute: 40, second: 0, of: now) ?? now
+            if morning < now { d.recordCheckIn(.green, level: 0.12, at: morning, now: now) }
+            if noon < now { d.recordCheckIn(.yellow, level: 0.46, at: noon, now: now) }
+            d.recordCheckIn(state, level: state.middleLevel + 0.03, at: now, now: now)
+            day = d
+        }
+        let minutes = defaults.integer(forKey: "NPSitMinutes")
+        if minutes > 0 {
+            var d = day
+            d.startSit(minutes: minutes, label: "Intro of the thesis", taskID: nil, now: now.addingTimeInterval(-6 * 60))
+            day = d
+        }
+        if defaults.bool(forKey: "NPPalDump") {
+            var d = day
+            d.addDump("Email the lab about the SPAD array time slot", now: now.addingTimeInterval(-3600))
+            d.addDump("Buy coffee filters", now: now.addingTimeInterval(-1800))
+            d.addDump("That idea about correlation imaging with two cameras", now: now.addingTimeInterval(-300))
+            day = d
+        }
+        if defaults.string(forKey: "NPPalChat") == "crisis" {
+            chat = [
+                PalChatLine(role: .user, text: "I don’t want to be here anymore", at: now.addingTimeInterval(-60)),
+                PalChatLine(role: .pal, text: PalLogic.crisisReply, at: now.addingTimeInterval(-59), crisis: true, local: true),
+            ]
+        } else if defaults.bool(forKey: "NPPalChat") {
+            chat = [
+                PalChatLine(role: .user, text: "Everything feels loud today and I can’t start the paper.",
+                            at: now.addingTimeInterval(-120)),
+                PalChatLine(role: .pal, text: "That sounds like a lot to hold at once. Want to pick just the next small "
+                                + "thing together? Opening the paper counts.", at: now.addingTimeInterval(-110)),
+            ]
+        }
+    }
+}
+
+/// One line of Pal's chat.
+public struct PalChatLine: Codable, Hashable, Sendable, Identifiable {
+    public enum Role: String, Codable, Sendable { case user, pal }
+
+    public var id: String
+    public var role: Role
+    public var text: String
+    public var at: Date
+    /// Pal's careful crisis answer: shows the calming steps and help lines.
+    public var crisis: Bool
+    /// Written on this device (the crisis answer or an offline line), not by the server.
+    public var local: Bool
+
+    public init(id: String = UUID().uuidString, role: Role, text: String, at: Date = Date(), crisis: Bool = false,
+                local: Bool = false) {
+        self.id = id
+        self.role = role
+        self.text = String(text.prefix(4000))
+        self.at = at
+        self.crisis = crisis
+        self.local = local
+    }
+}
+
+/// A "Sit with me" event with when it happened (so two equal events differ).
+public struct SitEventStamp: Equatable, Sendable {
+    public let event: SitEvent
+    public let at: Date
 }
