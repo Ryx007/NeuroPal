@@ -1,6 +1,7 @@
 "use client";
 // Pal: name, talk style (with a sample line), voice, and whether Pal points
-// you to people. Part of your look (appearance.pal), saved in this browser.
+// you to people. Part of your look (appearance.pal): saved in this browser
+// and, signed in, to your NeuroPal with the rest of the look (lookSync.ts).
 import { useId, useState, type FormEvent } from "react";
 import { useAppearance } from "@/components/AppearanceProvider";
 import { normalizeAppearance } from "@/lib/appearance";

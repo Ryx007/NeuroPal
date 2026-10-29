@@ -7,9 +7,12 @@
 //     settled feeling, not every key press); an older check-in joins the
 //     history in time order and leaves the current state alone
 //   - a new day un-ticks the minimum day and sets every anchor back to upcoming
-// Stored in localStorage; nothing here needs the server.
+// Stored in localStorage; nothing here needs the server. It belongs to the
+// signed-in account (owner.ts): written only while that account is signed
+// in, and cleared when its session ends (localData.ts).
 import { useEffect } from "react";
 import { createStoredValue, useStored } from "@/lib/store";
+import { personalOpen } from "./owner";
 
 export type NervousState = "green" | "yellow" | "red";
 
@@ -223,6 +226,8 @@ export const dayStore = createStoredValue<DayData>({
 });
 
 function update(fn: (d: DayData) => DayData) {
+  // A write after the session ended (a slider saving as Home closes) is dropped.
+  if (!personalOpen()) return;
   const now = new Date();
   dayStore.set(fn(rollover(dayStore.get(), now)));
 }
@@ -230,7 +235,7 @@ function update(fn: (d: DayData) => DayData) {
 /** Applies the day rollover if the date changed while the page was open. */
 export function ensureToday(now = new Date()) {
   const d = dayStore.get();
-  if (d.dayStamp !== stampOf(now)) dayStore.set(rollover(d, now));
+  if (d.dayStamp !== stampOf(now) && personalOpen()) dayStore.set(rollover(d, now));
 }
 
 /** Today's data; re-checks the date when the tab comes back into view. */

@@ -116,14 +116,15 @@ export function SettingsView() {
                   <h3 className="np-label">In this browser</h3>
                   <ul className={styles.list}>
                     <li>Your day: check-ins, anchors, the minimum viable day, the brain dump.</li>
-                    <li>Reading and keyboard settings, your look and your Pal.</li>
-                    <li>Talk messages: this tab only, or this device when you stay signed in. Signing out clears them.</li>
+                    <li>Talk messages: this tab only, or this device when you stay signed in.</li>
+                    <li>Signing out clears both, so the next person here sees none of it. Reading and keyboard settings and the look stay.</li>
                   </ul>
                 </div>
                 <div>
                   <h3 className="np-label">On your NeuroPal server{base ? ` (${hostOf(base)})` : ""}</h3>
                   <ul className={styles.list}>
                     <li>Your documents, reading progress and questions about them.</li>
+                    <li>Your look and your Pal’s settings, so every device shows the same.</li>
                     <li>A copy of your chat with Pal, until you clear it.</li>
                     <li>Questions and Talk messages are answered by the AI service your server uses. Nothing is sold, and there are no ads.</li>
                   </ul>

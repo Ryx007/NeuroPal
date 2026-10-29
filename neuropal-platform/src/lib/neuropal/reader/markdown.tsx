@@ -45,6 +45,24 @@ function findClosing(text: string, from: number, marker: string): number {
   return -1;
 }
 
+/**
+ * "Where is the next … at or after `from`?", remembered per kind. The parser
+ * only moves forward and each answer depends on the text alone, so an answer
+ * stays good until the scan passes it: a run of markers that never close
+ * ("[[[[…", "*a *a *a …", "<<<<…") costs one search in all, not one per
+ * marker. (An answer of 60 000 "[" once froze the tab for seconds.)
+ */
+function forwardSearches() {
+  const memo = new Map<string, { from: number; at: number }>();
+  return (kind: string, from: number, find: (from: number) => number): number => {
+    const m = memo.get(kind);
+    if (m && from >= m.from && (m.at < 0 || m.at >= from)) return m.at;
+    const at = find(from);
+    memo.set(kind, { from, at });
+    return at;
+  };
+}
+
 function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
   const out: ReactNode[] = [];
   let buf = "";
@@ -54,6 +72,21 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
     buf = "";
   };
   const k = () => `${key}.${n++}`;
+  const seek = forwardSearches();
+  const next = (s: string, from: number) => seek(s, from, (f) => text.indexOf(s, f));
+  // A closing * or _ for emphasis: not doubled, not after a space, and (for _) ending a word.
+  const emClose = (ch: string) => (from: number) => {
+    let end = from;
+    while (end < text.length) {
+      const j = findClosing(text, end, ch);
+      if (j < 0) return -1;
+      const doubled = text[j + 1] === ch || text[j - 1] === ch;
+      const okEnd = !/\s/.test(text[j - 1]) && (ch === "*" || j + 1 >= text.length || /[\s.,;:!?)\]}"'”’]/.test(text[j + 1]));
+      if (!doubled && okEnd) return j;
+      end = j + 1;
+    }
+    return -1;
+  };
   let i = 0;
   while (i < text.length) {
     const ch = text[i];
@@ -68,13 +101,17 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
       let ticks = 1;
       while (text[i + ticks] === "`") ticks++;
       const fence = "`".repeat(ticks);
-      const end = text.indexOf(fence, i + ticks);
+      const end = next(fence, i + ticks);
       if (end > i) {
         flush();
         out.push(<code key={k()}>{text.slice(i + ticks, end).trim()}</code>);
         i = end + ticks;
-        continue;
+      } else {
+        // No run of as many backticks follows: the whole run stays as typed.
+        buf += fence;
+        i += ticks;
       }
+      continue;
     }
 
     if (ch === "$" && text[i + 1] !== "$" && text[i + 1] && !/\s/.test(text[i + 1])) {
@@ -94,7 +131,7 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
 
     if (depth < MAX_DEPTH && (text.startsWith("**", i) || text.startsWith("__", i))) {
       const marker = text.slice(i, i + 2);
-      const end = findClosing(text, i + 2, marker);
+      const end = seek(`strong${marker}`, i + 2, (f) => findClosing(text, f, marker));
       if (end > i + 2) {
         flush();
         out.push(<strong key={k()}>{inline(text.slice(i + 2, end), opts, k(), depth + 1)}</strong>);
@@ -106,19 +143,7 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
     if (depth < MAX_DEPTH && (ch === "*" || ch === "_") && text[i + 1] && !/\s/.test(text[i + 1])) {
       const wordStart = ch === "*" || i === 0 || /[\s([{"'“‘]/.test(text[i - 1]);
       if (wordStart) {
-        let end = i + 1;
-        let found = -1;
-        while (end < text.length) {
-          const j = findClosing(text, end, ch);
-          if (j < 0) break;
-          const doubled = text[j + 1] === ch || text[j - 1] === ch;
-          const okEnd = !/\s/.test(text[j - 1]) && (ch === "*" || j + 1 >= text.length || /[\s.,;:!?)\]}"'”’]/.test(text[j + 1]));
-          if (!doubled && okEnd) {
-            found = j;
-            break;
-          }
-          end = j + 1;
-        }
+        const found = seek(`em${ch}`, i + 1, emClose(ch));
         if (found > i + 1) {
           flush();
           out.push(<em key={k()}>{inline(text.slice(i + 1, found), opts, k(), depth + 1)}</em>);
@@ -129,11 +154,11 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
     }
 
     if (ch === "[") {
-      const close = text.indexOf("]", i + 1);
+      const close = next("]", i + 1);
       if (close > i) {
         const label = text.slice(i + 1, close);
         if (text[close + 1] === "(") {
-          const end = text.indexOf(")", close + 2);
+          const end = next(")", close + 2);
           if (end > close) {
             const href = safeHref(text.slice(close + 2, end));
             flush();
@@ -177,8 +202,10 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
     }
 
     if (ch === "<") {
-      const end = text.indexOf(">", i + 1);
-      if (end > i) {
+      const end = next(">", i + 1);
+      const lt = next("<", i + 1);
+      // An autolink holds no "<" of its own, so each "<" looks at its own stretch only.
+      if (end > i && (lt < 0 || lt > end)) {
         const href = safeHref(text.slice(i + 1, end));
         if (href) {
           flush();
@@ -210,12 +237,23 @@ function inline(text: string, opts: Opts, key: string, depth = 0): ReactNode[] {
 
 // ---- blocks ---------------------------------------------------------------
 
+// No two unbounded runs of the same characters sit side by side in these
+// patterns, so a long line of spaces can't make them backtrack for seconds.
 const LIST_RE = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
-const FENCE_RE = /^\s*(```+|~~~+)\s*([\w+-]*)\s*$/;
-const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const FENCE_RE = /^\s*(```+|~~~+)\s*(?:[\w+-]+\s*)?$/;
+const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*)$/;
 const HR_RE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/;
 const QUOTE_RE = /^\s{0,3}>\s?(.*)$/;
-const TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+const TABLE_SEP_RE = /^\s*(?:\|\s*)?:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*(?:\|\s*)?$/;
+
+/** A heading's words: closing #s and the spaces around them go (by hand, not by a backtracking pattern). */
+function headingText(raw: string): string {
+  let end = raw.length;
+  while (end > 0 && /\s/.test(raw[end - 1])) end -= 1;
+  while (end > 0 && raw[end - 1] === "#") end -= 1;
+  while (end > 0 && /\s/.test(raw[end - 1])) end -= 1;
+  return raw.slice(0, end);
+}
 
 const indentOf = (line: string) => (/^\s*/.exec(line)?.[0].replace(/\t/g, "    ").length ?? 0);
 const isOrdered = (marker: string) => /\d/.test(marker);
@@ -322,8 +360,9 @@ function blocks(src: string, opts: Opts, key: string, depth = 0): ReactNode[] {
     const fence = FENCE_RE.exec(line);
     if (fence) {
       const body: string[] = [];
+      const closing = new RegExp(`^\\s*${fence[1][0] === "`" ? "`" : "~"}{${fence[1].length},}\\s*$`);
       let j = i + 1;
-      while (j < lines.length && !new RegExp(`^\\s*${fence[1][0] === "`" ? "`" : "~"}{${fence[1].length},}\\s*$`).test(lines[j])) {
+      while (j < lines.length && !closing.test(lines[j])) {
         body.push(lines[j]);
         j += 1;
       }
@@ -363,7 +402,7 @@ function blocks(src: string, opts: Opts, key: string, depth = 0): ReactNode[] {
 
     const heading = HEADING_RE.exec(line);
     if (heading) {
-      out.push(<h3 key={k()}>{inline(heading[2], opts, k())}</h3>);
+      out.push(<h3 key={k()}>{inline(headingText(heading[2]), opts, k())}</h3>);
       i += 1;
       continue;
     }
@@ -452,16 +491,20 @@ export function Markdown({ text, className, ...opts }: MarkdownProps) {
   return <div className={className}>{blocks(src, opts, "md")}</div>;
 }
 
-/** The answer as plain text (for copying). */
+/**
+ * The answer as plain text (for copying, and the screen-reader summary).
+ * Every pattern stops at the next bracket or line, so it stays linear on
+ * any answer.
+ */
 export function markdownToPlain(text: string): string {
   return String(text ?? "")
     .replace(/\r\n?/g, "\n")
-    .replace(/^\s*```.*$/gm, "")
+    .replace(/^[ \t]*```.*$/gm, "")
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/__(.+?)__/g, "$1")
     .replace(/(^|[\s(])\*(\S.*?)\*/g, "$1$2")
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, "$1 ($2)")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\[([^[\]]+)\]\((https?:[^)\n[\]]+)\)/g, "$1 ($2)")
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "")
     .trim();
 }

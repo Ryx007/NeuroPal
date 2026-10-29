@@ -7,6 +7,9 @@
 // the browser is offline or the server can't be reached, keyboard shortcuts
 // (with a "?" list and an off switch), the screen-reader announcer, the
 // "Sit with me" watcher, and the session check that keeps the token fresh.
+// The signed-in account's personal things (lib/neuropal/localData.ts) show
+// only once they are that account's, and the look follows the account
+// (lib/neuropal/lookSync.ts).
 // The bottom bar's height is published on <html> as --np-app-bottom-bar
 // (0px on wide screens) so docked players and sheets can sit above it.
 import Link from "next/link";
@@ -18,10 +21,12 @@ import { hostOf } from "@/lib/api";
 import { refreshSession } from "@/lib/neuropal/account";
 import { currentSession } from "@/lib/neuropal/client";
 import { checkServer, useConnection } from "@/lib/neuropal/connection";
+import { claimLocalData } from "@/lib/neuropal/localData";
 import { normalizePal, palSay } from "@/lib/neuropal/look";
+import { startLookSync } from "@/lib/neuropal/lookSync";
 import { tickSit, useSit } from "@/lib/neuropal/palState";
 import { setPrefs, usePrefs } from "@/lib/neuropal/prefs";
-import { displayName, useAppSession } from "@/lib/neuropal/session";
+import { displayName, useAppSession, useLocalData } from "@/lib/neuropal/session";
 import { announce } from "./common/announce";
 import { Announcer } from "./common/Announcer";
 import { BOTTOM_BAR_VAR, rememberPath, ROUTES, SHORTCUTS_EVENT } from "./common/appNav";
@@ -51,13 +56,18 @@ let lastChecked: string | null = null;
 export function AppShell({ children }: { children: ReactNode }) {
   const path = norm(usePathname() || "/app");
   const router = useRouter();
-  const { ready, signedIn, user, base, local } = useAppSession();
+  const { ready, signedIn, user, base, local, account } = useAppSession();
+  const localData = useLocalData(account);
   const prefs = usePrefs();
   const [helpOpen, setHelpOpen] = useState(false);
   const [goPending, setGoPending] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const calm = path === norm(ROUTES.calm);
   const gate = ready && !signedIn && !calm;
+
+  // The look follows the signed-in account, both ways. Never on the calming
+  // steps (no network there); a change still waiting goes up on the next page.
+  useEffect(() => (calm ? undefined : startLookSync()), [calm]);
 
   // Publish the bottom bar's height (before paint, and again whenever it
   // changes: a rotation, larger text, the safe area) for anything docked
@@ -249,7 +259,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={styles.content}>
         <ConnectionNotice signedIn={ready && signedIn} base={base} />
         <main id="app-main" tabIndex={-1} className={styles.main} data-route={path.split("/")[2] || "home"}>
-          {!ready ? null : signedIn || calm ? children : <SignIn />}
+          {!ready ? null : calm ? (
+            children
+          ) : !signedIn ? (
+            <SignIn />
+          ) : localData === "ok" ? (
+            children
+          ) : localData === "elsewhere" && account ? (
+            <OtherAccountHere account={account} />
+          ) : null}
         </main>
       </div>
 
@@ -263,6 +281,32 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SitWatcher />
       <Announcer />
     </div>
+  );
+}
+
+// ---- another account took this browser, in another tab ------------------------------
+
+// This browser keeps one account's day, chat and notes at a time. When an
+// account signs in in another tab, this tab stops showing them (they are
+// that account's now) until the person here chooses to continue.
+function OtherAccountHere({ account }: { account: string }) {
+  const id = useId();
+  return (
+    <section className={`np-panel ${styles.elsewhere}`} aria-labelledby={`${id}-title`}>
+      <h1 id={`${id}-title`} className={`np-display ${styles.elsewhereTitle}`}>
+        Another account is open in this browser
+      </h1>
+      <p>
+        Someone signed in with a different account in another tab. This browser keeps one account’s day, chat and notes at a time, so
+        yours were cleared from it, and nothing personal is shown here.
+      </p>
+      <p>Continue here to use NeuroPal as you. The other account’s things are cleared from this browser first, and its tab will show this message.</p>
+      <div>
+        <button type="button" className="np-btn" onClick={() => claimLocalData(account)}>
+          Continue here
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -2,7 +2,7 @@
 // QA for the Library, the Reader (text, original pages, EPUB) and Ask.
 //   1. a dev API (real backend, fake AI):  node scripts/qa/dev-api.cjs 4420
 //   2. the dev server:  NP_DIST_DIR=.next-web-reader npx next dev -p 4320
-//   3. node scripts/qa/web-reader.mjs [--web http://localhost:4320] [--api http://127.0.0.1:4420] [--out <dir>] [--only library,reader,ask,epub,pages]
+//   3. node scripts/qa/web-reader.mjs [--web http://localhost:4320] [--api http://127.0.0.1:4420] [--out <dir>] [--only library,reader,ask,epub,pages,states,accounts,tickets]
 // Visits every screen and state at 1440×900 and 390×844 in both skins, saves
 // screenshots, runs axe (any violation fails, the EPUB frame included), fails
 // on console errors, and checks what matters: resume, karaoke from a clicked
@@ -94,6 +94,68 @@ function samplePdf() {
   for (let i = 1; i < objs.length; i++) out += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
   out += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, "latin1");
+}
+
+// ---- a small EPUB (a stored ZIP: two chapters and a stylesheet) ------------------------
+function crc32(buf) {
+  let crc = 0xffffffff;
+  for (const byte of buf) {
+    crc ^= byte;
+    for (let k = 0; k < 8; k++) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function storedZip(files) {
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  for (const [entry, text] of files) {
+    const name = Buffer.from(entry);
+    const data = Buffer.from(text);
+    const crc = crc32(data);
+    const head = Buffer.alloc(30);
+    head.writeUInt32LE(0x04034b50, 0);
+    head.writeUInt16LE(20, 4);
+    head.writeUInt32LE(crc, 14);
+    head.writeUInt32LE(data.length, 18);
+    head.writeUInt32LE(data.length, 22);
+    head.writeUInt16LE(name.length, 26);
+    parts.push(head, name, data);
+    const dir = Buffer.alloc(46);
+    dir.writeUInt32LE(0x02014b50, 0);
+    dir.writeUInt16LE(20, 4);
+    dir.writeUInt16LE(20, 6);
+    dir.writeUInt32LE(crc, 16);
+    dir.writeUInt32LE(data.length, 20);
+    dir.writeUInt32LE(data.length, 24);
+    dir.writeUInt16LE(name.length, 28);
+    dir.writeUInt32LE(offset, 42);
+    central.push(dir, name);
+    offset += head.length + name.length + data.length;
+  }
+  const dir = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(dir.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, dir, end]);
+}
+
+function sampleEpub() {
+  const page = (title, text) =>
+    `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${title}</title><link rel="stylesheet" href="style.css"/></head><body><h1>${title}</h1><p>${text}</p></body></html>`;
+  return storedZip([
+    ["mimetype", "application/epub+zip"],
+    ["META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'],
+    ["OEBPS/content.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata/><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="ch2.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>'],
+    ["OEBPS/nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">1. Tickets</a></li><li><a href="ch2.xhtml">2. Fresh ones</a></li></ol></nav></body></html>'],
+    ["OEBPS/ch1.xhtml", page("1. Tickets", "A reading pass for one document, valid for a while.")],
+    ["OEBPS/ch2.xhtml", page("2. Fresh ones", "A new password means new passes.")],
+    ["OEBPS/style.css", "body{line-height:1.5}"],
+  ]);
 }
 
 // ---- a fake speech engine for headless Chromium ---------------------------------------
@@ -613,6 +675,123 @@ try {
       await context.close();
     }
   }
+  // --------------------------------------------------- uploads across accounts --
+  // Files still uploading or waiting when one account signs out never go into
+  // the next account's library, and none of their names show there.
+  if (want("accounts")) {
+    const vp = VIEWPORTS[0];
+    const skin = SKINS[0];
+    const tag = `${vp.name}-${skin.name}`;
+    console.log(`\n— uploads across a sign-out @ ${tag}`);
+    const errors = [];
+    const email = "qa-uli@example.com";
+    const password = "qa-uli-password";
+    let r = await fetch(`${API}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+    if (r.status === 401) {
+      r = await fetch(`${API}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, name: "Uli", inviteCode: "np-dev" }) });
+    }
+    if (!r.ok) throw new Error(`${email}: sign-in failed (${r.status})`);
+    const uli = await r.json();
+    const context = await newContext(browser, vp, skin, session);
+    const page = await open(context, "/app/library/", errors);
+    const appNav = (name) => page.getByRole("navigation", { name: "App" }).getByRole("link", { name, exact: true }).click();
+    try {
+      await page.getByRole("heading", { level: 1, name: "Library" }).waitFor();
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Network.enable");
+      await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 40, downloadThroughput: 4e6, uploadThroughput: 48 * 1024 });
+      const stamp = Date.now().toString(36);
+      const names = ["one", "two", "three"].map((n) => `queued-${n}-${stamp}`);
+      const body = Buffer.from("Photon counting notes, kept for later.\n\n".repeat(36000));
+      await page.locator('input[type="file"]').setInputFiles(names.map((n) => ({ name: `${n}.txt`, mimeType: "text/plain", buffer: body })));
+      await page.getByText(/Uploading · \d+% of/).first().waitFor({ timeout: 10000 });
+      check((await page.getByText("Waiting to upload").count()) === 1, "uploads: two go up while one waits", "uploads: no file is waiting");
+      // Sign out in the app (the queue's page stays loaded), mid-upload.
+      await appNav("Settings");
+      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await page.getByRole("heading", { level: 1, name: "Welcome back" }).waitFor({ timeout: 10000 });
+      check(
+        (await page.getByText(/3 uploads that hadn’t finished were stopped/).count()) > 0,
+        "uploads: the sign-in screen says the unfinished uploads were stopped",
+        "uploads: no note about the stopped uploads",
+      );
+      await shot(page, `signin-uploads-stopped-${tag}`);
+      // Uli signs in on the same tab, and the network is fast again.
+      await page.getByLabel("Email").fill(email);
+      await page.getByLabel("Password", { exact: true }).fill(password);
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await page.getByRole("heading", { level: 1, name: "Settings" }).waitFor({ timeout: 10000 });
+      await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+      await appNav("Library");
+      await page.getByRole("heading", { level: 1, name: "Library" }).waitFor();
+      await page.waitForTimeout(5000);
+      const shown = await page.evaluate((list) => list.filter((n) => document.body.innerText.includes(n)), names);
+      check(shown.length === 0, "uploads: none of the earlier files are listed for the next account", `uploads: shown to Uli: ${shown.join(", ")}`);
+      const uliDocs = await api("/documents", { token: uli.token });
+      const landed = uliDocs.filter((d) => names.some((n) => String(d.title).includes(n)));
+      check(landed.length === 0, "uploads: nothing queued before the sign-out went into the next account’s library", `uploads: went into Uli’s library: ${landed.map((d) => d.title).join(", ")}`);
+      const mine = (await api("/documents", { token })).filter((d) => names.some((n) => String(d.title).includes(n)));
+      check(mine.length === 0, "uploads: the stopped uploads didn’t finish into the first account’s library either", `uploads: still landed for Ryx: ${mine.map((d) => d.title).join(", ")}`);
+      await axe(page, `library after the account changed ${tag}`);
+    } catch (e) {
+      fail(`uploads across a sign-out: ${String(e).split("\n")[0]}`);
+      await page.screenshot({ path: `${OUT}/FAILED-uploads-accounts.png` }).catch(() => undefined);
+    }
+    const real = errors.filter((e) => !/Download the React DevTools|\[HMR\]|\[Fast Refresh\]/.test(e));
+    if (real.length) fail(`console errors uploads across a sign-out: ${real.slice(0, 6).join(" | ")}`);
+    else pass("no console errors uploads across a sign-out");
+    await page.close();
+    await context.close();
+  }
+
+  // ------------------------------------------------ tickets after a password change --
+  // A password changed in this tab makes the book's old reading passes
+  // useless: the reader asks for fresh ones and the book still opens.
+  if (want("tickets")) {
+    const vp = VIEWPORTS[0];
+    const skin = SKINS[0];
+    console.log(`\n— an EPUB after a password change @ ${vp.name}-${skin.name}`);
+    const errors = [];
+    const email = `qa-epub-${Date.now().toString(36)}@example.com`;
+    const password = "qa-epub-password-1";
+    const reg = await fetch(`${API}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, name: "Eve", inviteCode: "np-dev" }) });
+    if (!reg.ok) throw new Error(`${email}: couldn't create the account (${reg.status})`);
+    const eve = await reg.json();
+    const book = new FormData();
+    book.append("file", new Blob([sampleEpub()], { type: "application/epub+zip" }), "tickets.epub");
+    const up = await api("/documents/upload", { token: eve.token, method: "POST", form: book });
+    const context = await newContext(browser, vp, skin, { token: eve.token, base: API, user: { id: eve.user?.id, email, name: "Eve" } });
+    const page = await open(context, `/app/read/?doc=${up._id}`, errors);
+    const chapterShows = async (n) => {
+      await page.locator(`iframe[title^="Chapter ${n} of 2"]`).waitFor({ timeout: 10000 });
+      await page.frameLocator(`iframe[title^="Chapter ${n} of 2"]`).locator("h1").waitFor({ timeout: 10000 });
+    };
+    try {
+      await chapterShows(1);
+      pass("the book opens with a reading pass");
+      await page.getByRole("navigation", { name: "App" }).getByRole("link", { name: "Settings", exact: true }).click();
+      await page.getByRole("button", { name: "Change password" }).click();
+      await page.getByLabel("Current password").fill(password);
+      await page.getByLabel("New password").fill(`${password}-new`);
+      await page.getByRole("button", { name: "Save new password" }).click();
+      await page.getByText("Password changed. Every other device was signed out.").waitFor({ timeout: 10000 });
+      await page.goBack();
+      await chapterShows(1);
+      check((await page.getByText(/This chapter couldn’t be loaded/).count()) === 0, "after a password change in this tab, the book opens again", "after a password change, the chapter didn't load");
+      await page.getByRole("button", { name: "Next chapter" }).click();
+      await chapterShows(2);
+      pass("…and turning the page works with the fresh pass");
+    } catch (e) {
+      fail(`an EPUB after a password change: ${String(e).split("\n")[0]}`);
+      await page.screenshot({ path: `${OUT}/FAILED-epub-password.png` }).catch(() => undefined);
+    }
+    const real = errors.filter((e) => !/Download the React DevTools|\[HMR\]|\[Fast Refresh\]/.test(e));
+    if (real.length) fail(`console errors an EPUB after a password change: ${real.slice(0, 6).join(" | ")}`);
+    else pass("no console errors an EPUB after a password change");
+    await page.close();
+    await context.close();
+  }
+
   // Leave the dev library as it was: remove what this run added.
   for (const d of await api("/documents", { token })) if (!known.has(d._id)) created.add(d._id);
   for (const id of created) await api(`/documents/${id}`, { token, method: "DELETE" }).catch(() => undefined);

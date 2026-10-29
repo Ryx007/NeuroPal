@@ -2,12 +2,15 @@
 // QA for the web app's shell, Home, calming steps, Pal and Settings.
 //   1. a dev API (real backend, fake AI):  node scripts/qa/dev-api.cjs 4410
 //   2. the dev server:  NP_DIST_DIR=.next-web-shell npx next dev -p 4310
-//   3. node scripts/qa/web-shell.mjs [--web http://localhost:4310] [--api http://127.0.0.1:4410] [--out <dir>] [--only home,pal]
+//   3. node scripts/qa/web-shell.mjs [--web http://localhost:4310] [--api http://127.0.0.1:4410] [--out <dir>] [--only home,pal,behaviour,accounts,look]
 // Visits every screen and state at 1440×900 and 390×844 in both skins, saves
 // screenshots, runs axe (any violation fails), fails on console errors, and
 // checks the behaviour that matters: sign-in errors, the slider's keys, the
 // shortcuts, the crisis check (a crisis-sounding message is never sent), the
-// offline notice, the bottom bar's published height and 200% text.
+// offline notice, the bottom bar's published height and 200% text; that one
+// account's chat, brain dump and check-ins never show to the next account on
+// the same browser (sign-out, a 401, two tabs); and that the look follows the
+// account both ways (accounts qa-*@example.com, made on the dev API).
 import AxeBuilderModule from "@axe-core/playwright";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
@@ -661,6 +664,278 @@ async function behaviour(browser, session) {
   }
 }
 
+// ---- accounts on one browser -----------------------------------------------------------
+
+// Signs in through the API, creating the account the first time (the dev
+// API's invite code), for checks that need more than one account.
+async function account(email, password, name) {
+  const post = async (path, body) => {
+    for (let attempt = 0; ; attempt += 1) {
+      const r = await fetch(`${API}/api/auth/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const wait = Number(r.headers.get("Retry-After"));
+      if (r.status !== 429 || !wait || wait > 900 || attempt) return r;
+      console.log(`(the server limits sign-ins: waiting ${wait} s)`);
+      await new Promise((res) => setTimeout(res, (wait + 1) * 1000));
+    }
+  };
+  let r = await post("login", { email, password });
+  if (r.status === 401) r = await post("register", { email, password, name, inviteCode: "np-dev" });
+  if (!r.ok) throw new Error(`${email}: sign-in failed (${r.status})`);
+  const j = await r.json();
+  return { email, password, token: j.token, session: { token: j.token, base: API, user: { id: j.user?.id, email: j.user?.email, name: j.user?.name } } };
+}
+
+async function apiJson(path, token, { method = "GET", json } = {}) {
+  const headers = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (json !== undefined) headers["Content-Type"] = "application/json";
+  const r = await fetch(`${API}/api${path}`, { method, headers, body: json === undefined ? undefined : JSON.stringify(json) });
+  const text = await r.text();
+  return { status: r.status, data: text ? JSON.parse(text) : null };
+}
+
+async function poll(fn, ms) {
+  const until = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v || Date.now() > until) return v;
+    await new Promise((res) => setTimeout(res, 300));
+  }
+}
+
+// Everything this tab's storage holds (both areas), and today's check-ins.
+const held = (page) =>
+  page.evaluate(() => {
+    const lines = [];
+    for (const area of [localStorage, sessionStorage]) {
+      for (let i = 0; i < area.length; i += 1) lines.push(`${area.key(i)}=${area.getItem(area.key(i))}`);
+    }
+    let checkins = 0;
+    try {
+      checkins = JSON.parse(localStorage.getItem("np.app.day.v1") || "{}").checkins?.length ?? 0;
+    } catch {
+      checkins = -1;
+    }
+    return { text: lines.join("\n"), checkins };
+  });
+
+async function signInUI(page, who) {
+  await page.getByLabel("Email").fill(who.email);
+  await page.getByLabel("Password", { exact: true }).fill(who.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+}
+
+// Client-side navigation (this tab's in-memory state stays), then wait for the page.
+const ROUTE_OF = { Home: "/app/", Library: "/app/library/", Pal: "/app/pal/", Settings: "/app/settings/" };
+async function nav(page, name) {
+  await page.getByRole("navigation", { name: "App" }).getByRole("link", { name, exact: true }).click();
+  await page.waitForURL((u) => new URL(u).pathname === ROUTE_OF[name], { timeout: 10000 });
+}
+
+async function accounts(browser) {
+  console.log("\naccounts on one browser");
+  // Sign out, and a session that ends by itself (a 401 after "Sign out
+  // everywhere" on another device), clear this browser's personal things:
+  // the next account sees none of the last one's chat, brain dump or check-ins.
+  const runs = [
+    { how: "sign-out", vp: VIEWPORTS[0], skin: SKINS[0] },
+    { how: "401", vp: VIEWPORTS[1], skin: SKINS[1] },
+  ];
+  for (const { how, vp, skin } of runs) {
+    const label = `${how} @${vp.name} ${skin.name}`;
+    const ada = await account("qa-ada@example.com", "qa-ada-password", "Ada");
+    const bea = await account("qa-bea@example.com", "qa-bea-password", "Bea");
+    const ctx = await context(browser, vp, skin, { signedIn: true, session: ada.session, day: null });
+    const { page, errors } = await open(ctx, "/app/pal/?tool=talk");
+    try {
+      const mark = `${how.replace(/\W/g, "")}${Date.now().toString(36)}`;
+      const talk = page.getByLabel("Message to Pal");
+      await talk.fill(`Ada asks ${mark}`);
+      await talk.press("Enter");
+      await page.getByRole("list", { name: "Chat with Pal" }).getByText(/That sounds like a lot/).waitFor({ timeout: 15000 });
+      await page.getByRole("tab", { name: /^Brain dump/ }).click();
+      const dump = page.getByLabel("A thought, a worry, a to-do");
+      await dump.fill(`Ada dumps ${mark}`);
+      await dump.press("Enter");
+      await page.getByText(`Ada dumps ${mark}`, { exact: true }).waitFor();
+      await nav(page, "Home");
+      const slider = page.getByRole("slider");
+      await slider.waitFor();
+      await slider.focus();
+      await page.keyboard.press("End");
+      await page.waitForTimeout(1400);
+      const before = await held(page);
+      check(
+        before.text.includes(`Ada asks ${mark}`) && before.text.includes(`Ada dumps ${mark}`) && before.checkins > 0,
+        `${label}: Ada’s chat, brain dump and check-in are kept while she is signed in`,
+        `${label}: Ada’s things weren't kept (${before.checkins} check-ins)`,
+      );
+
+      if (how === "sign-out") {
+        await nav(page, "Settings");
+        await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      } else {
+        await apiJson("/auth/logout-all", ada.token, { method: "POST" });
+        await nav(page, "Library"); // its first request now gets a 401
+      }
+      await page.getByRole("heading", { level: 1, name: "Welcome back" }).waitFor({ timeout: 10000 });
+      const note = how === "sign-out" ? /^Signed out\. Pal’s chat and your day/ : /^Your session ended, so you’re signed out here\. Pal’s chat and your day/;
+      check(await shows(page.getByText(note)), `${label}: the sign-in screen says what happened`, `${label}: no note about how the session ended`);
+      await shot(page, `signin-after-${how}-${vp.name}-${skin.name}`);
+      await axe(page, `sign-in after ${label}`);
+      const gone = await held(page);
+      check(
+        !gone.text.includes(mark) && gone.checkins === 0 && !/np\.app\.owner/.test(gone.text) && !/np\.session/.test(gone.text),
+        `${label}: nothing of Ada’s is left in this browser`,
+        `${label}: still stored: ${gone.text.split("\n").filter((l) => l.includes(mark) || /owner|np\.session/.test(l)).join(" | ").slice(0, 240)}`,
+      );
+
+      // Bea signs in on the same tab.
+      await signInUI(page, bea);
+      await page.getByRole("heading", { level: 1, name: "Welcome back" }).waitFor({ state: "detached", timeout: 10000 });
+      await nav(page, "Home");
+      await page.getByRole("slider").waitFor({ timeout: 10000 });
+      const vt = await page.getByRole("slider").getAttribute("aria-valuetext");
+      check(vt === "Not checked in yet", `${label}: Bea’s Home has no check-in`, `${label}: Bea’s Home shows a check-in (“${vt}”)`);
+      await nav(page, "Pal");
+      await page.getByRole("tab", { name: /^Talk/ }).click();
+      const chat = page.getByRole("list", { name: "Chat with Pal" });
+      await chat.waitFor();
+      check(
+        (await chat.getByText(mark).count()) === 0 && (await shows(chat.getByText("No messages yet."))),
+        `${label}: Bea’s Talk shows none of Ada’s chat`,
+        `${label}: Ada’s chat shows to Bea`,
+      );
+      await page.getByRole("tab", { name: /^Brain dump/ }).click();
+      await page.getByLabel("A thought, a worry, a to-do").waitFor();
+      check((await page.getByText(`Ada dumps ${mark}`).count()) === 0, `${label}: Bea’s brain dump has none of Ada’s`, `${label}: Ada’s brain dump shows to Bea`);
+      const after = await held(page);
+      check(!after.text.includes(mark) && after.checkins === 0, `${label}: nothing of Ada’s is stored for Bea`, `${label}: Ada’s things came back for Bea`);
+      checkErrors(errors.filter((e) => !/401|Failed to load resource/.test(e)), label);
+    } catch (e) {
+      fail(`${label}: ${String(e).split("\n")[0]}`);
+      await page.screenshot({ path: `${OUT}/FAILED-accounts-${how}.png` }).catch(() => undefined);
+    }
+    await ctx.close();
+  }
+
+  // Two accounts in two tabs of one browser: the later sign-in takes this
+  // browser's personal things; the other tab shows nothing personal until
+  // its person chooses to continue there.
+  {
+    const vp = VIEWPORTS[0];
+    const skin = SKINS[0];
+    const ada = await account("qa-ada@example.com", "qa-ada-password", "Ada");
+    const bea = await account("qa-bea@example.com", "qa-bea-password", "Bea");
+    const ctx = await browser.newContext({ viewport: vp.size, reducedMotion: "no-preference" });
+    await ctx.addInitScript(
+      ({ api, look }) => {
+        if (sessionStorage.getItem("__qa")) return;
+        sessionStorage.setItem("__qa", "1");
+        localStorage.setItem("np.apiBase", api);
+        localStorage.setItem("np.appearance.v1", JSON.stringify(look));
+      },
+      { api: API, look: skin.look },
+    );
+    const errors = [];
+    const tab = async (who, path) => {
+      const page = await ctx.newPage();
+      page.on("pageerror", (e) => errors.push(String(e)));
+      page.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+      await page.goto(`${WEB}${path}`, { waitUntil: "networkidle" });
+      await page.evaluate((s) => sessionStorage.setItem("np.session", JSON.stringify(s)), who.session);
+      await page.reload({ waitUntil: "networkidle" });
+      return page;
+    };
+    try {
+      const one = await tab(ada, "/app/pal/?tool=dump");
+      const field = one.getByLabel("A thought, a worry, a to-do");
+      await field.fill("Ada in tab one");
+      await field.press("Enter");
+      await one.getByText("Ada in tab one", { exact: true }).waitFor();
+      const two = await tab(bea, "/app/");
+      await two.getByRole("slider").waitFor({ timeout: 10000 });
+      const heading = (p) => p.getByRole("heading", { level: 1, name: "Another account is open in this browser" });
+      check(await shows(heading(one)), "two tabs: the earlier tab steps back when another account signs in", "two tabs: the earlier tab still shows its things");
+      check((await one.getByText("Ada in tab one").count()) === 0, "two tabs: nothing personal shows in the earlier tab", "two tabs: Ada’s note still shows");
+      await one.bringToFront();
+      await shot(one, "another-account-1440-signal");
+      await axe(one, "another account in another tab");
+      await one.getByRole("button", { name: "Continue here" }).click();
+      check(await shows(one.getByLabel("A thought, a worry, a to-do")), "two tabs: Continue here shows Pal again in tab one", "two tabs: Continue here didn't bring the app back");
+      check(await shows(heading(two)), "…and the other tab steps back instead", "two tabs: the other tab didn't step back");
+      checkErrors(errors, "two tabs");
+    } catch (e) {
+      fail(`two tabs: ${String(e).split("\n")[0]}`);
+    }
+    await ctx.close();
+  }
+}
+
+// ---- the look follows the account ------------------------------------------------------
+
+async function lookSync(browser) {
+  console.log("\nthe look follows the account");
+  const vp = VIEWPORTS[0];
+  const skin = SKINS[0];
+  const cy = await account("qa-cy@example.com", "qa-cy-password", "Cy");
+  const saved = { skin: "classic", classic: { theme: "sepia", accent: "green" }, pal: { name: "Moss", talk: "Direct" }, updatedAt: new Date().toISOString() };
+  const put = await apiJson("/me/appearance", cy.token, { method: "PUT", json: { appearance: saved } });
+  if (put.status !== 200) throw new Error(`couldn't save a look for the check (${put.status})`);
+  const ctx = await context(browser, vp, skin, { signedIn: false, session: cy.session, day: null });
+  const { page, errors } = await open(ctx, "/app/settings/");
+  const theme = () => page.evaluate(() => `${document.documentElement.dataset.skin}/${document.documentElement.dataset.theme}`);
+  const themeIs = (want) => page.waitForFunction((w) => `${document.documentElement.dataset.skin}/${document.documentElement.dataset.theme}` === w, want, { timeout: 8000 }).then(() => true, () => false);
+  const server = async () => (await apiJson("/me/appearance", cy.token)).data?.appearance ?? null;
+  const pick = (name) => page.getByRole("group", { name: "Theme" }).getByRole("button", { name, exact: true }).click();
+  try {
+    await signInUI(page, cy);
+    await page.getByRole("heading", { level: 1, name: "Settings" }).waitFor({ timeout: 10000 });
+    check(await themeIs("classic/sepia"), "a look saved on the server shows after signing in (Classic, Sepia)", `the server’s look didn't show (${await theme()})`);
+    const name = page.locator("section#pal").getByLabel("Name");
+    check((await name.inputValue()) === "Moss", "…with Pal’s name from the server (Moss)", `Pal is called “${await name.inputValue()}”, not Moss`);
+    await shot(page, "settings-look-synced-1440-signal");
+
+    // A change here reaches the server about a second later, Pal's name too.
+    await pick("Light");
+    await name.fill("Fern");
+    await name.press("Enter");
+    const up = await poll(async () => {
+      const a = await server();
+      return a?.classic?.theme === "light" && a?.pal?.name === "Fern" && a?.pal?.talk === "Direct";
+    }, 8000);
+    check(up, "a change in the app reaches the server (Light, Pal called Fern)", `the change didn't reach the server (${JSON.stringify((await server())?.classic)})`);
+
+    // 409: the server holds a newer copy, so this browser takes it.
+    const stored = { ...saved, classic: { theme: "dark", accent: "cyan" }, pal: { name: "Moss", talk: "Nerdy" }, updatedAt: new Date(Date.now() + 1000).toISOString() };
+    await page.route(`${API}/api/me/appearance`, (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 409, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ error: "stale appearance", appearance: stored }) })
+        : route.continue(),
+    );
+    await pick("Sepia");
+    check(await themeIs("classic/dark"), "409: the newer copy from the server is taken (Dark)", `409: the stored copy wasn't taken (${await theme()})`);
+    await page.unroute(`${API}/api/me/appearance`);
+
+    // Offline: the change waits here, and goes up on the next load.
+    await page.route(`${API}/api/me/appearance`, (route) => route.abort("internetdisconnected"));
+    await pick("Sepia");
+    await page.waitForTimeout(2500);
+    check((await server())?.classic?.theme === "light", "offline: the change waits in this browser", `offline: the server changed anyway (${(await server())?.classic?.theme})`);
+    await page.unroute(`${API}/api/me/appearance`);
+    await page.reload({ waitUntil: "networkidle" });
+    const later = await poll(async () => (await server())?.classic?.theme === "sepia", 8000);
+    check(later, "…and goes up on the next load", `after the reload the server has ${(await server())?.classic?.theme}`);
+    checkErrors(errors.filter((e) => !/Failed to load resource|ERR_INTERNET_DISCONNECTED/.test(e)), "look sync");
+  } catch (e) {
+    fail(`look sync: ${String(e).split("\n")[0]}`);
+    await page.screenshot({ path: `${OUT}/FAILED-look-sync.png` }).catch(() => undefined);
+  }
+  await ctx.close();
+}
+
 // ---- run -------------------------------------------------------------------------------------
 
 const browser = await chromium.launch({ args: ["--use-gl=swiftshader"] });
@@ -690,6 +965,8 @@ try {
     }
   }
   if (!ONLY.length || ONLY.includes("behaviour")) await behaviour(browser, session);
+  if (!ONLY.length || ONLY.includes("accounts")) await accounts(browser);
+  if (!ONLY.length || ONLY.includes("look")) await lookSync(browser);
 } finally {
   await browser.close();
 }

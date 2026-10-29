@@ -1,8 +1,8 @@
 "use client";
 // Look: the core of the Make it yours studio, right here — skin, Classic's
 // theme and accent, Signal's vibe, accent and motion — with Undo. Everything
-// else (the live preview, fine-tuning, Ask Pal, saving to your NeuroPal)
-// lives in the studio, one link away.
+// else (the live preview, fine-tuning, Ask Pal) lives in the studio, one link
+// away. Signed in, the look goes to your NeuroPal by itself (lookSync.ts).
 import Link from "next/link";
 import { useAppearance } from "@/components/AppearanceProvider";
 import {
@@ -95,7 +95,7 @@ export function LookSection() {
           <ArrowRightIcon />
         </Link>
       </div>
-      <p className={styles.note}>Saved in this browser. Make it yours has the live preview, every Signal setting, Ask Pal, and saving to your NeuroPal.</p>
+      <p className={styles.note}>Saved in this browser and to your NeuroPal, so the app shows it too. Make it yours has the live preview, every Signal setting and Ask Pal.</p>
     </div>
   );
 }

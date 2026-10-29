@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/neuropal/client";
 import type { DayData } from "@/lib/neuropal/day";
 import { palSay, type PalLook } from "@/lib/neuropal/look";
 import { clearPalChat, palChat } from "@/lib/neuropal/pal";
+import { currentAccount, personalOpen } from "@/lib/neuropal/owner";
 import { chatContext, CRISIS_REPLY, looksLikeCrisis, MESSAGE_MAX_CHARS } from "@/lib/neuropal/palLogic";
 import { CHAT_SHOWN, clearLocalChat, pushChat, useChat, type PalChatItem } from "@/lib/neuropal/palState";
 import { announce } from "../common/announce";
@@ -57,7 +58,10 @@ export function TalkPanel({ pal, day }: { pal: PalLook; day: DayData }) {
     if (!text || sending) return;
     setDraft("");
     setCleared(null);
-    pushChat({ role: "user", text });
+    // The reply belongs to whoever sent the message: if they sign out
+    // meanwhile, it is dropped (pushChat), never shown to the next account.
+    const who = currentAccount();
+    pushChat({ role: "user", text }, who);
     // The safety net runs before anything leaves this browser.
     if (looksLikeCrisis(text)) {
       pushChat({ role: "pal", text: CRISIS_REPLY, crisis: true, local: true });
@@ -70,16 +74,18 @@ export function TalkPanel({ pal, day }: { pal: PalLook; day: DayData }) {
     try {
       const context = chatContext({ state: day.state, now: new Date(), anchors: day.anchors, tasks: day.tasks, pal });
       const r = await palChat(text, context);
+      if (!personalOpen(who)) return; // signed out meanwhile: not for whoever is here now
       reply = r?.reply || palSay(pal, "talkError");
-      pushChat({ role: "pal", text: reply, crisis: Boolean(r?.crisis), local: !r?.reply });
+      pushChat({ role: "pal", text: reply, crisis: Boolean(r?.crisis), local: !r?.reply }, who);
       if (r?.crisis) {
         if (alive.current) setSending(false);
         announce(`${pal.name}: ${reply}`, { assertive: true });
         return;
       }
     } catch (err) {
+      if (!personalOpen(who)) return;
       reply = fallbackLine(pal, err);
-      pushChat({ role: "pal", text: reply, local: true });
+      pushChat({ role: "pal", text: reply, local: true }, who);
     }
     if (!alive.current) return; // closed meanwhile: don't speak over whatever came next
     setSending(false);

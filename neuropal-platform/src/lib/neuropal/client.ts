@@ -5,9 +5,12 @@
 // 401 rule (same as every NeuroPal client): a 401 only ends the session when
 // the request carried the token that is STILL current — a wrong password on
 // sign-in, or a late reply to a request sent with an older token, never
-// signs anyone out.
-import { apiBaseStore, mixedContentProblem, sessionStore, type Session } from "@/lib/api";
+// signs anyone out. It ends through `endSession`, like every sign-out, so
+// this browser's personal things go with it.
+import { apiBaseStore, mixedContentProblem } from "@/lib/api";
 import { reportReachable, reportUnreachable } from "./connection";
+import { endSession } from "./localData";
+import { currentSession } from "./owner";
 
 export class ApiError extends Error {
   /** 0 = no answer (offline, timeout, CORS, mixed content). */
@@ -31,11 +34,7 @@ export class ApiError extends Error {
 }
 
 /** The signed-in session for the CURRENT server, or null. */
-export function currentSession(): Session | null {
-  const s = sessionStore.get();
-  const base = apiBaseStore.get();
-  return s && s.base === base ? s : null;
-}
+export { currentSession };
 
 export function currentBase(): string {
   return apiBaseStore.get();
@@ -132,7 +131,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const envelope = data as { error?: unknown; retryAfterSec?: unknown } | null;
   const message = typeof envelope?.error === "string" ? envelope.error : `The server answered ${res.status}.`;
   if (res.status === 401 && sentToken && !opts.keepSessionOn401 && currentSession()?.token === sentToken) {
-    sessionStore.clear(); // the session is over: the app shows sign-in
+    endSession("ended"); // the session is over: the app shows sign-in
   }
   const retryAfter =
     typeof envelope?.retryAfterSec === "number" ? envelope.retryAfterSec : Number(res.headers.get("Retry-After")) || null;

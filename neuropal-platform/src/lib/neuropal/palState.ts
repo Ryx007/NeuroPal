@@ -6,10 +6,13 @@
 //         "Clear chat".)
 //   sit   the running "Sit with me" session and the last notes (localStorage,
 //         so a reload never loses the timer).
+// Both belong to the signed-in account (owner.ts): written only while it is
+// signed in, and cleared when its session ends (localData.ts).
 import { useSyncExternalStore } from "react";
 import { sessionKept, sessionStore } from "@/lib/api";
 import { createStoredValue, useStored } from "@/lib/store";
 import { freshId } from "./day";
+import { personalOpen } from "./owner";
 
 // ---- chat ---------------------------------------------------------------------------
 
@@ -69,9 +72,13 @@ export function useChat(): PalChatItem[] {
   return useSyncExternalStore(chatStore.subscribe, chatStore.get, chatStore.getServer);
 }
 
-export function pushChat(item: { role: "user" | "pal"; text: string; crisis?: boolean; local?: boolean }) {
+/**
+ * Add a message. `account` (owner.ts `currentAccount()` when the message was
+ * sent): a reply that comes back after that account signed out is dropped.
+ */
+export function pushChat(item: { role: "user" | "pal"; text: string; crisis?: boolean; local?: boolean }, account?: string | null) {
   const t = clean(item.text, 4000);
-  if (!t) return;
+  if (!t || !personalOpen(account)) return;
   const area = chatArea();
   const entry: PalChatItem = { id: freshId("m"), role: item.role, text: t, at: new Date().toISOString(), crisis: Boolean(item.crisis), local: Boolean(item.local) };
   area.set([...area.get(), entry].slice(-CHAT_KEEP));
@@ -168,6 +175,7 @@ export const sitStore = createStoredValue<SitData>({ key: "np.app.palsit.v1", ar
 export const useSit = () => useStored(sitStore);
 
 export function startSit({ minutes, label = "", taskId = null, anchorId = null }: { minutes: number; label?: string; taskId?: string | null; anchorId?: string | null }) {
+  if (!personalOpen()) return;
   const startedAt = Date.now();
   const m = Math.max(1, Math.round(minutes));
   sitStore.set({
@@ -178,7 +186,7 @@ export function startSit({ minutes, label = "", taskId = null, anchorId = null }
 
 function patchSit(patch: Partial<PalSit>) {
   const d = sitStore.get();
-  if (d.sit) sitStore.set({ ...d, sit: { ...d.sit, ...patch } });
+  if (d.sit && personalOpen()) sitStore.set({ ...d, sit: { ...d.sit, ...patch } });
 }
 
 export const answerSitCheck = (v: "yes" | "no") => patchSit({ checkIn: v });
@@ -197,7 +205,7 @@ export function clearSit() {
 export function saveSitNote(note: string) {
   const d = sitStore.get();
   const s = d.sit;
-  if (!s) return;
+  if (!s || !personalOpen()) return;
   const n = clean(note, 500);
   const end = s.endedAt || s.endsAt;
   const notes = n

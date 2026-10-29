@@ -4,13 +4,16 @@
 // /auth/config decides what to show (sign in, create an account with an
 // invite code, or "nothing to sign in to" on a single-user server); errors
 // stay on screen in plain words until the next try; the calming steps are
-// one click away while signed out. The password is never kept.
+// one click away while signed out. The password is never kept. After a
+// session ends, a short note says so (and what was cleared from this browser).
 import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { apiBaseStore, hostOf, mixedContentProblem, parseBase, saveSession, userLabel, type PublicUser } from "@/lib/api";
 import { authConfig, fetchMe, register, signIn } from "@/lib/neuropal/account";
 import { ApiError } from "@/lib/neuropal/client";
+import { clearSessionNotice, type SessionNotice } from "@/lib/neuropal/localData";
 import { normalizePal } from "@/lib/neuropal/look";
+import { useSessionNotice } from "@/lib/neuropal/session";
 import { useStored } from "@/lib/store";
 import { useAppearance } from "@/components/AppearanceProvider";
 import { announce } from "./announce";
@@ -45,6 +48,19 @@ function offline() {
   }
 }
 
+/** How the last session ended, in plain words. */
+function sessionNoticeText(n: SessionNotice): string {
+  const parts = [n.reason === "ended" ? "Your session ended, so you’re signed out here." : "Signed out."];
+  if (n.cleared) parts.push("Pal’s chat and your day (check-ins, anchors, brain dump) were cleared from this browser.");
+  if (n.stopped === 1) parts.push("An upload that hadn’t finished was stopped. Add it again after you sign in.");
+  else if (n.stopped > 1) parts.push(`${n.stopped} uploads that hadn’t finished were stopped. Add them again after you sign in.`);
+  return parts.join(" ");
+}
+
+/** Only what the app shows of the account is kept with the session. */
+const publicUser = (u: PublicUser | null): PublicUser | null =>
+  u ? { id: u.id, email: u.email, name: u.name, displayName: u.displayName } : null;
+
 /** Plain words for a failed sign-in or sign-up. */
 function describe(e: unknown, host: string, signingUp: boolean): Problem {
   if (!(e instanceof ApiError)) return { text: "Something went wrong. Try again.", fields: [] };
@@ -77,6 +93,14 @@ export function SignIn() {
   const { appearance } = useAppearance();
   const pal = normalizePal(appearance.pal);
   const now = useNow(1000);
+  const notice = useSessionNotice();
+  const noticeText = notice ? sessionNoticeText(notice) : "";
+  const noticeId = notice?.id ?? 0;
+
+  // The note appears with the screen, so it is also said once.
+  useEffect(() => {
+    if (noticeId && noticeText) announce(noticeText);
+  }, [noticeId, noticeText]);
 
   const [draftBase, setDraftBase] = useState<string | null>(null);
   const [editServer, setEditServer] = useState(!storedBase);
@@ -152,7 +176,9 @@ export function SignIn() {
   };
 
   const finish = (token: string, user: PublicUser | null, local = false) => {
-    saveSession(local ? { token, base, user, local: true } : { token, base, user }, { keep });
+    const who = publicUser(user);
+    clearSessionNotice();
+    saveSession(local ? { token, base, user: who, local: true } : { token, base, user: who }, { keep });
     setPassword("");
     announce(local ? "Connected to your NeuroPal." : `Signed in as ${userLabel(user)}.`);
     // The page takes over: start screen readers at its content.
@@ -266,6 +292,7 @@ export function SignIn() {
               ? "No marketing emails. Your library stays on your NeuroPal server."
               : "Sign in to pick up where you left off."}
         </p>
+        {noticeText ? <p className={styles.notice}>{noticeText}</p> : null}
 
         {ok?.localMode ? (
           <div className={styles.form}>

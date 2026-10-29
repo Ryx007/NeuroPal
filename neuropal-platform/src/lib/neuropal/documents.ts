@@ -1,7 +1,8 @@
 // Documents: /api/documents/* (docs/BRAIN.md §4). Owned by the Library +
 // Reader + Ask work; add functions freely, keep these signatures.
-import { sessionStore } from "@/lib/api";
+import type { Session } from "@/lib/api";
 import { ApiError, currentBase, currentSession, fileUrl, request, seg } from "./client";
+import { endSession, onForget } from "./localData";
 import type { ChatMessage, DocumentText, EpubManifest, NPDocument, QueryAnswer, ReadingProgress } from "./types";
 
 export const listDocuments = (q?: string, signal?: AbortSignal) =>
@@ -65,25 +66,53 @@ export const epubBaseUrl = (id: string, ticket: string | null) =>
 export const reingestDocument = (id: string) =>
   request<{ ok: boolean; status: string }>(`/documents/${seg(id)}/reingest`, { method: "POST", body: { json: {} } });
 
+// Tickets belong to one session: a new token (a password change, a refreshed
+// token) or another server means new tickets — a ticket from before a
+// password change is refused by the server.
 const ticketCache = new Map<string, { ticket: string | null; until: number }>();
+const ticketsAsked = new Map<string, Promise<string | null>>();
+let ticketScope = "";
 
-/** A document ticket, cached until an hour before it expires. */
+/** A document ticket, cached until an hour before it expires; `fresh` asks the server again. */
 export async function ticketFor(id: string, fresh = false): Promise<string | null> {
-  const key = `${currentBase()}|${id}`;
-  const hit = ticketCache.get(key);
+  const scope = `${currentBase()}|${currentSession()?.token ?? ""}`;
+  if (scope !== ticketScope) {
+    forgetTickets();
+    ticketScope = scope;
+  }
+  const hit = ticketCache.get(id);
   if (!fresh && hit && hit.until > Date.now()) return hit.ticket;
-  const r = await getTicket(id);
-  const ticket = r?.ticket ?? null;
-  const expires = Date.parse(r?.expiresAt || "");
-  ticketCache.set(key, {
-    ticket,
-    until: Number.isFinite(expires) ? expires - 60 * 60 * 1000 : Date.now() + 60 * 60 * 1000,
+  const asked = ticketsAsked.get(id);
+  if (!fresh && asked) return asked;
+  const p = getTicket(id).then((r) => {
+    const ticket = r?.ticket ?? null;
+    const expires = Date.parse(r?.expiresAt || "");
+    if (ticketScope === scope) {
+      ticketCache.set(id, {
+        ticket,
+        until: Number.isFinite(expires) ? expires - 60 * 60 * 1000 : Date.now() + 60 * 60 * 1000,
+      });
+    }
+    return ticket;
   });
-  return ticket;
+  ticketsAsked.set(id, p);
+  try {
+    return await p;
+  } finally {
+    if (ticketsAsked.get(id) === p) ticketsAsked.delete(id);
+  }
 }
 
 export function forgetTickets() {
   ticketCache.clear();
+  ticketsAsked.clear();
+}
+
+onForget(forgetTickets);
+
+/** The server refused this ticket: the next ask gets a new one. */
+function dropTicket(id: string, ticket: string) {
+  if (ticketCache.get(id)?.ticket === ticket) ticketCache.delete(id);
 }
 
 /** One EPUB entry path, each segment encoded ("OEBPS/Text/ch 1.xhtml"). */
@@ -101,7 +130,7 @@ export function epubChapterBase(id: string, href: string, ticket: string | null)
 }
 
 function applySessionRule(status: number, sentToken: string | null) {
-  if (status === 401 && sentToken && currentSession()?.token === sentToken) sessionStore.clear();
+  if (status === 401 && sentToken && currentSession()?.token === sentToken) endSession("ended");
 }
 
 function errorFrom(status: number, text: string, retryHeader: string | null): ApiError {
@@ -138,6 +167,7 @@ export async function fetchEpubChapter(id: string, href: string, ticket: string 
   }
   const text = await res.text();
   if (res.ok) return text;
+  if (ticket && res.status === 401) dropTicket(id, ticket);
   applySessionRule(res.status, session?.token ?? null);
   throw errorFrom(res.status, text, res.headers.get("Retry-After"));
 }
@@ -164,17 +194,19 @@ export interface UploadOptions {
   title?: string;
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
+  /** The session to upload with (the queue passes the one it checked); default: the current one. */
+  session?: Session | null;
 }
 
 /** Upload with progress (XMLHttpRequest): same session and error rules as `request`. */
 export function uploadWithProgress(file: File, opts: UploadOptions = {}): Promise<NPDocument> {
   return new Promise((resolve, reject) => {
-    const base = currentBase();
+    const session = opts.session !== undefined ? opts.session : currentSession();
+    const base = session?.base ?? currentBase();
     if (!base) {
       reject(new ApiError("Connect to your NeuroPal server first.", 0));
       return;
     }
-    const session = currentSession();
     const sentToken = session?.token ?? null;
     const xhr = new XMLHttpRequest();
     const form = new FormData();

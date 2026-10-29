@@ -68,6 +68,16 @@
   line-height: 1.5;
 }
 
+/* How the last session ended: a calm note, not an error. */
+.notice {
+  padding: 0.625rem 0.875rem;
+  border: var(--rule);
+  border-left: 6px solid var(--np-accent-fill);
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  line-height: 1.5;
+}
+
 .form {
   display: flex;
   flex-direction: column;

@@ -100,6 +100,8 @@ export function EpubReader({ doc, docId, initialAsk, askUnavailable }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<string, string>());
+  /** The last "Try again" a fresh ticket was asked for. */
+  const ticketAttempt = useRef(0);
   const findRef = useRef(0);
   const findWaiters = useRef(new Map<number, (index: number) => void>());
   const spineRef = useRef(0);
@@ -222,7 +224,11 @@ export function EpubReader({ doc, docId, initialAsk, askUnavailable }: Props) {
     const ctrl = new AbortController();
     (async () => {
       try {
-        const ticket = await ticketFor(docId);
+        // "Try again" asks for a fresh ticket too: the old one may have run
+        // out, or stopped working when the password changed.
+        const fresh = attempt > ticketAttempt.current;
+        ticketAttempt.current = attempt;
+        const ticket = await ticketFor(docId, fresh);
         const key = `${spine}|${entry.href}`;
         const xhtml = cache.current.get(key) ?? (await fetchEpubChapter(docId, entry.href, ticket, ctrl.signal));
         cache.current.set(key, xhtml);
