@@ -9,6 +9,7 @@ public final class MockNeuroPalAPI: NeuroPalAPI, @unchecked Sendable {
     public var latency: Duration
     let lock = NSLock()
     private var _token: String?
+    private var _offline = false
 
     // Domain state, guarded by `lock` (see the +Domain files).
     var documentsStore: [NPDocument]
@@ -19,6 +20,13 @@ public final class MockNeuroPalAPI: NeuroPalAPI, @unchecked Sendable {
     public var token: String? {
         get { lock.withLock { _token } }
         set { lock.withLock { _token = newValue } }
+    }
+
+    /// The account calls behave as if the server can't be reached (the
+    /// `-NPOffline` launch argument: the app opens offline, banner and all).
+    public var offline: Bool {
+        get { lock.withLock { _offline } }
+        set { lock.withLock { _offline = newValue } }
     }
 
     public init(host: URL = URL(string: "https://mock.neuropal.invalid")!, token: String? = "mock-token",
@@ -35,6 +43,10 @@ public final class MockNeuroPalAPI: NeuroPalAPI, @unchecked Sendable {
 
     func requireSession() throws {
         if token == nil { throw APIError.unauthorized }
+    }
+
+    func requireNetwork() throws {
+        if offline { throw APIError.offline }
     }
 }
 

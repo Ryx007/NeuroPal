@@ -6,13 +6,17 @@
 #   scripts/mac-build.sh shot <name> [iphone|ipad] [launch args…]
 #                                                  install the last build, launch it, screenshot
 #   scripts/mac-build.sh ui-test [iphone|ipad]     run the UI tests (accessibility audits)
+#   scripts/mac-build.sh build-tests [iphone|ipad] compile the app and the UI tests without running them
+#   scripts/mac-build.sh reboot-sim [iphone|ipad]  restart a simulator (clears a stuck system alert)
 #
 # Every Xcode/simulator step takes one machine-wide lock, so several
 # checkouts can share one Mac without builds fighting over memory or the
 # simulators. Env: NP_DERIVED (DerivedData dir; default ../.dd-<checkout>),
 # NP_SHOTS (screenshot dir; default ~/Developer/neuropal-agents/shots/<checkout>),
 # NP_APPEARANCE (light|dark simulator appearance, default dark),
-# NP_TEXT_SIZE (simulator Dynamic Type, e.g. accessibility-extra-large).
+# NP_TEXT_SIZE (simulator Dynamic Type, default large; e.g. accessibility-extra-large),
+# NP_ONLY_TESTING (ui-test: e.g. NeuroPalUITests/SignInFlowTests),
+# NP_UITEST_TIMEOUT (ui-test: seconds before a stuck run is stopped, default 1500).
 set -euo pipefail
 
 HERE="${0:A:h}"
@@ -36,7 +40,8 @@ boot() {
   xcrun simctl boot "$id" 2>/dev/null || true
   xcrun simctl bootstatus "$id" -b >/dev/null
   xcrun simctl ui "$id" appearance "${NP_APPEARANCE:-dark}" || true
-  if [[ -n "${NP_TEXT_SIZE:-}" ]]; then xcrun simctl ui "$id" content_size "$NP_TEXT_SIZE" || true; fi
+  # Always set (default: large), so one shot's text size never leaks into the next.
+  xcrun simctl ui "$id" content_size "${NP_TEXT_SIZE:-large}" || true
   xcrun simctl status_bar "$id" override --time 9:41 --dataNetwork wifi --wifiBars 3 \
     --batteryState charged --batteryLevel 100 >/dev/null 2>&1 || true
 }
@@ -91,7 +96,14 @@ do_shot() {
   echo "SHOT $out"
 }
 
-do_ui_test() {
+do_reboot_sim() {
+  local id; id=$(device "${1:-iphone}")
+  xcrun simctl shutdown "$id" 2>/dev/null || true
+  boot "$id"
+  echo "REBOOTED $id"
+}
+
+do_build_tests() {
   local id; id=$(device "${1:-iphone}")
   cd "$IOS"
   xcodegen generate --quiet
@@ -99,10 +111,54 @@ do_ui_test() {
   xcodebuild -project NeuroPal.xcodeproj -scheme NeuroPal -configuration Debug \
     -destination "platform=iOS Simulator,id=$id" -derivedDataPath "$DERIVED" \
     CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
-    test > "$DERIVED.uitest.log" 2>&1
+    build-for-testing > "$DERIVED.build.log" 2>&1
   local rc=$?
   set -e
-  grep -E "Test Case|error:|failed|passed|Executed" "$DERIVED.uitest.log" | tail -60 || true
+  grep -E "(error|warning): " "$DERIVED.build.log" | grep -v "/DerivedData/\|SourcePackages/checkouts" \
+    | sed "s|$CHECKOUT/||" | sort -u | head -80 || true
+  if [[ $rc -eq 0 ]]; then echo "BUILD FOR TESTING OK ($NAME)"; else
+    tail -25 "$DERIVED.build.log"; echo "BUILD FOR TESTING FAILED ($NAME) — full log: $DERIVED.build.log"; fi
+  return $rc
+}
+
+do_ui_test() {
+  local id; id=$(device "${1:-iphone}")
+  cd "$IOS"
+  xcodegen generate --quiet
+  local only=()
+  [[ -n "${NP_ONLY_TESTING:-}" ]] && only=(-only-testing:"$NP_ONLY_TESTING")
+  set +e
+  xcodebuild -project NeuroPal.xcodeproj -scheme NeuroPal -configuration Debug \
+    -destination "platform=iOS Simulator,id=$id" -derivedDataPath "$DERIVED" \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+    "${only[@]}" test > "$DERIVED.uitest.log" 2>&1 &
+  local xc=$!
+  # A run that can't start (the test runner never connects) would hold the
+  # machine-wide lock forever: stop it after NP_UITEST_TIMEOUT seconds.
+  local waited=0 limit="${NP_UITEST_TIMEOUT:-1500}" stopped=0
+  while kill -0 "$xc" 2>/dev/null; do
+    sleep 5
+    waited=$((waited + 5))
+    if (( waited >= limit )); then
+      stopped=1
+      kill "$xc" 2>/dev/null
+      break
+    fi
+  done
+  wait "$xc"
+  local rc=$?
+  if (( stopped )); then
+    # The runner is launched suspended; a Mac without Developer Tools access
+    # (DevToolsSecurity) never resumes it. Don't leave it behind.
+    xcrun simctl terminate "$id" "$BUNDLE.uitests.xctrunner" >/dev/null 2>&1 || true
+    echo "UI TESTS STOPPED after ${limit}s — the test runner never started (is Developer Tools access enabled? DevToolsSecurity -status)" >> "$DERIVED.uitest.log"
+    rc=124
+  fi
+  set -e
+  # Each accessibility audit issue is one A11Y-ISSUE line (screen, kind,
+  # element); then the verdict per test.
+  grep -E "A11Y-ISSUE" "$DERIVED.uitest.log" | grep -v "error:" | sort -u | head -120 || true
+  grep -E "Test Case .*(passed|failed)|Executed|\*\* TEST|UI TESTS STOPPED" "$DERIVED.uitest.log" | tail -40 || true
   return $rc
 }
 
@@ -112,9 +168,13 @@ case "$cmd" in
   test) locked "$0" __test "$@" ;;
   shot) locked "$0" __shot "$@" ;;
   ui-test) locked "$0" __ui_test "$@" ;;
+  build-tests) locked "$0" __build_tests "$@" ;;
+  reboot-sim) locked "$0" __reboot_sim "$@" ;;
   __build) do_build "$@" ;;
   __test) do_test "$@" ;;
   __shot) do_shot "$@" ;;
   __ui_test) do_ui_test "$@" ;;
-  *) echo "usage: $0 build|test|shot|ui-test …" >&2; exit 2 ;;
+  __build_tests) do_build_tests "$@" ;;
+  __reboot_sim) do_reboot_sim "$@" ;;
+  *) echo "usage: $0 build|test|shot|ui-test|build-tests|reboot-sim …" >&2; exit 2 ;;
 esac

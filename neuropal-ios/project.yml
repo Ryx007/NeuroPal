@@ -138,13 +138,33 @@ targets:
       # (WidgetGalleryView, -NPScreen widgets).
       - package: NeuroPalUI
         products: [NPTheme, NPHome]
+  # Every screen on the offline fixtures through Xcode's accessibility
+  # audit, and the sign-in flow: scripts/mac-build.sh ui-test iphone
+  NeuroPalUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: NeuroPalUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.neuropal.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: NeuroPal
+    dependencies:
+      - target: NeuroPal
 schemes:
   NeuroPal:
     build:
       targets:
         NeuroPal: all
         NeuroPalWidgets: all
+        NeuroPalUITests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - NeuroPalUITests
     archive:
       config: Release

@@ -5,6 +5,10 @@ import NPCore
 /// launch):
 ///   -NPMock 1                 offline fixtures (MockNeuroPalAPI), signed in
 ///   -NPSignedOut 1            with -NPMock: start signed out (sign-in screen)
+///   -NPSignUp 1               with -NPSignedOut: the sign-in screen on "Create account"
+///   -NPServerForm 1           with -NPSignedOut: the server address open on sign-in
+///   -NPOffline 1              with -NPMock: the server can't be reached (the app
+///                             opens offline with the cached user; banner shows)
 ///   -NPScreen <name>          start on: home | library | reader | ask | pal | calm | settings
 ///                             | widgets (every widget at its real sizes)
 ///   -NPDoc <id>               the document for reader/ask (default: the sample paper)
@@ -13,12 +17,18 @@ import NPCore
 ///   -NPPalTool <tool>         whatNow | breakdown | dump | sit | talk (with -NPScreen pal)
 ///   -NPHost <url>             a real server at this address, nothing saved (e.g. a backend
 ///                             running on the Mac: http://localhost:4100)
+///   -NPToken <jwt>            (debug builds, with -NPHost) open signed in with this session
 struct LaunchOptions {
     var mock = false
     var signedOut = false
+    var signUp = false
+    var serverForm = false
+    var offline = false
     var widgetGallery = false
     /// A real server to use for this launch only (no saved session or look).
     var host: URL?
+    /// Debug builds: a session for `host`, for end-to-end screenshots.
+    var token: String?
     var route: NPRoute?
     var appearance: Appearance?
 
@@ -27,7 +37,13 @@ struct LaunchOptions {
     init(defaults: UserDefaults) {
         mock = defaults.bool(forKey: "NPMock")
         host = defaults.string(forKey: "NPHost").flatMap(URL.init(string:))
+        #if DEBUG
+        token = defaults.string(forKey: "NPToken")
+        #endif
         signedOut = defaults.bool(forKey: "NPSignedOut")
+        signUp = defaults.bool(forKey: "NPSignUp")
+        serverForm = defaults.bool(forKey: "NPServerForm")
+        offline = defaults.bool(forKey: "NPOffline")
         let doc = defaults.string(forKey: "NPDoc") ?? MockFixtures.paperID
         switch defaults.string(forKey: "NPScreen") {
         case "home": route = .tab(.home)

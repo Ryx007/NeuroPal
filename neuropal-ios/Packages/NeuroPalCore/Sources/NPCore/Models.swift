@@ -56,6 +56,19 @@ public struct AuthConfig: Codable, Hashable, Sendable {
         self.localMode = localMode
         self.signup = signup
     }
+
+    /// An older server without these fields asks for sign-in with an invite.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        localMode = (try? c.decodeIfPresent(Bool.self, forKey: .localMode)) ?? false
+        let raw = ((try? c.decodeIfPresent(String.self, forKey: .signup)) ?? "invite").lowercased()
+        signup = ["invite", "open", "closed"].contains(raw) ? raw : "invite"
+    }
+
+    /// Sign-up is possible here (with or without an invite).
+    public var signupOpen: Bool { signup != "closed" }
+    /// Creating an account needs the server's invite code.
+    public var needsInvite: Bool { signup == "invite" }
 }
 
 /// POST /api/auth/login | /register → `{token, user}`
@@ -277,6 +290,20 @@ public struct Citation: Codable, Hashable, Sendable {
         self.sectionHeading = sectionHeading
         self.excerpt = excerpt
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chunkId = try? c.decodeIfPresent(String.self, forKey: .chunkId)
+        if let p = try? c.decodeIfPresent(Int.self, forKey: .page) {
+            page = p
+        } else if let p = try? c.decodeIfPresent(Double.self, forKey: .page), p.isFinite {
+            page = Int(p)
+        } else {
+            page = nil
+        }
+        sectionHeading = try? c.decodeIfPresent(String.self, forKey: .sectionHeading)
+        excerpt = try? c.decodeIfPresent(String.self, forKey: .excerpt)
+    }
 }
 
 /// POST /api/documents/:id/query → grounded answer with its sources.
@@ -298,6 +325,17 @@ public struct QueryAnswer: Codable, Hashable, Sendable {
         self.model = model
         self.provider = provider
         self.chunksUsed = chunksUsed
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        answer = try c.decode(String.self, forKey: .answer)
+        citations = (try? c.decodeIfPresent([Citation].self, forKey: .citations)) ?? []
+        threadId = try? c.decodeIfPresent(String.self, forKey: .threadId)
+        mode = try? c.decodeIfPresent(String.self, forKey: .mode)
+        model = try? c.decodeIfPresent(String.self, forKey: .model)
+        provider = try? c.decodeIfPresent(String.self, forKey: .provider)
+        chunksUsed = try? c.decodeIfPresent(Int.self, forKey: .chunksUsed)
     }
 }
 
@@ -449,6 +487,13 @@ public struct PalBreakdown: Codable, Hashable, Sendable {
         self.provider = provider
         self.model = model
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        steps = try c.decode([String].self, forKey: .steps)
+        provider = try? c.decodeIfPresent(String.self, forKey: .provider)
+        model = try? c.decodeIfPresent(String.self, forKey: .model)
+    }
 }
 
 /// POST /api/pal/chat `context` — what Pal may know about right now.
@@ -498,5 +543,13 @@ public struct PalChatReply: Codable, Hashable, Sendable {
         self.crisis = crisis
         self.provider = provider
         self.model = model
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        reply = try c.decode(String.self, forKey: .reply)
+        crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
+        provider = try? c.decodeIfPresent(String.self, forKey: .provider)
+        model = try? c.decodeIfPresent(String.self, forKey: .model)
     }
 }
