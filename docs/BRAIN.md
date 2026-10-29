@@ -116,6 +116,7 @@ BEFORE the check. AI routes spend a per-user daily budget
 | `PATCH /api/documents/:id` | `{title?,subtitle?}` | rename (library long-press UI) |
 | `GET /api/documents/:id/ticket` | — | `{ticket, expiresAt}` — 12 h read pass for ONE document (JWT `{sub,v,doc,scope:'doc'}`), for requests that can't send a header; `{ticket:null}` in LOCAL_MODE |
 | `GET /api/documents/:id/page/:n` | `?t=<ticket>` optional | rendered PDF page JPEG (reader "Original pages" view), disk-cached, `Cache-Control: private`; works for `pdf` and `arxiv` types. pdftoppm found via PATH (Linux + Homebrew) |
+| `GET /api/documents/:id/file` | `?t=<ticket>` optional | 2026-10-29: the ORIGINAL PDF for native viewers (iOS PDFKit); `pdf`/`arxiv` only (400 otherwise); always `Content-Disposition: attachment`, `Cache-Control: private, no-store`, `CSP: sandbox`; stored paths outside STORAGE_ROOT are never served |
 | `GET /api/documents/:id/annotations` | — | Annotation[] (highlights + bookmarks, word-index anchored) |
 | `POST /api/documents/:id/annotations` | `{kind:'highlight'\|'bookmark', wordStart, wordEnd[,color,excerpt,note,page]}` | 201 Annotation |
 | `PATCH /api/annotations/:id` | `{color?,note?}` | updated Annotation |

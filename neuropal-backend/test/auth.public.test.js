@@ -165,6 +165,33 @@ test('a document ticket reads that EPUB through the path, and nothing else', asy
     assert.equal(sessionAsTicket.status, 401);
 });
 
+test('the original PDF downloads with the session or a ticket, and only for PDFs', async () => {
+    const rel = path.join('documents', String(userId), 'paper.pdf');
+    fs.writeFileSync(path.join(storage, rel), '%PDF-1.4\n% tiny test file\n%%EOF\n');
+    const { Document } = require('../src/models');
+    const pdf = await Document.create({ userId, title: 'Paper', type: 'pdf', file: { relativePath: rel } });
+    const id = String(pdf._id);
+
+    assert.equal((await fetch(`${base}/api/documents/${id}/file`)).status, 401, 'no header, no ticket');
+    const r = await fetch(`${base}/api/documents/${id}/file`, { headers: bearer(token) });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'application/pdf');
+    assert.match(r.headers.get('content-disposition'), /^attachment/);
+    assert.equal(r.headers.get('cache-control'), 'private, no-store');
+    assert.match(r.headers.get('content-security-policy'), /sandbox/);
+    assert.match(await r.text(), /^%PDF-1\.4/);
+
+    const t = await (await fetch(`${base}/api/documents/${id}/ticket`, { headers: bearer(token) })).json();
+    assert.equal((await fetch(`${base}/api/documents/${id}/file?t=${t.ticket}`)).status, 200, 'ticket in the query');
+    // a ticket is for ONE document
+    assert.equal((await fetch(`${base}/api/documents/${docId}/file?t=${t.ticket}`)).status, 401);
+    // not for EPUBs (or any other type)
+    assert.equal((await fetch(`${base}/api/documents/${docId}/file`, { headers: bearer(token) })).status, 400);
+    // a stored path that points outside the storage folder is never served
+    const evil = await Document.create({ userId, title: 'Evil', type: 'pdf', file: { relativePath: '../../etc/passwd' } });
+    assert.equal((await fetch(`${base}/api/documents/${evil._id}/file`, { headers: bearer(token) })).status, 404);
+});
+
 test("someone else's session can't get a ticket for Ryx's document", async () => {
     const r = await post('/api/auth/register', {
         email: 'friend@example.com',
