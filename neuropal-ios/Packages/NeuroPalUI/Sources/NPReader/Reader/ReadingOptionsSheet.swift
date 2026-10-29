@@ -9,6 +9,8 @@ struct ReadingOptionsSheet: View {
     @Environment(AppPreferences.self) private var prefs
     @Environment(\.npTheme) private var theme
     @Environment(\.dismiss) private var dismiss
+    /// The document's language when known ("en"): its voices come first.
+    var language: String?
 
     var body: some View {
         @Bindable var prefs = prefs
@@ -19,7 +21,7 @@ struct ReadingOptionsSheet: View {
                               shown: "\(Int(prefs.wordsPerMinute)) wpm",
                               spoken: "\(Int(prefs.wordsPerMinute)) words per minute")
                     NavigationLink {
-                        VoicePicker(selection: $prefs.voiceIdentifier)
+                        VoicePicker(selection: $prefs.voiceIdentifier, language: language)
                     } label: {
                         LabeledContent("Voice", value: Self.voiceName(prefs.voiceIdentifier))
                             .font(theme.bodyFont)
@@ -116,46 +118,75 @@ struct ReadingOptionsSheet: View {
     }
 }
 
-/// Installed voices for the current language, best quality first, each
-/// with a short sample.
+/// Every installed voice: the document's and the device's languages first,
+/// then the others, each language its own group (best quality first), each
+/// voice with a short sample.
 struct VoicePicker: View {
     @Environment(\.npTheme) private var theme
     @Binding var selection: String?
+    var language: String?
     @State private var sampler = VoiceSampler()
-
-    private var voices: [AVSpeechSynthesisVoice] {
-        let language = String(AVSpeechSynthesisVoice.currentLanguageCode().prefix(2))
-        return AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix(language) }
-            .sorted {
-                if $0.quality.rawValue != $1.quality.rawValue { return $0.quality.rawValue > $1.quality.rawValue }
-                return $0.name < $1.name
-            }
-    }
+    @State private var groups: [VoiceDirectory.Group] = []
+    @State private var preferred = 0
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         List {
             Section {
-                row(identifier: nil, name: "System voice", detail: "The default voice for your language")
+                row(identifier: nil, name: "System voice", detail: "The default voice for your device’s language")
             }
             .listRowBackground(theme.surfaceHigh)
-            Section {
-                ForEach(voices, id: \.identifier) { voice in
-                    row(identifier: voice.identifier, name: voice.name, detail: Self.detail(voice))
+            ForEach(groups.prefix(preferred)) { group in
+                Section {
+                    ForEach(group.voices) { voice in
+                        row(identifier: voice.id, name: voice.name, detail: Self.detail(voice))
+                    }
+                } header: {
+                    SkinLabel(group.title)
                 }
-            } header: {
-                SkinLabel("Installed voices")
-            } footer: {
-                Text("More natural voices can be downloaded in the iPhone Settings app, under Accessibility, Spoken Content, Voices.")
-                    .font(theme.font(.body, size: 13, relativeTo: .footnote))
-                    .foregroundStyle(theme.onSurfaceVariant)
+                .listRowBackground(theme.surfaceHigh)
             }
-            .listRowBackground(theme.surfaceHigh)
+            if groups.count > preferred {
+                Section {
+                    ForEach(groups.dropFirst(preferred)) { group in
+                        DisclosureGroup(isExpanded: Binding(
+                            get: { expanded.contains(group.id) },
+                            set: { open in if open { expanded.insert(group.id) } else { expanded.remove(group.id) } })) {
+                            ForEach(group.voices) { voice in
+                                row(identifier: voice.id, name: voice.name, detail: Self.detail(voice))
+                            }
+                        } label: {
+                            Text(group.title)
+                                .font(theme.bodyFont)
+                                .foregroundStyle(theme.onSurface)
+                                .frame(minHeight: 44)
+                                .accessibilityLabel("\(group.title), \(group.voices.count) \(group.voices.count == 1 ? "voice" : "voices")")
+                        }
+                        .tint(theme.onSurfaceVariant)
+                    }
+                } header: {
+                    SkinLabel("Other languages")
+                } footer: {
+                    Text("More natural voices can be downloaded in the iPhone Settings app, under Accessibility, Spoken Content, Voices.")
+                        .font(theme.font(.body, size: 13, relativeTo: .footnote))
+                        .foregroundStyle(theme.onSurfaceVariant)
+                }
+                .listRowBackground(theme.surfaceHigh)
+            }
         }
         .scrollContentBackground(.hidden)
         .background(theme.surfaceContainer)
         .navigationTitle("Voice")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            let wanted = language.map { [$0] } ?? []
+            groups = VoiceDirectory.groups(preferring: wanted)
+            preferred = VoiceDirectory.preferredCount(groups, preferring: wanted)
+            // The chosen voice's language stays open.
+            if let selection, let g = groups.dropFirst(preferred).first(where: { $0.voices.contains { $0.id == selection } }) {
+                expanded.insert(g.id)
+            }
+        }
         .onDisappear { sampler.stop() }
     }
 
@@ -192,13 +223,8 @@ struct VoicePicker: View {
         }
     }
 
-    static func detail(_ voice: AVSpeechSynthesisVoice) -> String {
-        let region = Locale.current.localizedString(forIdentifier: voice.language) ?? voice.language
-        switch voice.quality.rawValue {
-        case 3: return "Premium · \(region)"
-        case 2: return "Enhanced · \(region)"
-        default: return region
-        }
+    static func detail(_ voice: VoiceDirectory.Voice) -> String {
+        voice.quality.isEmpty ? voice.region : "\(voice.quality) · \(voice.region)"
     }
 }
 

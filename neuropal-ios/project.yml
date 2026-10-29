@@ -101,6 +101,8 @@ targets:
           # The cloud server is https. A home server (LAN IP, Tailscale) is
           # plain http: allowed for local networking only.
           NSAllowsLocalNetworking: true
+        # Shown in iOS's Local Network prompt (a server at home, on Wi-Fi).
+        NSLocalNetworkUsageDescription: "NeuroPal connects to your own NeuroPal server when its address is on your home network. If you say no, NeuroPal can’t reach that server; you can change this in Settings, Privacy & Security, Local Network."
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
     dependencies:

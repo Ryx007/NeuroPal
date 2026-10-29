@@ -17,6 +17,9 @@ struct LabeledField<Focus: Hashable>: View {
     var secure = false
     var helper: String?
     var invalid = false
+    /// What's wrong with this field (shown in the error line): VoiceOver
+    /// hears it with the field.
+    var errorText: String?
     var contentType: UITextContentType?
     var keyboard: UIKeyboardType = .default
     var capitalization: TextInputAutocapitalization = .never
@@ -100,7 +103,8 @@ struct LabeledField<Focus: Hashable>: View {
     }
 
     private var hint: String {
-        [invalid ? "Needs a look" : nil, helper].compactMap { $0 }.joined(separator: ". ")
+        let problem = invalid ? "Error: " + (errorText.flatMap { $0.isEmpty ? nil : $0 } ?? "check this field") : nil
+        return [problem, helper].compactMap { $0 }.joined(separator: ". ")
     }
 
     private var edge: Color { theme.isSignal ? theme.control : theme.outline }

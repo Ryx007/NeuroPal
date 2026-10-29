@@ -32,6 +32,12 @@ extension HTTPNeuroPalAPI {
         try await send("DELETE", "/documents/\(Self.segment(id))")
     }
 
+    /// POST /api/documents/:id/reingest → `{ok, status: "pending"}`. A failed
+    /// ingest resumes where it stopped; the list shows the stages again.
+    public func reingestDocument(id: String) async throws {
+        try await send("POST", "/documents/\(Self.segment(id))/reingest", body: EmptyBody())
+    }
+
     /// GET /api/documents/:id/text — the reader and read-aloud source.
     public func documentText(id: String) async throws -> DocumentText {
         try await json("GET", "/documents/\(Self.segment(id))/text", timeout: 60)
@@ -91,8 +97,10 @@ extension HTTPNeuroPalAPI {
         let (downloaded, http) = try await rawDownload(r)
         defer { try? FileManager.default.removeItem(at: downloaded) }
         guard (200..<300).contains(http.statusCode) else {
-            let body = (try? Data(contentsOf: downloaded)) ?? Data()
-            throw mapError(status: http.statusCode, data: body, headers: http, sentAuthorization: sentAuthorization)
+            // Only the start of an error body: the server's `{error}` is
+            // short, and a page in front of it could be anything.
+            throw mapError(status: http.statusCode, data: Self.head(of: downloaded), headers: http,
+                           sentAuthorization: sentAuthorization, url: r.url)
         }
         let name = documentID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) && $0.isASCII }
         let destination = FileManager.default.temporaryDirectory
@@ -102,22 +110,41 @@ extension HTTPNeuroPalAPI {
         return destination
     }
 
+    /// The first `limit` bytes of a file (an error reply saved to disk).
+    static func head(of file: URL, limit: Int = 64 << 10) -> Data {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return Data() }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: limit)) ?? Data()
+    }
+
     // MARK: Upload body
 
     /// The upload request plus the temporary file holding its multipart body
-    /// (the caller deletes it). The document is copied into the body in
-    /// chunks, so a 300 MB book never sits in memory.
-    func uploadRequest(fileURL: URL, title: String?) throws -> (URLRequest, URL) {
+    /// (the caller deletes it; if building it fails, nothing is left behind).
+    /// The document is copied into the body in chunks, so a 300 MB book
+    /// never sits in memory.
+    func uploadRequest(fileURL: URL, title: String?,
+                       in folder: URL = FileManager.default.temporaryDirectory) throws -> (URLRequest, URL) {
         let boundary = "NeuroPal-\(UUID().uuidString)"
-        let bodyFile = FileManager.default.temporaryDirectory
-            .appending(path: "np-upload-\(UUID().uuidString).multipart")
+        let bodyFile = folder.appending(path: "np-upload-\(UUID().uuidString).multipart")
         // Always send the title: the server reads a part's filename as
         // Latin-1, so a non-English file name would otherwise arrive garbled.
         // Composed form (file names come decomposed), so a search finds it.
         let name = (title.nonEmpty ?? fileURL.deletingPathExtension().lastPathComponent).precomposedStringWithCanonicalMapping
-        try Multipart.write(file: fileURL, title: name.isEmpty ? nil : name, boundary: boundary, to: bodyFile)
+        do {
+            try Multipart.write(file: fileURL, title: name.isEmpty ? nil : name, boundary: boundary, to: bodyFile)
+        } catch {
+            try? FileManager.default.removeItem(at: bodyFile)
+            throw error
+        }
 
-        var r = try request("POST", "/documents/upload", timeout: Timeout.upload)
+        var r: URLRequest
+        do {
+            r = try request("POST", "/documents/upload", timeout: Timeout.upload)
+        } catch {
+            try? FileManager.default.removeItem(at: bodyFile)
+            throw error
+        }
         r.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         if let size = (try? FileManager.default.attributesOfItem(atPath: bodyFile.path))?[.size] as? NSNumber {
             r.setValue(size.stringValue, forHTTPHeaderField: "Content-Length")

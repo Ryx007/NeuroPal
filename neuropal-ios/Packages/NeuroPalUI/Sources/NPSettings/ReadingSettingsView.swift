@@ -44,38 +44,9 @@ final class SpeechSampler: NSObject, AVSpeechSynthesizerDelegate {
     }
 }
 
-/// The installed voices for the user's language, best first.
+/// The chosen voice's name for the Reading screen (the list itself comes
+/// from NPTheme's VoiceDirectory: every installed voice, grouped).
 enum VoiceCatalog {
-    struct Voice: Identifiable, Hashable {
-        let id: String
-        let name: String
-        let language: String
-        /// "Premium" | "Enhanced" | "" (compact)
-        let quality: String
-    }
-
-    static func voices(language: String = AVSpeechSynthesisVoice.currentLanguageCode()) -> [Voice] {
-        let prefix = language.split(separator: "-").first.map(String.init) ?? language
-        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix(prefix) }
-        func rank(_ v: AVSpeechSynthesisVoice) -> Int {
-            switch v.quality {
-            case .premium: return 0
-            case .enhanced: return 1
-            default: return 2
-            }
-        }
-        return all
-            .sorted { a, b in
-                if rank(a) != rank(b) { return rank(a) < rank(b) }
-                if (a.language == language) != (b.language == language) { return a.language == language }
-                return a.name < b.name
-            }
-            .map { v in
-                Voice(id: v.identifier, name: v.name, language: v.language,
-                      quality: v.quality == .premium ? "Premium" : v.quality == .enhanced ? "Enhanced" : "")
-            }
-    }
-
     static func name(of identifier: String?) -> String {
         guard let identifier, let v = AVSpeechSynthesisVoice(identifier: identifier) else { return "System default" }
         return v.name
@@ -272,41 +243,74 @@ private struct PageChip: View {
     }
 }
 
-/// Every installed voice for the language, best first, each with a sample.
+/// Every installed voice: the device's language first, then the others,
+/// each language its own group (best quality first), each with a sample.
 struct VoiceListView: View {
     @Environment(AppPreferences.self) private var prefs
     @Environment(\.npTheme) private var theme
     let speech: SpeechSampler
-    @State private var voices: [VoiceCatalog.Voice] = []
-    @State private var showAll = false
+    @State private var groups: [VoiceDirectory.Group] = []
+    @State private var preferred = 0
+    @State private var expanded: Set<String> = []
 
     var body: some View {
-        let better = voices.filter { !$0.quality.isEmpty }
-        let shown = showAll || voices.count <= 8 ? voices : Array(voices.prefix(8))
+        let mine = groups.prefix(preferred).flatMap(\.voices)
+        let better = mine.filter { !$0.quality.isEmpty }
         Form {
             Section {
                 voiceRow(id: nil, name: "System default", sub: "The device’s voice for your language")
-                ForEach(shown) { v in
-                    voiceRow(id: v.id, name: v.name, sub: [v.language, v.quality].filter { !$0.isEmpty }.joined(separator: " · "))
-                }
-                if voices.count > 8 {
-                    Button(showAll ? "Show fewer" : "Show all \(voices.count) voices") { showAll.toggle() }
-                        .font(theme.font(.bodySemi, size: 15, relativeTo: .body))
-                        .foregroundStyle(theme.accentText)
-                        .frame(minHeight: 44)
-                }
-            } header: {
-                FormHeader("Voices")
-            } footer: {
-                WhyText(better.isEmpty
-                    ? "Only compact voices are installed. For a natural sound, add an Enhanced or Premium voice in the Settings app (Accessibility, Spoken Content, Voices), then pick it here."
-                    : "\(better.count) higher-quality \(better.count == 1 ? "voice" : "voices") installed — these sound the most natural.")
             }
             .npFormRow()
+            ForEach(groups.prefix(preferred)) { group in
+                Section {
+                    ForEach(group.voices) { v in
+                        voiceRow(id: v.id, name: v.name, sub: [v.region, v.quality].filter { !$0.isEmpty }.joined(separator: " · "))
+                    }
+                } header: {
+                    FormHeader(group.title)
+                } footer: {
+                    WhyText(better.isEmpty
+                        ? "Only compact voices are installed. For a natural sound, add an Enhanced or Premium voice in the Settings app (Accessibility, Spoken Content, Voices), then pick it here."
+                        : "\(better.count) higher-quality \(better.count == 1 ? "voice" : "voices") installed — these sound the most natural.")
+                }
+                .npFormRow()
+            }
+            if groups.count > preferred {
+                Section {
+                    ForEach(groups.dropFirst(preferred)) { group in
+                        DisclosureGroup(isExpanded: Binding(
+                            get: { expanded.contains(group.id) },
+                            set: { open in if open { expanded.insert(group.id) } else { expanded.remove(group.id) } })) {
+                            ForEach(group.voices) { v in
+                                voiceRow(id: v.id, name: v.name, sub: [v.region, v.quality].filter { !$0.isEmpty }.joined(separator: " · "))
+                            }
+                        } label: {
+                            Text(group.title)
+                                .font(theme.font(.bodyMedium, size: 16, relativeTo: .body))
+                                .foregroundStyle(theme.onSurface)
+                                .frame(minHeight: 44)
+                                .accessibilityLabel("\(group.title), \(group.voices.count) \(group.voices.count == 1 ? "voice" : "voices")")
+                        }
+                        .tint(theme.onSurfaceVariant)
+                    }
+                } header: {
+                    FormHeader("Other languages")
+                } footer: {
+                    WhyText("A voice in the language of what you read sounds the most natural, whatever language the phone uses.")
+                }
+                .npFormRow()
+            }
         }
         .npForm()
         .navigationTitle("Voice")
-        .task { voices = VoiceCatalog.voices() }
+        .task {
+            groups = VoiceDirectory.groups()
+            preferred = VoiceDirectory.preferredCount(groups)
+            if let id = prefs.voiceIdentifier,
+               let g = groups.dropFirst(preferred).first(where: { $0.voices.contains { $0.id == id } }) {
+                expanded.insert(g.id)
+            }
+        }
         .onDisappear { speech.stop() }
     }
 
@@ -333,8 +337,9 @@ struct VoiceListView: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Use voice \(name)")
+            .accessibilityLabel(name)
             .accessibilityValue(sub)
+            .accessibilityHint("Reads aloud in this voice")
             .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
             Button {
                 speech.say("This is how the reader will sound with this voice.", voice: id, rate: prefs.speechRate, pitch: Float(prefs.pitch))

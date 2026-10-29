@@ -85,7 +85,7 @@ struct PlayerBar: View {
             }
             .font(theme.font(.mono, size: 12, relativeTo: .caption))
             .foregroundStyle(theme.accentText)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

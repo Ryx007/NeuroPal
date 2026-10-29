@@ -23,7 +23,9 @@ let package = Package(
         // Stored in the App Group so the widgets read the same data.
         .target(name: "NPDay", dependencies: ["NPCore"]),
         .testTarget(name: "NPTokensTests", dependencies: ["NPTokens"], resources: [.copy("Fixtures")]),
-        .testTarget(name: "NPCoreTests", dependencies: ["NPCore"]),
+        // Fixtures/reader-words.json is GENERATED from the web and Expo
+        // readers by scripts/make-reader-words.sh — never edit it here.
+        .testTarget(name: "NPCoreTests", dependencies: ["NPCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "NPDayTests", dependencies: ["NPDay"]),
     ],
     swiftLanguageModes: [.v5]

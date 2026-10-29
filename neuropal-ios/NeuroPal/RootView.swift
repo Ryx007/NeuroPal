@@ -16,6 +16,7 @@ struct RootView: View {
     let widgetGallery: Bool
     var creatingAccount = false
     var editingServer = false
+    var serverText: String?
 
     var body: some View {
         @Bindable var nav = nav
@@ -27,7 +28,8 @@ struct RootView: View {
                 } else {
                     switch session.phase {
                     case .booting: SplashView()
-                    case .signedOut: SignInView(creatingAccount: creatingAccount, editingServer: editingServer)
+                    case .signedOut: SignInView(creatingAccount: creatingAccount, editingServer: editingServer,
+                                                    serverText: serverText)
                     case .signedIn, .offline: MainView()
                     }
                 }

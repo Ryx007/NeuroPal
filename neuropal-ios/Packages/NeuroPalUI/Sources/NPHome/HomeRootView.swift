@@ -40,10 +40,11 @@ public struct HomeRootView: View {
             openLaunchSheet()
         }
         .onChange(of: theme.appearance.pal) { _, pal in day.pal = pal }
-        .sheet(item: $editingAnchor) { a in AnchorFormView(anchor: a).npTheme(theme) }
-        .sheet(isPresented: $addingAnchor) { AnchorFormView(anchor: nil).npTheme(theme) }
-        .sheet(isPresented: $showAnchors) { AnchorsEditorView().npTheme(theme) }
-        .sheet(isPresented: $showMinimumDay) { MinimumDaySheet().npTheme(theme) }
+        // Sheets don't inherit the tab's bottom margin for Pal's bubble.
+        .sheet(item: $editingAnchor) { a in AnchorFormView(anchor: a).npTheme(theme).npSheetMargins() }
+        .sheet(isPresented: $addingAnchor) { AnchorFormView(anchor: nil).npTheme(theme).npSheetMargins() }
+        .sheet(isPresented: $showAnchors) { AnchorsEditorView().npTheme(theme).npSheetMargins() }
+        .sheet(isPresented: $showMinimumDay) { MinimumDaySheet().npTheme(theme).npSheetMargins() }
     }
 
     // MARK: Layout
@@ -251,7 +252,7 @@ public struct HomeRootView: View {
     /// Mock screenshots only: -NPHomeSheet anchors | newAnchor | minimumDay.
     private func openLaunchSheet() {
         guard !day.isPersistent else { return }
-        switch UserDefaults.standard.string(forKey: "NPHomeSheet") {
+        switch DebugLaunch.string("NPHomeSheet") {
         case "anchors": showAnchors = true
         case "newAnchor": addingAnchor = true
         case "editAnchor": editingAnchor = day.day.anchors.first
@@ -312,5 +313,14 @@ struct HomePreview<Content: View>: View {
             .environment(themeStore)
             .environment(prefs)
             .npTheme(theme)
+    }
+}
+
+extension View {
+    /// Back to the default scroll margins inside a sheet: the shell adds a
+    /// bottom margin to each tab for Pal's bubble, and presented sheets
+    /// would otherwise inherit it.
+    func npSheetMargins() -> some View {
+        contentMargins(.bottom, nil, for: .scrollContent)
     }
 }

@@ -85,6 +85,13 @@ enum ContinueReading {
         reload(showing: nil)
     }
 
+    /// Signed out (the app removed reading.json and reloads every widget):
+    /// nothing is shown any more.
+    static func forgetShown() {
+        shown = nil
+        lastReload = .distantPast
+    }
+
     private static func reload(showing next: Shown?) {
         lastReload = Date()
         shown = next

@@ -9,11 +9,24 @@ public struct StoredSession: Codable, Hashable, Sendable {
     public var token: String
     /// The last user the server returned — lets the app open offline.
     public var user: NPUser?
+    /// The kind of address the session was made for. Over plain http the
+    /// token only goes to that same kind of address. nil in records saved
+    /// before it was kept.
+    public var kind: ServerAddress.Kind?
 
-    public init(host: String, token: String, user: NPUser? = nil) {
+    public init(host: String, token: String, user: NPUser? = nil, kind: ServerAddress.Kind? = nil) {
         self.host = host
         self.token = token
         self.user = user
+        self.kind = kind ?? URL(string: host).map { ServerAddress.kind(of: $0) }
+    }
+
+    /// May this session's token be sent to `url`? Always over https (the
+    /// record is already bound to its origin); over plain http only to the
+    /// kind of address it was made for.
+    public func isUsable(for url: URL) -> Bool {
+        guard ServerAddress.isUnencrypted(url) else { return true }
+        return kind == nil || kind == ServerAddress.kind(of: url)
     }
 }
 
@@ -73,6 +86,12 @@ public final class MemorySessionStore: SessionStore, @unchecked Sendable {
 ///   sign-in; 404 → nothing NeuroPal at this address, sign-in (where the
 ///   address can be changed); no answer → open offline unless the user
 ///   signed out on this device (then sign-in).
+///
+/// Answers are bound to the server and the session they were asked for: a
+/// sign-in or password-change reply that arrives after the server changed
+/// (or after someone else signed in or out) is dropped, never saved for
+/// the address now in use. A newly chosen server address is kept
+/// (`onHostChange`) only once a NeuroPal server answers there.
 @MainActor
 @Observable
 public final class AppSession {
@@ -99,14 +118,36 @@ public final class AppSession {
     /// the sign-in screen) is running.
     public var isChecking: Bool { quietCheck != nil }
     private var quietCheck: Int?
+    /// A sign-in, a new account or a password change is on its way: the
+    /// server address shouldn't change until it answers.
+    public var isAuthenticating: Bool { authenticating > 0 }
+    private var authenticating = 0
     @ObservationIgnored public let store: SessionStore
-    /// Called after `switchHost(_:)` with the new address, so the app can keep it.
+    /// Called with a newly chosen address once a NeuroPal server answers
+    /// there (the default address at once), so the app can keep it.
     @ObservationIgnored public var onHostChange: ((URL) -> Void)?
+    /// Called whenever a session ends (sign-out, sign-out everywhere, the
+    /// server refusing it, no session at boot): the app forgets what the
+    /// account left on this device (`AccountTraces`, read-aloud, caches).
+    @ObservationIgnored public var onSessionEnd: (() -> Void)?
     @ObservationIgnored private let makeAPI: (URL) -> any NeuroPalAPI
     /// Bumped by every change of session (sign-in, sign-out, a new server, a
     /// new check): an answer to an older check is ignored.
     @ObservationIgnored private var epoch = 0
+    /// Bumped only when the session changes hands (a sign-in, the end of a
+    /// session, a new server) — not by a check. A sign-in or password-change
+    /// answer that crossed such a change is dropped.
+    @ObservationIgnored private var sessionEpoch = 0
     @ObservationIgnored private var lastAttemptAt: Date?
+    /// A newly chosen address that hasn't answered yet (not saved).
+    @ObservationIgnored private var unsavedHost: URL?
+    /// A password change is on its way: the server swaps this session's
+    /// token for a new one, so a 401 on the current token waits for its
+    /// answer instead of signing out in the middle of it.
+    @ObservationIgnored private var rotations = 0
+    @ObservationIgnored private var rotatingAPI: (any NeuroPalAPI)?
+    @ObservationIgnored private var endedDuringRotation = false
+    @ObservationIgnored private var swappedDuringRotation = false
 
     public init(host: URL = AppSession.defaultHost, store: SessionStore,
                 makeAPI: @escaping (URL) -> any NeuroPalAPI) {
@@ -124,6 +165,11 @@ public final class AppSession {
         c.host = url.host?.lowercased()
         c.port = url.port
         return c.string ?? url.absoluteString
+    }
+
+    /// The built-in address (no server of one's own).
+    public nonisolated static func isDefault(_ url: URL) -> Bool {
+        origin(url) == origin(defaultHost) && (url.path.isEmpty || url.path == "/")
     }
 
     public var isSignedIn: Bool { phase == .signedIn || phase == .offline }
@@ -150,14 +196,25 @@ public final class AppSession {
         await check(splash: false, keepSignIn: true)
     }
 
+    /// Throws `CancellationError` when the answer came too late to count:
+    /// the server changed meanwhile, or another sign-in finished first.
     public func signIn(email: String, password: String) async throws {
+        let api = self.api
+        let before = sessionEpoch
+        authenticating += 1
+        defer { authenticating -= 1 }
         let result = try await api.login(email: email, password: password)
-        adopt(result)
+        try adopt(result, from: api, sessionEpoch: before)
     }
 
+    /// Throws `CancellationError` when the answer came too late to count (see `signIn`).
     public func register(email: String, password: String, name: String?, inviteCode: String?) async throws {
+        let api = self.api
+        let before = sessionEpoch
+        authenticating += 1
+        defer { authenticating -= 1 }
         let result = try await api.register(email: email, password: password, name: name, inviteCode: inviteCode)
-        adopt(result)
+        try adopt(result, from: api, sessionEpoch: before)
     }
 
     /// Sign out on this device only.
@@ -168,37 +225,103 @@ public final class AppSession {
     /// Ends every session of the account, then this one. A session the
     /// server already ended ends here too.
     public func signOutEverywhere() async throws {
+        let api = self.api
         do {
             try await api.logoutEverywhere()
         } catch APIError.unauthorized {
         } catch APIError.server(status: 401, _) {
         }
+        guard self.api === api else {
+            // The app moved to another server meanwhile: that server's
+            // session stays; the one that was ended is forgotten.
+            store.clear(host: api.host)
+            return
+        }
         endSession()
     }
 
     /// The server ends every other session and hands this one a new token.
+    /// Throws `CancellationError` when the answer came too late to count
+    /// (the server changed, or this session was signed out meanwhile).
     public func changePassword(current: String, new: String) async throws {
-        let token = try await api.changePassword(current: current, new: new)
+        let api = self.api
+        let before = sessionEpoch
+        authenticating += 1
+        defer { authenticating -= 1 }
+        if rotations == 0 {
+            rotatingAPI = api
+            endedDuringRotation = false
+            swappedDuringRotation = false
+        }
+        rotations += 1
+        let token: String
+        do {
+            token = try await api.changePassword(current: current, new: new)
+        } catch {
+            finishRotation()
+            throw error
+        }
+        defer { finishRotation() }
+        guard self.api === api, sessionEpoch == before, api.token != nil else { throw CancellationError() }
         epoch += 1
+        swappedDuringRotation = true
         api.token = token
-        store.save(StoredSession(host: Self.origin(host), token: token, user: user))
+        lastCheckedAt = Date()
+        store.save(StoredSession(host: Self.origin(host), token: token, user: user, kind: ServerAddress.kind(of: host)))
     }
 
     /// Point the app at another server (Settings / sign-in "Server"). The
     /// old session stays saved for the old host. From the sign-in screen the
     /// check is quiet: it opens the app only if the new server lets it (a
     /// saved session there, or a single-user server), else stays on sign-in.
+    /// The address is kept (`onHostChange`) once a NeuroPal server answers
+    /// there — the default address at once.
     public func switchHost(_ newHost: URL) async {
         let fromSignIn = phase == .signedOut
         epoch += 1
+        sessionEpoch += 1
         host = newHost
         api = makeAPI(newHost)
         wireUnauthorized()
         user = nil
         isLocalMode = false
         lastCheckedAt = nil
-        onHostChange?(newHost)
+        if Self.isDefault(newHost) {
+            unsavedHost = nil
+            onHostChange?(newHost)
+        } else {
+            unsavedHost = newHost
+        }
         await check(splash: !fromSignIn, keepSignIn: fromSignIn)
+    }
+
+    /// Whether a NeuroPal server answers at `host` — asked before switching
+    /// to it (GET /api/auth/config; an older server without it, GET
+    /// /api/auth/me). Nothing of the current session is sent.
+    public func serverAnswers(at host: URL) async -> Bool {
+        let probe = makeAPI(host)
+        probe.token = nil
+        do {
+            _ = try await probe.authConfig()
+            return true
+        } catch APIError.notFound, APIError.decoding {
+            do {
+                _ = try await probe.me()
+                return true
+            } catch APIError.unauthorized, APIError.server(status: 401, _) {
+                return true
+            } catch {
+                return false
+            }
+        } catch {
+            return false
+        }
+    }
+
+    /// The sign-in screen heard from the server (its sign-up settings): a
+    /// newly chosen address is kept.
+    public func serverAnswered() {
+        keepHostIfNew()
     }
 
     /// The server refused this session's token (a 401 on a request that
@@ -207,6 +330,15 @@ public final class AppSession {
     public func sessionEnded(rejectedToken: String? = nil) {
         if let rejectedToken, rejectedToken != api.token { return }
         guard phase != .signedOut || api.token != nil else { return }
+        if deferEndDuringRotation() { return }
+        endSession()
+    }
+
+    /// A data call sent without a token got a 401, and there is still no
+    /// token: the server wants an account now (a single-user server that
+    /// turned accounts on, or a first launch that opened offline). Sign-in shows.
+    func tokenlessRequestRefused() {
+        guard api.token == nil, phase == .signedIn || phase == .offline else { return }
         endSession()
     }
 
@@ -223,8 +355,9 @@ public final class AppSession {
 
         let saved = store.load(host: host)
         // The token in memory wins: if the Keychain ever failed to keep it,
-        // a later check must not drop a working session.
-        if api.token == nil { api.token = saved?.token }
+        // a later check must not drop a working session. A saved token goes
+        // over plain http only to the kind of address it was made for.
+        if api.token == nil, let saved, saved.isUsable(for: host) { api.token = saved.token }
         let sentToken = api.token
         let api = self.api
         do {
@@ -233,9 +366,11 @@ public final class AppSession {
             if let fresh = me.refreshedToken { api.token = fresh }
             user = me.user
             lastCheckedAt = Date()
+            keepHostIfNew()
             if let token = api.token {
                 isLocalMode = false
-                store.save(StoredSession(host: Self.origin(host), token: token, user: me.user))
+                store.save(StoredSession(host: Self.origin(host), token: token, user: me.user,
+                                         kind: ServerAddress.kind(of: host)))
             } else {
                 // Answered without a session: a single-user server.
                 isLocalMode = true
@@ -245,6 +380,9 @@ public final class AppSession {
             guard epoch == started else { return }
             switch error {
             case APIError.unauthorized, APIError.server(status: 401, _):
+                // NeuroPal answered: it wants a sign-in.
+                keepHostIfNew()
+                if !splash, sentToken != nil, deferEndDuringRotation() { return }
                 endSession()
             case APIError.notFound where sentToken == nil && !isLocalMode:
                 // Nothing NeuroPal answers here: sign-in shows the address.
@@ -268,17 +406,24 @@ public final class AppSession {
         }
     }
 
-    private func adopt(_ result: AuthResult) {
+    /// A sign-in answer: kept only if it was asked of the server still in
+    /// use, and no other sign-in or sign-out happened meanwhile.
+    private func adopt(_ result: AuthResult, from api: any NeuroPalAPI, sessionEpoch before: Int) throws {
+        guard self.api === api, sessionEpoch == before else { throw CancellationError() }
+        sessionEpoch += 1
         epoch += 1
         api.token = result.token
         user = result.user
         isLocalMode = false
         lastCheckedAt = Date()
-        store.save(StoredSession(host: Self.origin(host), token: result.token, user: result.user))
+        keepHostIfNew()
+        store.save(StoredSession(host: Self.origin(host), token: result.token, user: result.user,
+                                 kind: ServerAddress.kind(of: host)))
         phase = .signedIn
     }
 
     private func endSession() {
+        if api.token != nil || phase == .signedIn || phase == .offline { sessionEpoch += 1 }
         epoch += 1
         api.token = nil
         user = nil
@@ -286,12 +431,50 @@ public final class AppSession {
         lastCheckedAt = nil
         store.clear(host: host)
         phase = .signedOut
+        onSessionEnd?()
     }
 
+    /// The address chosen last answered as a NeuroPal server: keep it.
+    private func keepHostIfNew() {
+        guard let pending = unsavedHost, pending == host else { return }
+        unsavedHost = nil
+        onHostChange?(pending)
+    }
+
+    /// While a password change is swapping this session's token, a 401 on
+    /// it waits for that answer (true = it waits).
+    private func deferEndDuringRotation() -> Bool {
+        guard rotations > 0, let rotating = rotatingAPI, rotating === api else { return false }
+        endedDuringRotation = true
+        return true
+    }
+
+    /// The password change answered (or failed). A 401 that waited for it
+    /// ends the session now — unless the token was swapped for a new one.
+    private func finishRotation() {
+        rotations -= 1
+        guard rotations == 0 else { return }
+        let end = endedDuringRotation && !swappedDuringRotation && rotatingAPI === api && api.token != nil
+        rotatingAPI = nil
+        endedDuringRotation = false
+        swappedDuringRotation = false
+        if end { endSession() }
+    }
+
+    /// 401s from the API in use (a replaced API's late answers are ignored).
     private func wireUnauthorized() {
         guard let http = api as? HTTPNeuroPalAPI else { return }
-        http.onUnauthorized = { [weak self] rejected in
-            Task { @MainActor in self?.sessionEnded(rejectedToken: rejected) }
+        http.onUnauthorized = { [weak self, weak http] rejected in
+            Task { @MainActor in
+                guard let self, let http, self.api === http else { return }
+                self.sessionEnded(rejectedToken: rejected)
+            }
+        }
+        http.onUnauthorizedWithoutToken = { [weak self, weak http] in
+            Task { @MainActor in
+                guard let self, let http, self.api === http else { return }
+                self.tokenlessRequestRefused()
+            }
         }
     }
 }

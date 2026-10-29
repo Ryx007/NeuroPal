@@ -69,19 +69,47 @@ public enum ServerAddress {
     }
 
     /// On this device's own network: loopback, private IPv4 ranges,
-    /// `*.local` (Bonjour) and Tailscale's 100.64.0.0/10.
+    /// link-local, `*.local` (Bonjour) and Tailscale's 100.64.0.0/10.
     public static func isLocalNetwork(host: String) -> Bool {
+        kind(ofHost: host) != .internet
+    }
+
+    /// What kind of address a server has. Plain http:// is allowed for every
+    /// kind except `.internet`; a saved session remembers the kind it was
+    /// made for, and its token is never sent over http to another kind.
+    public enum Kind: String, Codable, Sendable, CaseIterable {
+        /// This device (localhost, 127.0.0.0/8, ::1).
+        case loopback
+        /// A private network (10/8, 172.16/12, 192.168/16).
+        case privateNetwork
+        /// Link-local (169.254.0.0/16).
+        case linkLocal
+        /// A Bonjour name (`*.local`).
+        case bonjour
+        /// Tailscale (100.64.0.0/10 — also used by carriers for CGNAT).
+        case tailscale
+        /// Anything else: only https.
+        case internet
+    }
+
+    public static func kind(ofHost host: String) -> Kind {
         let h = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        if h == "localhost" || h.hasSuffix(".localhost") || h == "::1" { return true }
-        if h.hasSuffix(".local"), h.count > ".local".count { return true }
-        guard let ip = ipv4(h) else { return false }
+        if h == "localhost" || h.hasSuffix(".localhost") || h == "::1" { return .loopback }
+        if h.hasSuffix(".local"), h.count > ".local".count { return .bonjour }
+        guard let ip = ipv4(h) else { return .internet }
         switch (ip[0], ip[1]) {
-        case (127, _), (10, _), (192, 168): return true
-        case (172, 16...31): return true
-        case (100, 64...127): return true  // Tailscale (CGNAT range)
-        default: return false
+        case (127, _): return .loopback
+        case (10, _), (192, 168), (172, 16...31): return .privateNetwork
+        case (169, 254): return .linkLocal
+        case (100, 64...127): return .tailscale
+        default: return .internet
         }
     }
+
+    public static func kind(of url: URL) -> Kind { kind(ofHost: url.host ?? "") }
+
+    /// Plain http:// — nothing on the way is encrypted.
+    public static func isUnencrypted(_ url: URL) -> Bool { url.scheme?.lowercased() == "http" }
 
     /// "api.ryx007.work", "192.168.1.20:4000" — what the screens show.
     public static func label(_ url: URL) -> String {

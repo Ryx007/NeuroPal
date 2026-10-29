@@ -73,8 +73,22 @@ do_build() {
 
 do_test() {
   cd "$IOS/Packages/NeuroPalCore"
-  swift test --scratch-path "$DERIVED-core" 2>&1 | grep -vE "^\[[0-9]+/[0-9]+\] (Compiling|Emitting|Linking|Write|Build|Planning)" | tail -60
-  return ${pipestatus[1]}
+  local log="$DERIVED.test.log"
+  set +e
+  swift test --scratch-path "$DERIVED-core" > "$log" 2>&1
+  local rc=$?
+  set -e
+  # Compiler errors and warnings from our own sources.
+  grep -E "(error|warning): " "$log" | grep -vE "/\.build/|/checkouts/|recorded an issue" \
+    | sed "s|$CHECKOUT/||" | sort -u | head -60 || true
+  # Every failure (Swift Testing issues, XCTest failures, crashes)…
+  grep -E "recorded an issue|failed after|with [0-9]+ issues?|error: -\[|: error: .*XCT|Fatal error|signal code|exited with" "$log" \
+    | sed "s|$CHECKOUT/||" | head -120 || true
+  # …then every suite's verdict and every run summary (NPTokens, NPCore, NPDay
+  # and any XCTest run), so no target hides behind another.
+  grep -E "Suite .*(passed|failed)|Test run with|Executed [0-9]+ tests?" "$log" || true
+  if [[ $rc -eq 0 ]]; then echo "TESTS OK ($NAME)"; else echo "TESTS FAILED ($NAME, exit $rc) — full log: $log"; fi
+  return $rc
 }
 
 do_shot() {

@@ -477,20 +477,37 @@ public struct EpubManifest: Codable, Hashable, Sendable {
     }
 }
 
-/// POST /api/pal/breakdown → 3–7 small steps.
+/// POST /api/pal/breakdown → 3–7 small steps. A task that sounds like a
+/// crisis never reaches the model: `{steps: [], crisis: true, reply}` with
+/// the server's careful reply (the app shows the calming steps and help lines).
 public struct PalBreakdown: Codable, Hashable, Sendable {
     public var steps: [String]
     public var provider: String?
     public var model: String?
-    public init(steps: [String], provider: String? = nil, model: String? = nil) {
+    /// The server answered with its fixed careful reply instead of steps.
+    public var crisis: Bool
+    /// That reply (with `crisis`).
+    public var reply: String?
+
+    public init(steps: [String], provider: String? = nil, model: String? = nil, crisis: Bool = false,
+                reply: String? = nil) {
         self.steps = steps
         self.provider = provider
         self.model = model
+        self.crisis = crisis
+        self.reply = reply
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        steps = try c.decode([String].self, forKey: .steps)
+        crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
+        reply = try? c.decodeIfPresent(String.self, forKey: .reply)
+        // A crisis answer may come without steps at all.
+        if crisis {
+            steps = (try? c.decodeIfPresent([String].self, forKey: .steps)) ?? []
+        } else {
+            steps = try c.decode([String].self, forKey: .steps)
+        }
         provider = try? c.decodeIfPresent(String.self, forKey: .provider)
         model = try? c.decodeIfPresent(String.self, forKey: .model)
     }

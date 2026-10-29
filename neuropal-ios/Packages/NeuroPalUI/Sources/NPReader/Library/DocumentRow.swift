@@ -5,12 +5,40 @@ import SwiftUI
 /// One library row: type badge, title, subtitle, and either reading
 /// progress, the ingest stage, or what went wrong — read by VoiceOver as
 /// one element ("Correlation plenoptic imaging…, PDF, 42 percent read").
+/// A file that couldn't be read also offers "Try again" (its own button in
+/// the card, beside — never inside — the button that opens the document).
 struct DocumentRow: View {
     @Environment(\.npTheme) private var theme
     let document: NPDocument
     var selected = false
+    /// iPhone: the card opens the document. nil on iPad, where the list selects the row.
+    var onOpen: (() -> Void)?
+    /// A document that couldn't be read: read it again.
+    var onRetry: (() -> Void)?
+    var retrying = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let onOpen {
+                Button(action: onOpen) { summary }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(spokenLabel)
+                    .accessibilityAddTraits(.isButton)
+            } else {
+                summary
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(spokenLabel)
+                    .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            }
+            if showsRetry { retryButton }
+        }
+        .readerCard(selected: selected)
+    }
+
+    private var showsRetry: Bool { document.status == .failed && onRetry != nil }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 14) {
             TypeBadge(type: document.type)
             VStack(alignment: .leading, spacing: 6) {
@@ -30,12 +58,33 @@ struct DocumentRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .readerCard(selected: selected)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, showsRetry ? 8 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spokenLabel)
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Lined up under the title, clear of the badge.
+    private var retryButton: some View {
+        Button {
+            onRetry?()
+        } label: {
+            HStack(spacing: 6) {
+                if retrying {
+                    ProgressView().controlSize(.small).tint(theme.accentText)
+                } else {
+                    Image(systemName: "arrow.clockwise").accessibilityHidden(true)
+                }
+                Text(retrying ? "Starting again…" : "Try again")
+            }
+        }
+        .buttonStyle(ReaderChipStyle(selected: true))
+        .disabled(retrying)
+        .padding(.leading, 14 + 54 + 14)
+        .padding(.trailing, 14)
+        .padding(.bottom, 10)
+        .accessibilityHint("Reads “\(document.title)” again")
     }
 
     @ViewBuilder

@@ -18,10 +18,15 @@ import WidgetKit
 ///   edited again after it (then push again, at most twice in a row).
 /// - offline or any other failure → keep the local copy; the next sync or
 ///   change tries again. Nothing here ever blocks the UI.
+/// - another account signing in (`account` changed) → its own look from
+///   the server (or the default when it has none), never the previous
+///   account's pushed into it. After a sign-out nothing is sent.
 @MainActor
 @Observable
 public final class ThemeStore {
     public nonisolated static let fileName = "appearance.json"
+    /// UserDefaults key: the account (server origin + user id) the saved look belongs to.
+    public nonisolated static let accountKey = "np.appearance.account"
 
     public private(set) var appearance: Appearance
     public private(set) var palette: Palette
@@ -39,15 +44,24 @@ public final class ThemeStore {
     @ObservationIgnored private var unsent = false
     /// Debounce before a PUT (and before the widgets reload).
     @ObservationIgnored public var pushDelay: Duration = .seconds(1)
+    /// The account the local look belongs to (nil: never synced, or from
+    /// before this was kept).
+    @ObservationIgnored private var account: String?
+    @ObservationIgnored private let defaults: UserDefaults?
+    /// Another account signed in and its look hasn't arrived yet: nothing
+    /// is pushed until it has (the old look must not land in the new account).
+    @ObservationIgnored private var accountPending = false
 
-    public init(appearance: Appearance? = nil, persist: Bool = true) {
+    public init(appearance: Appearance? = nil, persist: Bool = true, defaults: UserDefaults? = .standard) {
         self.persist = persist
+        self.defaults = persist ? defaults : nil
         let saved: Appearance? = persist
             ? SharedContainer.read(JSONValue.self, from: Self.fileName).map { Tokens.normalizeAppearance($0) }
             : nil
         let a = Tokens.normalizeAppearance(appearance ?? saved ?? .default)
         self.appearance = a
         self.palette = Tokens.palette(for: a)
+        self.account = self.defaults?.string(forKey: Self.accountKey)
     }
 
     public func theme(reduceMotion: Bool) -> NPTheme {
@@ -80,14 +94,37 @@ public final class ThemeStore {
     /// Call after boot / sign-in / reconnect (calling again is fine — it is
     /// the retry for anything that failed offline).
     public func syncWithServer(_ api: any NeuroPalAPI) async {
+        await syncWithServer(api, account: nil)
+    }
+
+    /// The same, for a known account ("<server origin>#<user id>"): when it
+    /// isn't the account the local look belongs to, the server's look is
+    /// adopted (the default when that account has none) — the previous
+    /// account's look is never pushed into this one.
+    public func syncWithServer(_ api: any NeuroPalAPI, account: String?) async {
         if self.api !== api {
             self.api = api
             conflicts = 0
+        }
+        let newAccount = account != nil && self.account != nil && account != self.account
+        if newAccount {
+            // Nothing of the last account's goes out while we ask.
+            pushTask?.cancel()
+            pending = false
+            unsent = false
+            accountPending = true
         }
         do {
             let server = try await api.appearance()
             guard self.api === api else { return } // switched servers meanwhile
             syncProblem = nil
+            if let account { remember(account) }
+            if newAccount {
+                if let server, !server.isNull { adopt(server) } else { set(Tokens.normalizeAppearance(.default)) }
+                unsent = false
+                accountPending = false
+                return
+            }
             let local = appearance
             if let server, !server.isNull {
                 let serverAt = Tokens.normalizeAppearance(server).updatedAt
@@ -102,14 +139,43 @@ public final class ThemeStore {
             } else if local.updatedAt != nil {
                 await push()
             }
+        } catch APIError.notFound where newAccount && self.api === api {
+            // A server that keeps no looks: the new account starts from the default.
+            set(Tokens.normalizeAppearance(.default))
+            if let account { remember(account) }
+            accountPending = false
         } catch {
             // Offline, signed out, an older server without the route: stay local.
             if case APIError.offline = error { syncProblem = "Offline — your look is saved on this device." }
         }
     }
 
+    /// The session ended: stop talking to the server (a pending change is
+    /// dropped, not sent with the next account's session). The look stays
+    /// on the device until another account brings its own.
+    public func forgetServer() {
+        let wasSyncing = api != nil
+        pushTask?.cancel()
+        pushTask = nil
+        api = nil
+        pending = false
+        conflicts = 0
+        // The look no longer belongs to the account that just left: whoever
+        // signs in next gets their own (someone who never had an account
+        // keeps theirs when they make one).
+        if wasSyncing || (account != nil && account != Self.endedAccount) { remember(Self.endedAccount) }
+    }
+
+    /// The saved look's account after a sign-out.
+    nonisolated static let endedAccount = "signed-out"
+
+    private func remember(_ account: String) {
+        self.account = account
+        defaults?.set(account, forKey: Self.accountKey)
+    }
+
     private func schedulePush() {
-        guard api != nil else { return }
+        guard api != nil, !accountPending else { return }
         pushTask?.cancel()
         let delay = pushDelay
         pushTask = Task { [weak self] in
@@ -120,7 +186,7 @@ public final class ThemeStore {
     }
 
     private func push() async {
-        guard let api else { return }
+        guard let api, !accountPending else { return }
         if inFlight {
             // Never drop an edit: send it as soon as the current PUT settles.
             pending = true

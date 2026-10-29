@@ -241,7 +241,8 @@ struct SessionTests {
         await session.switchHost(second.host)
         #expect(session.phase == .signedOut)
         #expect(session.host == second.host)
-        #expect(saved == second.host)
+        // Never answered: not saved (the next launch is back on the old address).
+        #expect(saved == nil)
     }
 
     @Test func switchingToAServerWithItsOwnSessionOpensTheApp() async {
@@ -251,6 +252,8 @@ struct SessionTests {
         let store = MemorySessionStore(StoredSession(host: AppSession.origin(second.host), token: "tok-b"))
         let session = AppSession(host: first.host, store: store,
                                  makeAPI: { HTTPNeuroPalAPI(host: $0, urlSession: sessions[$0]!) })
+        var saved: URL?
+        session.onHostChange = { saved = $0 }
         await session.boot()
         // The first server's 401 doesn't touch the second server's session.
         #expect(session.phase == .signedOut)
@@ -259,6 +262,113 @@ struct SessionTests {
         #expect(session.phase == .signedIn)
         #expect(second.last?.header("Authorization") == "Bearer tok-b")
         #expect(first.requests.allSatisfy { $0.header("Authorization") == nil })
+        #expect(saved == second.host)
+    }
+
+    @Test func aNewAddressIsKeptOnlyOnceANeuroPalServerAnswersThere() async {
+        let first = StubServer(always: .json(401, #"{"error":"Missing token"}"#))
+        let down = StubServer(always: .fail(.cannotConnectToHost))
+        let html = StubServer(always: .json(200, "<html>a router page</html>", headers: ["Content-Type": "text/html"]))
+        let counter = Counter()
+        let later = StubServer { _ in counter.next() == 0 ? .fail(.timedOut) : .json(401, #"{"error":"Missing token"}"#) }
+        let second = StubServer(always: .json(401, #"{"error":"Missing token"}"#))
+        let sessions = [first.host: first.session, down.host: down.session, html.host: html.session,
+                        later.host: later.session, second.host: second.session]
+        let session = AppSession(host: first.host, store: MemorySessionStore(),
+                                 makeAPI: { HTTPNeuroPalAPI(host: $0, urlSession: sessions[$0]!) })
+        var kept: [URL] = []
+        session.onHostChange = { kept.append($0) }
+        await session.boot()
+        await session.switchHost(down.host)
+        await session.switchHost(html.host)
+        #expect(kept.isEmpty)
+        // The sign-in screen heard from it later ("Try again"): kept then.
+        await session.switchHost(later.host)
+        #expect(kept.isEmpty)
+        session.serverAnswered()
+        #expect(kept == [later.host])
+        // A NeuroPal server asking for a sign-in is an answer.
+        await session.switchHost(second.host)
+        #expect(kept == [later.host, second.host])
+        session.serverAnswered()
+        #expect(kept == [later.host, second.host])
+    }
+
+    @Test func probingAServerSendsNothingOfTheSession() async {
+        let current = StubServer(always: .json(200, Wire.user))
+        let answering = StubServer(always: .json(200, #"{"localMode":false,"signup":"invite"}"#))
+        let older = StubServer { r in
+            r.path == "/api/auth/config" ? .json(404, #"{"error":"Not found"}"#) : .json(401, #"{"error":"Missing token"}"#)
+        }
+        let notNeuroPal = StubServer(always: .json(200, "<html>hello</html>", headers: ["Content-Type": "text/html"]))
+        let off = StubServer(always: .fail(.cannotFindHost))
+        let down = StubServer(always: .json(502, "<html>Bad gateway</html>"))
+        let sessions = [current.host: current.session, answering.host: answering.session, older.host: older.session,
+                        notNeuroPal.host: notNeuroPal.session, off.host: off.session, down.host: down.session]
+        let session = AppSession(host: current.host, store: savedStore(current),
+                                 makeAPI: { HTTPNeuroPalAPI(host: $0, urlSession: sessions[$0]!) })
+        await session.boot()
+        #expect(session.phase == .signedIn)
+        #expect(await session.serverAnswers(at: answering.host))
+        #expect(await session.serverAnswers(at: older.host))
+        #expect(!(await session.serverAnswers(at: notNeuroPal.host)))
+        #expect(!(await session.serverAnswers(at: off.host)))
+        #expect(!(await session.serverAnswers(at: down.host)))
+        for server in [answering, older, notNeuroPal] {
+            #expect(server.requests.allSatisfy { $0.header("Authorization") == nil })
+        }
+        // Asking changed nothing here.
+        #expect(session.host == current.host)
+        #expect(session.api.token == "tok-1")
+    }
+
+    // MARK: A session without a token
+
+    @Test func aSingleUserServerThatTurnedAccountsOnAsksForSignIn() async throws {
+        let server = StubServer { r in
+            r.path == "/api/auth/me" ? .json(200, #"{"id":"l1","email":"local@neuropal.app","name":"Ryx"}"#)
+                : .json(401, #"{"error":"Missing token"}"#)
+        }
+        let session = makeSession(server, store: MemorySessionStore())
+        await session.boot()
+        #expect(session.phase == .signedIn)
+        #expect(session.isLocalMode)
+        await #expect(throws: APIError.unauthorized) { _ = try await session.api.documents(query: nil) }
+        #expect(await eventually { session.phase == .signedOut })
+    }
+
+    @Test func aFirstLaunchThatOpenedOfflineAsksForSignInWhenTheServerRefuses() async throws {
+        let server = StubServer { r in
+            r.path == "/api/auth/me" ? .fail(.notConnectedToInternet) : .json(401, #"{"error":"Missing token"}"#)
+        }
+        let session = makeSession(server, store: MemorySessionStore())
+        await session.boot()
+        #expect(session.phase == .offline)
+        _ = try? await session.api.documents(query: nil)
+        #expect(await eventually { session.phase == .signedOut })
+    }
+
+    @Test func anOldAPIsLate401sChangeNothing() async throws {
+        // A data call still on its way to the old server after a switch.
+        let counter = Counter()
+        let first = StubServer { r in
+            if r.path == "/api/auth/me" { return .json(200, #"{"id":"l1","email":"local@neuropal.app"}"#) }
+            _ = counter.next()
+            return .json(401, #"{"error":"Missing token"}"#)
+        }
+        let second = StubServer(always: .json(200, Wire.user))
+        let sessions = [first.host: first.session, second.host: second.session]
+        let store = MemorySessionStore(StoredSession(host: AppSession.origin(second.host), token: "tok-b"))
+        let session = AppSession(host: first.host, store: store,
+                                 makeAPI: { HTTPNeuroPalAPI(host: $0, urlSession: sessions[$0]!) })
+        await session.boot()
+        let old = session.api
+        await session.switchHost(second.host)
+        #expect(session.phase == .signedIn)
+        _ = try? await old.documents(query: nil)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(session.phase == .signedIn)
+        #expect(session.api.token == "tok-b")
     }
 
     @Test func foregroundChecksAreThrottled() async {

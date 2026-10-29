@@ -84,7 +84,7 @@ final class SignInFlowTests: XCTestCase {
 
     func testCalmingStepsOpenWhileSignedOut() throws {
         let app = signedOutApp()
-        app.buttons["I need help right now — open the calming steps"].tap()
+        app.buttons["Need help right now? Open the calming steps"].tap()
         // The full-screen cover takes sign-in out of the way.
         let covered = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.textFields["Email"])
         wait(for: [covered], timeout: 5)
