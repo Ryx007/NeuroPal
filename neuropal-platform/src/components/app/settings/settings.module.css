@@ -1,0 +1,335 @@
+/* Settings: an "On this page" list beside the sections when there's room.
+   "Room" is measured in em (container queries), so with large text the list
+   moves on top and the two-column parts stack. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  container: settings / inline-size;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.title {
+  font-size: clamp(2.25rem, 1.6rem + 2.2vw, 3.5rem);
+  line-height: 1;
+}
+
+.lead {
+  color: var(--np-on-surface-variant);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@container settings (min-width: 45.5em) {
+  .layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+    align-items: start;
+    gap: 2rem;
+  }
+
+  .toc {
+    position: sticky;
+    top: 1.25rem;
+  }
+}
+
+.toc ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@container settings (min-width: 45.5em) {
+  .toc ul {
+    flex-direction: column;
+  }
+}
+
+.tocLabel {
+  margin-bottom: 0.5rem;
+}
+
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1.5px solid transparent;
+  border-radius: var(--np-radius-control);
+  color: var(--np-on-surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.toc a:hover {
+  color: var(--np-on-surface);
+  border-color: var(--np-control);
+}
+
+@container settings (max-width: 45.49em) {
+  .toc a {
+    border-color: var(--np-control);
+  }
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.125rem, 1rem + 1vw, 1.75rem);
+  scroll-margin-top: 1rem;
+}
+
+.sectionTitle {
+  font-size: 1.75rem;
+  line-height: 1.05;
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  container-type: inline-size;
+}
+
+.twoCol {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@container (min-width: 33em) {
+  .twoCol {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.grow {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.note {
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.note:empty {
+  display: none;
+}
+
+.problem {
+  font-weight: 700;
+}
+
+.problem:empty {
+  display: none;
+}
+
+.list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+}
+
+/* ---- switch rows ---- */
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 0.375rem 0.625rem 0.875rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+}
+
+.switchLabel {
+  font-weight: 700;
+}
+
+/* ---- reading ---- */
+.preview {
+  padding: 1rem 1.25rem 1.25rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: var(--np-surface-lowest);
+  color: var(--np-on-surface);
+  max-width: 70ch;
+}
+
+.previewLabel {
+  margin-bottom: 0.375rem;
+  color: var(--np-on-surface-variant);
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.voiceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.voiceRow > select {
+  flex: 1 1 14rem;
+}
+
+.select {
+  cursor: pointer;
+}
+
+.range {
+  display: flex;
+  flex-direction: column;
+}
+
+.rangeHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rangeHead :global(.np-field-label) {
+  margin-bottom: 0;
+}
+
+.rangeValue {
+  color: var(--np-accent-text);
+  font-family: var(--font-label);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+/* ---- pal ---- */
+.palRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.says {
+  flex: 1 1 16rem;
+  padding: 0.875rem 1rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+}
+
+.saysLine {
+  margin-top: 0.375rem;
+  font-size: 1.0625rem;
+  line-height: 1.45;
+}
+
+.nameForm {
+  display: flex;
+  max-width: 28rem;
+}
+
+.voicePick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+/* ---- account ---- */
+.accountCard {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1.5px solid var(--pressed-border);
+  border-radius: 50%;
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 800;
+}
+
+.accountText {
+  min-width: 0;
+}
+
+.accountName {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.accountMeta {
+  overflow-wrap: anywhere;
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+}
+
+.pwForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  max-width: 30rem;
+}
+
+.pwForm[hidden] {
+  display: none;
+}
+
+.dialogTitle {
+  padding-right: 3.25rem;
+  font-size: 1.75rem;
+  line-height: 1.05;
+}

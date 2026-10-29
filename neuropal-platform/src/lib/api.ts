@@ -1,9 +1,10 @@
 // Talking to the visitor's own NeuroPal server (contract: docs/BRAIN.md §4 and
 // docs/PLATFORM-PLAN.md §3.3). Every call is best effort and reports its
 // failure in plain words. Credentials are never logged or stored; only the
-// session token is kept, in sessionStorage, for this tab.
+// session token is kept: in sessionStorage for this tab (the default), or in
+// localStorage when the person ticks "Keep me signed in on this device".
 import { API_BASE_KEY, SESSION_KEY } from "./keys";
-import { createStoredValue } from "./store";
+import { createStoredValue, type StoredValue } from "./store";
 
 export interface PublicUser {
   id?: string;
@@ -16,6 +17,8 @@ export interface Session {
   token: string;
   base: string;
   user: PublicUser | null;
+  /** A single-user (LOCAL_MODE) server: no account, the token is a placeholder. */
+  local?: boolean;
 }
 
 export interface ApiResult<T> {
@@ -58,16 +61,80 @@ export const apiBaseStore = createStoredValue<string>({
   serialize: (v) => v,
 });
 
-export const sessionStore = createStoredValue<Session | null>({
-  key: SESSION_KEY,
-  area: "session",
-  fallback: null,
-  parse: (raw) => {
-    const o = JSON.parse(raw) as Partial<Session> | null;
-    if (!o || typeof o.token !== "string" || !o.token) return null;
-    return { token: o.token, base: String(o.base || ""), user: (o.user as PublicUser) ?? null };
+// ---- the session ------------------------------------------------------------
+// Two places, never both at once:
+//   tab  (sessionStorage, SESSION_KEY)       this tab only, gone when it closes
+//   kept (localStorage, KEPT_SESSION_KEY)    "Keep me signed in on this device"
+// `sessionStore` reads the tab copy first, then the kept one. Its `set` is the
+// site's sign-in page (this tab only, exactly as before); the app signs in
+// with `saveSession`, and refreshed tokens go through `updateSession`, which
+// writes back to wherever the session already lives.
+const KEPT_SESSION_KEY = "np.session.kept";
+
+function parseSession(raw: string): Session | null {
+  const o = JSON.parse(raw) as Partial<Session> | null;
+  if (!o || typeof o.token !== "string" || !o.token) return null;
+  const s: Session = { token: o.token, base: String(o.base || ""), user: (o.user as PublicUser) ?? null };
+  if (o.local === true) s.local = true;
+  return s;
+}
+
+const tabSession = createStoredValue<Session | null>({ key: SESSION_KEY, area: "session", fallback: null, parse: parseSession });
+const keptSession = createStoredValue<Session | null>({ key: KEPT_SESSION_KEY, area: "local", fallback: null, parse: parseSession });
+
+export const sessionStore: StoredValue<Session | null> = {
+  subscribe(listener) {
+    const offTab = tabSession.subscribe(listener);
+    const offKept = keptSession.subscribe(listener);
+    return () => {
+      offTab();
+      offKept();
+    };
   },
-});
+  get: () => tabSession.get() ?? keptSession.get(),
+  getServer: () => null,
+  set(value) {
+    if (!value) {
+      tabSession.clear();
+      keptSession.clear();
+      return;
+    }
+    // New copy first, then the old one goes: no moment without a session.
+    tabSession.set(value);
+    keptSession.clear();
+  },
+  clear() {
+    tabSession.clear();
+    keptSession.clear();
+  },
+};
+
+/** Sign-in from the app: `keep` = stay signed in on this device (localStorage). */
+export function saveSession(value: Session, opts: { keep: boolean }) {
+  if (opts.keep) {
+    keptSession.set(value);
+    tabSession.clear();
+  } else {
+    tabSession.set(value);
+    keptSession.clear();
+  }
+}
+
+/** Change the current session in place (a refreshed token, fresher user details). */
+export function updateSession(patch: Partial<Session>) {
+  const tab = tabSession.get();
+  if (tab) {
+    tabSession.set({ ...tab, ...patch });
+    return;
+  }
+  const kept = keptSession.get();
+  if (kept) keptSession.set({ ...kept, ...patch });
+}
+
+/** true when the current session is kept on this device (localStorage). */
+export function sessionKept(): boolean {
+  return !tabSession.get() && Boolean(keptSession.get());
+}
 
 export function hostOf(base: string): string {
   try {

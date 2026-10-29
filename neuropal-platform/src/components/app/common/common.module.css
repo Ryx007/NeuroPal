@@ -1,0 +1,315 @@
+/* Shared app primitives. Design-system variables only (src/styles/tokens.css,
+   src/app/globals.css); motion only when html[data-motion] isn't "Still". */
+
+/* ---------------------------------------------------------------- dialog -- */
+.dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: var(--panel-border);
+  border-radius: var(--np-radius);
+  background: var(--panel-solid);
+  color: var(--np-on-surface);
+  box-shadow: var(--panel-shadow);
+}
+
+.dialogWide {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.dialog::backdrop {
+  background: color-mix(in srgb, var(--np-surface-lowest) 72%, transparent);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.dialogBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.25rem 1.375rem;
+}
+
+@media (min-width: 640px) {
+  .dialogBody {
+    padding: 1.5rem 1.75rem 1.75rem;
+  }
+}
+
+.dialogClose {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  min-width: 44px;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------- kbd -- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6em;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--np-outline-variant);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--np-surface-container);
+  color: var(--np-on-surface-variant);
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- switch -- */
+.switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: var(--np-radius-control);
+  background: transparent;
+  color: var(--np-on-surface);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.switchTrack {
+  position: relative;
+  display: block;
+  width: 52px;
+  height: 30px;
+  border: 2px solid var(--np-control);
+  border-radius: var(--np-radius-control);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: max(3px, calc(var(--np-radius-control) - 4px));
+  background: var(--np-on-surface-variant);
+}
+
+.switch[aria-checked="true"] .switchTrack {
+  background: var(--np-accent-fill);
+  border-color: var(--pressed-border);
+}
+
+.switch[aria-checked="true"] .switchKnob {
+  left: 26px;
+  background: var(--np-accent-ink);
+}
+
+.switchText {
+  min-width: 2em;
+  font-size: 0.875rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion="Still"])) .switchKnob {
+    transition: left 0.16s ease;
+  }
+}
+
+/* ---------------------------------------------------------------- chips --- */
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.choiceLabel {
+  color: var(--label-color);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* --------------------------------------------------------------- status --- */
+.status {
+  min-height: 1.5em;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--np-on-surface-variant);
+}
+
+.status:empty {
+  min-height: 0;
+}
+
+.statusError {
+  color: var(--np-on-surface);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- tints --- */
+.tintGreen {
+  color: var(--np-secondary);
+}
+
+.tintYellow {
+  color: var(--np-tertiary);
+}
+
+.tintRed {
+  color: var(--np-error);
+}
+
+.tintNone {
+  color: var(--np-outline);
+}
+
+/* ----------------------------------------------------------- help lines --- */
+.helpLines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.helpTitle {
+  font-size: 1.375rem;
+  line-height: 1.1;
+}
+
+.helpLead {
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.helpList {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.helpList > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.875rem;
+}
+
+.helpCall {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1rem;
+  border: var(--ctl-border);
+  border-radius: var(--np-radius-control);
+  color: var(--np-on-surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.helpCall:hover {
+  color: var(--np-on-surface);
+  background: color-mix(in srgb, var(--np-on-surface) 8%, transparent);
+}
+
+.helpNumber {
+  font-family: var(--font-label);
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.helpWhat {
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+}
+
+.helpElsewhere {
+  min-height: 44px;
+  color: var(--np-on-surface);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ pal --- */
+.pal {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.palSvg {
+  display: block;
+  overflow: visible;
+  transform-origin: 50% 70%;
+}
+
+.palBlink {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+.palTalk {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+@keyframes palBreathe {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-2px) scale(1.03);
+  }
+}
+
+@keyframes palBlink {
+  0%,
+  95.5%,
+  100% {
+    transform: scaleY(1);
+  }
+  97.5% {
+    transform: scaleY(0.12);
+  }
+}
+
+@keyframes palTalk {
+  from {
+    transform: scaleY(0.45);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion="Still"])) .palBreathe {
+    animation: palBreathe 2.25s ease-in-out infinite alternate;
+  }
+
+  :global(html[data-motion="Calm"]) .palBreathe {
+    animation-duration: 3.5s;
+  }
+
+  :global(html:not([data-motion="Still"])) .palBlink {
+    animation: palBlink 5.2s linear infinite;
+  }
+
+  :global(html:not([data-motion="Still"])) .palTalk {
+    animation: palTalk 0.16s ease-in-out infinite alternate;
+  }
+}

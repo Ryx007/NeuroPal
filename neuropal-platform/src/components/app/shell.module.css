@@ -1,99 +1,437 @@
+/* The app frame. Wide: sidebar + content. Narrow (< 840 px): content, then
+   a bottom bar. Skins come from the design-system variables. The sidebar
+   grows with the text size (up to a third of the window); when the text is
+   large for its width, the shortcut hints step aside and labels wrap. */
 .shell {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: clamp(252px, 15.75rem, 32vw) minmax(0, 1fr);
   min-height: 100dvh;
-  background: var(--np-surface);
   color: var(--np-on-surface);
 }
 
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px 16px;
-  border-right: var(--np-border) solid var(--np-line);
+/* ---------------------------------------------------------------- sidebar -- */
+.sidebar {
   position: sticky;
   top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
   height: 100dvh;
+  padding: 1.125rem 0.875rem 1rem;
+  overflow-y: auto;
+  border-right: var(--header-border);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  container: appside / inline-size;
 }
 
-.wordmark {
+.brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  color: inherit;
+  gap: 0.625rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.5rem;
+  color: var(--np-on-surface);
   text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--np-on-surface);
+}
+
+.brandText {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-variation-settings: "wdth" var(--wordmark-wdth);
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .navList {
-  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 4px;
+  list-style: none;
 }
 
-.navLink {
-  display: block;
-  padding: 10px 12px;
-  min-height: 44px;
+.navLink,
+.calmLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 46px;
+  padding: 0 0.75rem;
+  border: 1.5px solid transparent;
   border-radius: var(--np-radius-control);
-  color: var(--np-on-surface-variant);
+  color: var(--np-on-surface);
+  font-weight: 700;
   text-decoration: none;
 }
 
-.navLink[aria-current="page"] {
-  color: var(--np-on-surface);
-  background: var(--np-surface-high);
+.navLink :global(.np-icon) {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
-.calm {
+.navLink:hover {
+  color: var(--np-on-surface);
+  border-color: var(--np-control);
+}
+
+.navLink[aria-current="page"],
+.navLink[aria-current="page"]:hover {
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+  border-color: var(--pressed-border);
+}
+
+.navText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.2rem;
+}
+
+/* Large text in a sidebar that can't widen enough: the hints go (the "?"
+   list still has them) so the labels keep the room. Measured against the
+   sidebar's content box: the widest row needs about 12.8em with its hint,
+   and the content box is about 13.1em whenever the sidebar can grow with
+   the text. */
+@container appside (max-width: 12.9em) {
+  .hint,
+  .keysButton > svg,
+  .keysButton > kbd {
+    display: none;
+  }
+}
+
+/* The calming steps: set apart below the pages, always the same place. */
+.calmItem {
+  margin-top: 0.75rem;
+  padding-top: 0.875rem;
+  border-top: var(--rule);
+}
+
+.calmLink {
+  min-height: 52px;
+  padding-left: 0.5rem;
+  border: var(--ctl-border);
+  background: color-mix(in srgb, var(--np-secondary) 10%, var(--panel-solid));
+}
+
+.calmLink:hover {
+  color: var(--np-on-surface);
+  background: color-mix(in srgb, var(--np-secondary) 18%, var(--panel-solid));
+}
+
+.calmLink[aria-current="page"] {
+  border-color: var(--np-on-surface);
+}
+
+.calmIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid var(--pressed-border);
+  border-radius: 50%;
+  background: var(--np-secondary);
+  color: var(--np-surface-lowest);
+}
+
+.calmIcon :global(.np-icon) {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.sideFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
   margin-top: auto;
 }
 
-.main {
+.account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 56px;
+  padding: 0.5rem 0.625rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  color: var(--np-on-surface);
+  text-decoration: none;
+}
+
+.account:hover {
+  color: var(--np-on-surface);
+  border-color: var(--np-control);
+}
+
+.avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1.5px solid var(--pressed-border);
+  border-radius: 50%;
+  background: var(--np-accent-fill);
+  color: var(--np-accent-ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.accountText {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 24px;
 }
 
-.signIn {
-  max-width: 720px;
-  margin: 0 auto;
-  display: grid;
-  gap: 16px;
+.accountName {
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 800px) {
+.accountMeta {
+  color: var(--np-on-surface-variant);
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.keysButton {
+  justify-content: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  font-size: 0.875rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.keysButton > :last-child {
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------------- content -- */
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A flexible column: each page sets its own measure (the reader may use
+   the full width and its own side panel). */
+.main {
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+  padding: clamp(1rem, 1rem + 1.5vw, 2.25rem) clamp(1rem, 0.5rem + 2.5vw, 3rem) 3.5rem;
+}
+
+.noticeSlot:empty {
+  display: none;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.875rem;
+  margin: 0.75rem clamp(1rem, 0.5rem + 2.5vw, 3rem) 0;
+  padding: 0.5rem 0.625rem 0.5rem 0.875rem;
+  border: var(--rule);
+  border-left: 6px solid var(--np-warn);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.notice > p {
+  flex: 1 1 18rem;
+}
+
+.goHint {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.5rem 0.75rem;
+  border: var(--panel-border);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+  box-shadow: var(--panel-shadow);
+  font-size: 0.875rem;
+}
+
+/* ---------------------------------------------------------- shortcuts list -- */
+.dialogTitle {
+  padding-right: 3rem;
+  font-size: 1.75rem;
+  line-height: 1.05;
+}
+
+.keysToggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.375rem 0.25rem 0.375rem 0.875rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+}
+
+.keysToggleLabel {
+  font-weight: 700;
+}
+
+.keysTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  /* Both lists line up: the same column split. */
+  table-layout: fixed;
+}
+
+.keysTable th:first-child {
+  width: 46%;
+}
+
+.keysCaption {
+  padding: 0.25rem 0 0.5rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.keysTable th {
+  padding: 0 0 0.375rem;
+  color: var(--label-color);
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-ls);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.keysTable td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-top: var(--rule);
+  vertical-align: middle;
+}
+
+/* A chord ("Shift + ↑") never splits across lines; "or" / "then" may. */
+.chord {
+  white-space: nowrap;
+}
+
+.then {
+  color: var(--np-on-surface-variant);
+  font-size: 0.8125rem;
+}
+
+/* ------------------------------------------------------------ narrow screens -- */
+@media (max-width: 839px) {
   .shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
   }
-  .nav {
+
+  .sidebar {
     order: 2;
     position: sticky;
-    bottom: 0;
     top: auto;
+    bottom: 0;
     height: auto;
     flex-direction: row;
-    align-items: center;
-    padding: 8px 12px;
+    gap: 0;
+    padding: 0.375rem 0.375rem calc(0.375rem + env(safe-area-inset-bottom));
+    overflow: visible;
     border-right: 0;
-    border-top: var(--np-border) solid var(--np-line);
-    background: var(--np-surface);
+    border-top: var(--header-border);
+    /* Solid on phones: page text must never show through the bar. */
+    background: var(--panel-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
-  .wordmark {
+
+  .brand,
+  .sideFoot,
+  .hint {
     display: none;
   }
+
   .navList {
-    display: flex;
+    display: grid;
     flex: 1;
-    justify-content: space-around;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.25rem;
   }
-  .calm {
-    margin-top: 0;
+
+  .navLink,
+  .calmLink {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.125rem;
+    min-height: 56px;
+    padding: 0.25rem 0.125rem;
+    font-size: 0.75rem;
+    line-height: 1.15;
+    text-align: center;
   }
+
+  .navText {
+    flex: 0 0 auto;
+  }
+
+  .calmItem {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .calmLink {
+    padding-left: 0.125rem;
+  }
+
+  .calmIcon {
+    width: 26px;
+    height: 26px;
+  }
+
   .main {
-    padding: 16px;
+    padding-bottom: 2rem;
+  }
+
+  .goHint {
+    display: none;
   }
 }

@@ -1,0 +1,279 @@
+/* The check-in slider: a 26 px lane for the value bubble over a 44 px track
+   (the touch height). Region colours are the state tints and never stand
+   alone: the bubble, the knob glyph and the legend say the word. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.slider {
+  position: relative;
+  height: 70px;
+  border-radius: var(--radius-box);
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.slider:focus {
+  outline: none;
+}
+
+.slider:focus-visible {
+  outline: 3px solid var(--np-accent-text);
+  outline-offset: 3px;
+}
+
+/* ---- the track ---- */
+.rail {
+  position: absolute;
+  inset: 0 15px;
+  pointer-events: none;
+}
+
+.band {
+  position: absolute;
+  top: 44px;
+  height: 8px;
+  border-radius: 4px;
+  opacity: 0.55;
+}
+
+:global(html[data-skin="signal"]) .band {
+  border-radius: 2px;
+}
+
+.band0 {
+  left: 0;
+  width: calc(33.5% - 1.5px);
+  background: var(--np-secondary);
+}
+
+.band1 {
+  left: calc(33.5% + 1.5px);
+  width: calc(33% - 3px);
+  background: var(--np-tertiary);
+}
+
+.band2 {
+  left: calc(66.5% + 1.5px);
+  right: 0;
+  background: var(--np-error);
+}
+
+/* Signal's warning language: hazard stripes on Overwhelmed, never red alone. */
+:global(html[data-skin="signal"]) .band2 {
+  background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--np-shadow-color) 60%, transparent) 0 2.5px, transparent 2.5px 6px);
+}
+
+.bandOn {
+  opacity: 1;
+}
+
+/* A 1 px rule under the whole track: its extent reads at 3:1 whatever the
+   regions' fill (WCAG 1.4.11). */
+.rule {
+  position: absolute;
+  top: 54px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--np-outline);
+}
+
+.ticks,
+.major {
+  display: none;
+}
+
+:global(html[data-skin="signal"]) .ticks {
+  position: absolute;
+  top: 37px;
+  left: 0;
+  right: 0;
+  display: block;
+  height: 7px;
+  background: repeating-linear-gradient(90deg, var(--np-outline) 0 1.5px, transparent 1.5px calc(100% / 30));
+}
+
+:global(html[data-skin="signal"]) .major {
+  position: absolute;
+  top: 29px;
+  display: block;
+  width: 2px;
+  height: 15px;
+  margin-left: -1px;
+  background: var(--np-on-surface-variant);
+}
+
+.major0 {
+  left: 0;
+}
+
+.major1 {
+  left: 33.5%;
+}
+
+.major2 {
+  left: 66.5%;
+}
+
+.major3 {
+  left: 100%;
+}
+
+/* ---- the knob ---- */
+.knob {
+  position: absolute;
+  top: 33px;
+  left: calc(var(--pos) * (100% - 30px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2.5px solid var(--np-outline);
+  border-radius: 50%;
+  background: var(--np-surface-highest);
+  color: var(--np-outline);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--np-shadow-color) 35%, transparent);
+  pointer-events: none;
+}
+
+:global(html[data-skin="signal"]) .knob {
+  border-width: 2px;
+  background: radial-gradient(circle at 38% 32%, var(--np-surface-highest), var(--np-surface-lowest) 75%);
+  box-shadow: 2px 2px 0 var(--np-shadow-color);
+}
+
+.knobDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--np-on-surface-variant);
+}
+
+.slider[data-region="0"] .knob,
+.slider[data-region="0"] .bubbleGlyph {
+  border-color: var(--np-secondary);
+  color: var(--np-secondary);
+}
+
+.slider[data-region="1"] .knob,
+.slider[data-region="1"] .bubbleGlyph {
+  border-color: var(--np-tertiary);
+  color: var(--np-tertiary);
+}
+
+.slider[data-region="2"] .knob,
+.slider[data-region="2"] .bubbleGlyph {
+  border-color: var(--np-error);
+  color: var(--np-error);
+}
+
+/* ---- the value bubble ---- */
+.bubble {
+  position: absolute;
+  top: 0;
+  left: calc(var(--pos) * 100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 24px;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--np-control);
+  border-radius: 12px;
+  background: var(--np-surface-container);
+  color: var(--np-on-surface);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(calc(var(--pos) * -100%));
+  pointer-events: none;
+}
+
+:global(html[data-skin="signal"]) .bubble {
+  border-radius: min(4px, var(--np-radius-control));
+  box-shadow: 2px 2px 0 var(--np-shadow-color);
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.unset .bubble {
+  color: var(--np-on-surface-variant);
+}
+
+.bubbleGlyph {
+  flex-shrink: 0;
+}
+
+/* ---- motion: the knob glides to a saved level; never while dragging ---- */
+@media (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion="Still"])) .knob,
+  :global(html:not([data-motion="Still"])) .bubble {
+    transition:
+      left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  :global(html:not([data-motion="Still"])) .band {
+    transition: opacity 0.16s ease;
+  }
+
+  :global(html:not([data-motion="Still"])) .dragging .knob,
+  :global(html:not([data-motion="Still"])) .dragging .bubble {
+    transition: none;
+  }
+}
+
+/* ---- legend (large tiles) ---- */
+.legend {
+  display: flex;
+  padding: 0 15px;
+}
+
+.legendItem {
+  display: inline-flex;
+  flex: 33.5 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 0;
+  color: var(--np-on-surface-variant);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.legendItem:nth-child(2) {
+  flex-grow: 33;
+}
+
+:global(html[data-skin="signal"]) .legendItem {
+  font-family: var(--font-label);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legendOn {
+  color: var(--np-on-surface);
+}
+
+.legendItem[data-state="green"] .legendGlyph {
+  color: var(--np-secondary);
+}
+
+.legendItem[data-state="yellow"] .legendGlyph {
+  color: var(--np-tertiary);
+}
+
+.legendItem[data-state="red"] .legendGlyph {
+  color: var(--np-error);
+}

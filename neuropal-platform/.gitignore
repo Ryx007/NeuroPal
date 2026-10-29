@@ -17,3 +17,6 @@ npm-debug.log*
 
 # env files
 .env*.local
+
+# written by `next dev` (Next 16 agent notes)
+AGENTS.md

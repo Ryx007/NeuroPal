@@ -6,7 +6,8 @@
 // the request carried the token that is STILL current — a wrong password on
 // sign-in, or a late reply to a request sent with an older token, never
 // signs anyone out.
-import { apiBaseStore, sessionStore, type Session } from "@/lib/api";
+import { apiBaseStore, mixedContentProblem, sessionStore, type Session } from "@/lib/api";
+import { reportReachable, reportUnreachable } from "./connection";
 
 export class ApiError extends Error {
   /** 0 = no answer (offline, timeout, CORS, mixed content). */
@@ -52,6 +53,11 @@ export interface RequestOptions {
   timeoutMs?: number;
   /** false for sign-in/sign-up (never sends the session). */
   auth?: boolean;
+  /**
+   * true where a 401 means "a password you typed is wrong", not "the session
+   * is over" (POST /auth/password). The caller then checks the session itself.
+   */
+  keepSessionOn401?: boolean;
 }
 
 function buildUrl(base: string, path: string, query?: RequestOptions["query"]): string {
@@ -69,6 +75,8 @@ export const seg = (s: string) => encodeURIComponent(s);
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const base = currentBase();
   if (!base) throw new ApiError("Connect to your NeuroPal server first.", 0);
+  const mixed = mixedContentProblem(base);
+  if (mixed) throw new ApiError(mixed, 0);
   const session = opts.auth === false ? null : currentSession();
   const sentToken = session?.token ?? null;
 
@@ -100,14 +108,17 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   } catch (e) {
     if (opts.signal?.aborted) throw e; // the caller cancelled: not an error to show
     const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
+    if (timedOut) throw new ApiError("The server took too long to answer.", 0);
+    reportUnreachable();
     throw new ApiError(
-      timedOut ? "The server took too long to answer." : "Can’t reach your NeuroPal server right now.",
+      isOffline() ? "You’re offline right now." : "Can’t reach your NeuroPal server right now.",
       0,
     );
   } finally {
     window.clearTimeout(timeout);
     opts.signal?.removeEventListener("abort", onAbort);
   }
+  reportReachable();
 
   const text = await res.text();
   let data: unknown = null;
@@ -120,7 +131,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   const envelope = data as { error?: unknown; retryAfterSec?: unknown } | null;
   const message = typeof envelope?.error === "string" ? envelope.error : `The server answered ${res.status}.`;
-  if (res.status === 401 && sentToken && currentSession()?.token === sentToken) {
+  if (res.status === 401 && sentToken && !opts.keepSessionOn401 && currentSession()?.token === sentToken) {
     sessionStore.clear(); // the session is over: the app shows sign-in
   }
   const retryAfter =
@@ -131,6 +142,14 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 /** A URL to a server file for an <img>/<iframe> that can't send headers (pass a document ticket). */
 export function fileUrl(path: string, query?: RequestOptions["query"]): string {
   return buildUrl(currentBase(), path, query);
+}
+
+function isOffline(): boolean {
+  try {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+  } catch {
+    return false;
+  }
 }
 
 /** Plain words for any error from `request`. */
