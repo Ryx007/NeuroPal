@@ -107,3 +107,55 @@ jobs:
       - run: npm run typecheck
       - name: Static export
         run: npm run build
+
+  web-app:
+    name: Web app (browser checks, real backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Backend dependencies
+        working-directory: neuropal-backend
+        run: npm ci
+      - name: Platform dependencies + Chromium
+        working-directory: neuropal-platform
+        run: |
+          npm ci
+          npx playwright-core install --with-deps chromium
+      - name: Static export
+        working-directory: neuropal-platform
+        run: npm run build
+      # Two seeded public-mode APIs (in-memory MongoDB, a labelled fake AI)
+      # and the built site; they keep running for the next steps.
+      - name: Start the APIs and the site
+        working-directory: neuropal-platform
+        run: |
+          node scripts/qa/dev-api.cjs 4420 > "$RUNNER_TEMP/api-reader.log" 2>&1 &
+          node scripts/qa/dev-api.cjs 4410 > "$RUNNER_TEMP/api-shell.log" 2>&1 &
+          npm run serve > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if grep -q "dev-api" "$RUNNER_TEMP/api-reader.log" && grep -q "dev-api" "$RUNNER_TEMP/api-shell.log" \
+              && curl -sf http://127.0.0.1:4321/ > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP"/*.log
+          exit 1
+      - name: Library, Reader, Ask
+        working-directory: neuropal-platform
+        run: node scripts/qa/web-reader.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4420 --out "$RUNNER_TEMP/shots-reader"
+      - name: Shell, Home, calming steps, Pal, Settings
+        working-directory: neuropal-platform
+        run: node scripts/qa/web-shell.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4410 --out "$RUNNER_TEMP/shots-shell"
+      - name: Pal's crisis check matches the backend
+        working-directory: neuropal-platform
+        run: node scripts/qa/web-shell-crisis.mjs
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-app-screens
+          path: ${{ runner.temp }}/shots-*
+          retention-days: 7

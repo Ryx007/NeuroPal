@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // QA for the Library, the Reader (text, original pages, EPUB) and Ask.
-//   1. a dev API (real backend, fake AI):  node <scratchpad>/tools/dev-api.cjs 4420
+//   1. a dev API (real backend, fake AI):  node scripts/qa/dev-api.cjs 4420
 //   2. the dev server:  NP_DIST_DIR=.next-web-reader npx next dev -p 4320
 //   3. node scripts/qa/web-reader.mjs [--web http://localhost:4320] [--api http://127.0.0.1:4420] [--out <dir>] [--only library,reader,ask,epub,pages]
 // Visits every screen and state at 1440×900 and 390×844 in both skins, saves
@@ -23,7 +23,7 @@ const arg = (name, fallback) => {
 // Next's dev server only serves its dev resources to "localhost".
 const WEB = arg("web", "http://localhost:4320").replace(/\/+$/, "");
 const API = arg("api", "http://127.0.0.1:4420").replace(/\/+$/, "");
-const OUT = arg("out", "/tmp/claude-0/-home-claude/aa7fe01a-faa2-5b24-9f30-0260a7a33b2d/scratchpad/web-shots/web-reader");
+const OUT = arg("out", "shots/web-reader");
 const ONLY = (arg("only", "") || "").split(",").filter(Boolean);
 const want = (k) => !ONLY.length || ONLY.includes(k);
 const EMAIL = "ryx@example.com";

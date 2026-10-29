@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // QA for the web app's shell, Home, calming steps, Pal and Settings.
-//   1. a dev API (real backend, fake AI):  node <scratchpad>/tools/dev-api.cjs 4410
+//   1. a dev API (real backend, fake AI):  node scripts/qa/dev-api.cjs 4410
 //   2. the dev server:  NP_DIST_DIR=.next-web-shell npx next dev -p 4310
 //   3. node scripts/qa/web-shell.mjs [--web http://localhost:4310] [--api http://127.0.0.1:4410] [--out <dir>] [--only home,pal]
 // Visits every screen and state at 1440×900 and 390×844 in both skins, saves
@@ -20,7 +20,7 @@ const arg = (name, fallback) => {
 // Next's dev server only serves its dev resources to "localhost".
 const WEB = arg("web", "http://localhost:4310").replace(/\/+$/, "");
 const API = arg("api", "http://127.0.0.1:4410").replace(/\/+$/, "");
-const OUT = arg("out", "/tmp/claude-0/-home-claude/aa7fe01a-faa2-5b24-9f30-0260a7a33b2d/scratchpad/web-shots/web-shell");
+const OUT = arg("out", "shots/web-shell");
 const ONLY = (arg("only", "") || "").split(",").filter(Boolean);
 const EMAIL = "ryx@example.com";
 const PASSWORD = "neuropal-dev-1";
