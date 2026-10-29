@@ -117,9 +117,14 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      # poppler renders PDF page images (the reader's "Original pages"), as
+      # in the server's Docker image.
       - name: Backend dependencies
         working-directory: neuropal-backend
-        run: npm ci
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends poppler-utils
+          npm ci
       - name: Platform dependencies + Chromium
         working-directory: neuropal-platform
         run: |
