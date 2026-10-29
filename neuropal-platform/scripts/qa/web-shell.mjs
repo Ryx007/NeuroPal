@@ -456,6 +456,27 @@ async function behaviour(browser, session) {
     await ctx.close();
   }
 
+  // Break it down never turns a crisis into steps: checked here first (never
+  // sent), and the server's own crisis answer is shown the same way.
+  {
+    const ctx = await context(browser, vp, skin, { signedIn: true, session });
+    const { page } = await open(ctx, "/app/pal/?tool=breakdown");
+    const sent = [];
+    await page.route(`${API}/api/pal/breakdown`, (route) => {
+      sent.push(route.request().postDataJSON()?.task);
+      return route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ steps: [], crisis: true, reply: "I’m really glad you told me. (server)" }) });
+    });
+    await page.getByLabel("The task").fill("i want to  end my life");
+    await page.getByRole("button", { name: "Break it down" }).last().click();
+    check((await shows(page.getByRole("link", { name: "Open the calming steps" }))), "breakdown crisis: calming steps offered", "no calming steps for a crisis task");
+    check((await shows(page.getByRole("link", { name: /112/ }))), "breakdown crisis: help lines shown", "no help lines for a crisis task");
+    check(sent.length === 0, "breakdown crisis: the task was never sent", `the crisis task was sent: ${sent.join(" | ")}`);
+    await page.getByLabel("The task").fill("plan the week");
+    await page.getByRole("button", { name: "Break it down" }).last().click();
+    check((await shows(page.getByText("(server)"))), "breakdown: the server's crisis answer is shown", "server crisis answer not shown");
+    await ctx.close();
+  }
+
   // The server's own crisis flag is shown like the local one; Clear chat asks first.
   {
     const ctx = await context(browser, vp, skin, { signedIn: true, session });

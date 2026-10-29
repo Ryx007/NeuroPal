@@ -42,9 +42,13 @@ assert.ok(crisis.length >= 10 && everyday.length >= 5, "phrase lists look too sh
 for (const m of ["I don’t want to be alive anymore", "I want to kill myself", "I want to die"]) if (!crisis.includes(m)) crisis.push(m);
 for (const m of ["this bug is killing me"]) if (!everyday.includes(m)) everyday.push(m);
 
+// Whitespace variants: the server collapses \s+ before matching, so must we.
+for (const m of ["I want to  die", "kill\tmyself", "voglio morire", "I want to\nend my life"]) crisis.push(m);
+
 const { looksLikeCrisis, CRISIS } = await import(webFile);
 const backendRe = new RegExp(backend.source, backend.flags);
-const backendCheck = (t) => backendRe.test(String(t || "").replace(/[’‘]/g, "'"));
+// The server's order (pal.js): collapse whitespace, trim, then the apostrophes.
+const backendCheck = (t) => backendRe.test(String(t || "").replace(/\s+/g, " ").trim().replace(/[’‘]/g, "'"));
 assert.equal(CRISIS.source, backendRe.source);
 
 let failures = 0;

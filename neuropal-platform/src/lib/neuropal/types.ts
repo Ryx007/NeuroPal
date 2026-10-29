@@ -99,6 +99,9 @@ export interface PalBreakdown {
   steps: string[];
   provider?: string;
   model?: string;
+  /** The task sounded like a crisis: no steps, the server's careful reply instead. */
+  crisis?: boolean;
+  reply?: string;
 }
 
 /** POST /api/pal/chat `context` — only what helps a short reply. */

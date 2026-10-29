@@ -4,14 +4,25 @@
 // or an answer that doesn't work) Pal's offline steps take over and the panel
 // says so. The steps become a checklist; any step can go on today's
 // minimum day; "Do step 1 with me" starts a sit.
+import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { addTask } from "@/lib/neuropal/day";
 import { ApiError } from "@/lib/neuropal/client";
 import { palSay, type PalLook } from "@/lib/neuropal/look";
 import { palBreakdown } from "@/lib/neuropal/pal";
-import { cleanSteps, localBreakdown, OFFLINE_STEPS_NOTE, TASK_MAX_CHARS, type OfflineReason } from "@/lib/neuropal/palLogic";
+import {
+  cleanSteps,
+  CRISIS_REPLY,
+  localBreakdown,
+  looksLikeCrisis,
+  OFFLINE_STEPS_NOTE,
+  TASK_MAX_CHARS,
+  type OfflineReason,
+} from "@/lib/neuropal/palLogic";
 import { startSit } from "@/lib/neuropal/palState";
+import { ROUTES } from "../common/appNav";
 import { announce } from "../common/announce";
+import { HelpLines } from "../common/HelpLines";
 import { CheckIcon, PlusIcon, SitIcon, SplitIcon } from "../common/icons";
 import styles from "./pal.module.css";
 
@@ -41,6 +52,8 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
   const [ticked, setTicked] = useState<Record<number, boolean>>({});
   const [added, setAdded] = useState<Record<number, boolean>>({});
   const [problem, setProblem] = useState("");
+  // A task that sounds like a crisis never becomes steps (and is never sent).
+  const [crisis, setCrisis] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const slowTimer = useRef<number | undefined>(undefined);
 
@@ -52,7 +65,16 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
     [],
   );
 
+  const showCrisis = (reply: string) => {
+    setResult(null);
+    setLoading(false);
+    setSlow(false);
+    setCrisis(reply);
+    announce(reply);
+  };
+
   const show = (r: Result) => {
+    setCrisis(null);
     setResult(r);
     setTicked({});
     setAdded({});
@@ -70,6 +92,10 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
     }
     if (loading) return;
     setProblem("");
+    if (looksLikeCrisis(t)) {
+      showCrisis(CRISIS_REPLY);
+      return;
+    }
     request.current?.abort();
     const ctrl = new AbortController();
     request.current = ctrl;
@@ -86,6 +112,10 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
     try {
       const r = await palBreakdown(t, ctrl.signal);
       if (request.current !== ctrl) return;
+      if (r?.crisis) {
+        showCrisis(typeof r.reply === "string" && r.reply.trim() ? r.reply : CRISIS_REPLY);
+        return;
+      }
       const steps = cleanSteps(r?.steps);
       show(steps ? { task: t, steps, offline: null } : { task: t, steps: localBreakdown(t), offline: "error" });
     } catch (err) {
@@ -101,6 +131,10 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
     request.current?.abort();
     request.current = null;
     window.clearTimeout(slowTimer.current);
+    if (looksLikeCrisis(task)) {
+      showCrisis(CRISIS_REPLY);
+      return;
+    }
     show({ task: task.trim(), steps: localBreakdown(task), offline: "quick" });
   };
 
@@ -145,6 +179,18 @@ export function BreakdownPanel({ pal, onSit }: { pal: PalLook; onSit: () => void
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {crisis ? (
+        <section className={styles.card} aria-label={`${pal.name}’s answer`}>
+          <p>{crisis}</p>
+          <div className={styles.crisis}>
+            <Link href={ROUTES.calm} className="np-btn">
+              Open the calming steps
+            </Link>
+            <HelpLines level={3} />
+          </div>
+        </section>
       ) : null}
 
       {result ? (
