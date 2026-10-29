@@ -18,6 +18,18 @@ import NPCore
 ///   -NPHost <url>             a real server at this address, nothing saved (e.g. a backend
 ///                             running on the Mac: http://localhost:4100)
 ///   -NPToken <jwt>            (debug builds, with -NPHost) open signed in with this session
+///
+/// Read by the features themselves (all mock-only, for screenshots):
+///   Home    -NPCheckIn green|yellow|red     today's check-in
+///           -NPHomeSheet anchors|newAnchor|editAnchor|minimumDay   open that sheet
+///           -NPCalmStep <n>                 the calming steps on step n
+///   Pal     -NPSitMinutes <n>               "Sit with me" running for n minutes
+///           -NPPalChat 1|crisis             a chat already under way (or a crisis reply)
+///           -NPPalDump 1                    a brain dump with entries
+///           -NPPalTask "<text>"             Break it down, already filled in
+///   Settings -NPSettingsPane <pane>         open that pane (look | reading | pal | accessibility | account | about)
+///           -NPSettingsAsk "<text>"         Make it yours with an Ask Pal proposal showing
+///   Reader  -NPReadAloud 1                  start reading aloud on open
 struct LaunchOptions {
     var mock = false
     var signedOut = false

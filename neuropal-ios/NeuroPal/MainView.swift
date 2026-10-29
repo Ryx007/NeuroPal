@@ -45,7 +45,10 @@ struct MainView: View {
         }
         .sheet(isPresented: $nav.palOpen) {
             ThemedRoot(store: themeStore) { PalAssistantView(initialTool: nav.palTool) }
-                .presentationDetents([.medium, .large])
+                // iPhone: half height first. iPad: a full form sheet (the
+                // assistant's tools don't fit a medium detent there).
+                .presentationDetents(UIDevice.current.userInterfaceIdiom == .pad ? [.large] : [.medium, .large])
+                .presentationSizing(.form)
                 .presentationDragIndicator(.visible)
         }
         .focusedSceneValue(\.npAppShowing, true)
@@ -56,13 +59,13 @@ struct MainView: View {
 /// bar — the iPad's floating one too — is never covered):
 /// - the offline banner at the top, while the app runs offline;
 /// - Pal's floating bubble (iPhone only — the iPad has Pal in its sidebar):
-///   not on the Pal tab itself, not over an open document (the reader's
-///   controls live there), and not when it's turned off in Settings.
+///   not on the Pal tab itself and not over an open document (the reader's
+///   controls live there). "Hide the bubble" is PalBubble's own rule, so it
+///   can stay up during "Sit with me".
 private struct ShellChrome: ViewModifier {
     let tab: NPTab
     @Environment(AppNavigator.self) private var nav
     @Environment(AppSession.self) private var session
-    @Environment(AppPreferences.self) private var preferences
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     func body(content: Content) -> some View {
@@ -70,12 +73,10 @@ private struct ShellChrome: ViewModifier {
             .safeAreaInset(edge: bannerEdge, spacing: 0) {
                 if session.phase == .offline { OfflineBanner(edge: bannerEdge) }
             }
-            .overlay(alignment: .bottomTrailing) {
-                if showsBubble {
-                    PalBubble()
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 12)
-                }
+            .overlay {
+                // PalBubble places itself from the safe area, follows
+                // "Hide the bubble", and stays up during "Sit with me".
+                if showsBubble { PalBubble() }
             }
     }
 
@@ -86,7 +87,7 @@ private struct ShellChrome: ViewModifier {
     }
 
     private var showsBubble: Bool {
-        guard UIDevice.current.userInterfaceIdiom == .phone, !preferences.palBubbleHidden else { return false }
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
         if tab == .pal { return false }
         if tab == .library && nav.openDocumentID != nil { return false }
         return true
