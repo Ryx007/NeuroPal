@@ -157,6 +157,9 @@ jobs:
       - name: Pal's crisis check matches the backend
         working-directory: neuropal-platform
         run: node scripts/qa/web-shell-crisis.mjs
+      - name: The answer renderer stays linear on garbled Markdown
+        working-directory: neuropal-platform
+        run: node scripts/qa/markdown-timing.mjs
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v4

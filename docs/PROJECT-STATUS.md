@@ -7,8 +7,14 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-10-24 — **v2 platform, round 2, on branch
-`v2-platform`**: the backend moves to the Contabo VPS behind a Cloudflare
+_Last updated: 2026-10-29 — **round 3 on branch `v3-apple-web` (PR #3,
+stacked on `v2-platform`)**: a native SwiftUI app for iPhone + iPad
+(`neuropal-ios/` — sign-in, library, word-by-word read-aloud reader with
+PDF and EPUB, Ask, Home, calming steps, Pal, widgets, Settings; simulator
+builds + `swift test` on a Mac and in CI) and the NeuroPal web app at
+`/app/` in the Next.js platform (same features, desktop-first; browser
+checks against a real backend in CI). The cross-platform choice (Expo vs
+Flutter) is still the owner's. Round 2 (2026-10-24) on `v2-platform`: the backend moves to the Contabo VPS behind a Cloudflare
 Tunnel (https://api.ryx007.work, `deploy/vps/`, written and tested, **not yet
 deployed** — waiting on SSH access), sign-in for the public server, the
 keyboard fix (react-native-keyboard-controller), the draggable check-in

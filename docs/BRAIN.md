@@ -46,6 +46,7 @@ call (Gemini free tier) for reasoning.
 
 - Backend: Node 20 / Express, Mongoose (14 schemas), Qdrant JS client, provider-agnostic `aiProvider` (gemini | ollama | anthropic).
 - Frontend: one Expo SDK 55 codebase (React Native 0.83, Redux Toolkit, NativeWind), three targets: Android (release APK), iOS (Expo Go), web (`expo start --web`).
+- Since v2/v3 (branches `v2-platform`, `v3-apple-web`) three more clients use the same API and sign-in: the Flutter app (`neuropal-flutter/`), the native SwiftUI app for iPhone + iPad (`neuropal-ios/`, Keychain session bound to the server address) and the web app at `/app/` of the Next.js platform (`neuropal-platform/`, static, calls the API with CORS — the API's `CORS_ORIGINS` must list its origin). The public cloud server is https://api.ryx007.work (`deploy/vps/`, not yet deployed). See `docs/PLATFORM-PLAN.md` §4 for what each client has.
 - Embeddings always local (Ollama `nomic-embed-text`, 768-dim). Storage always local. TTS always on-device. Only reasoning may touch the cloud.
 
 ## 3. Machine truth (Mac Mini, verified 2026-07-08)
