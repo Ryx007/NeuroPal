@@ -4,6 +4,11 @@ import Foundation
 /// Home layout. Exactly the shape `normalizeAppearance` returns in
 /// packages/tokens/src/appearance.js; the server stores it (User.appearance,
 /// GET/PUT /api/me/appearance) and every client syncs it.
+///
+/// Decoding never fails on content: `Appearance`, `Classic`, `Signal`, `Pal`
+/// and `Home` decode ANY JSON through the token normalisers (unknown or
+/// broken values fall back exactly like the JS), so an old save or a newer
+/// server's extra fields can't break the app.
 public struct Appearance: Codable, Hashable, Sendable {
     public enum Skin: String, Codable, Sendable, CaseIterable { case classic, signal }
 
@@ -15,6 +20,10 @@ public struct Appearance: Codable, Hashable, Sendable {
         public init(theme: String = "dark", accent: String = "ruby") {
             self.theme = theme
             self.accent = accent
+        }
+
+        public init(from decoder: Decoder) throws {
+            self = Tokens.normalizeClassic(try JSONValue(from: decoder))
         }
     }
 
@@ -37,6 +46,10 @@ public struct Appearance: Codable, Hashable, Sendable {
             self.corners = corners
             self.texture = texture
             self.type = type
+        }
+
+        public init(from decoder: Decoder) throws {
+            self = Tokens.normalizeSignal(try JSONValue(from: decoder))
         }
     }
 
@@ -65,6 +78,10 @@ public struct Appearance: Codable, Hashable, Sendable {
             self.talk = talk
             self.voice = voice
             self.people = people
+        }
+
+        public init(from decoder: Decoder) throws {
+            self = Tokens.normalizePal(try JSONValue(from: decoder))
         }
     }
 
@@ -101,6 +118,10 @@ public struct Appearance: Codable, Hashable, Sendable {
             self.tiles = tiles
             self.rules = rules
         }
+
+        public init(from decoder: Decoder) throws {
+            self = Tokens.normalizeHome(try JSONValue(from: decoder))
+        }
         public static let defaultTiles: [HomeTile] = [
             HomeTile(id: "state", size: "L"), HomeTile(id: "anchor", size: "M"), HomeTile(id: "focus", size: "M"),
             HomeTile(id: "mvd", size: "L"), HomeTile(id: "reading", size: "M"), HomeTile(id: "pal", size: "S"),
@@ -127,6 +148,10 @@ public struct Appearance: Codable, Hashable, Sendable {
         self.pal = pal
         self.home = home
         self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        self = Tokens.normalizeAppearance(try JSONValue(from: decoder))
     }
 
     public static let `default` = Appearance()
