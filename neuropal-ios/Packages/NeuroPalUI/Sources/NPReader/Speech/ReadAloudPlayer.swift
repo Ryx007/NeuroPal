@@ -1,5 +1,6 @@
 import AVFoundation
 import MediaPlayer
+import NPCore
 import NPTheme
 import Observation
 import UIKit
@@ -46,6 +47,9 @@ final class ReadAloudPlayer {
     @ObservationIgnored private var resumeAfterInterruption = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var commandTargets: [Any] = []
+    /// The owner said more is coming after this content (the next EPUB
+    /// chapter): the audio session stays up meanwhile.
+    @ObservationIgnored private var awaitingMore = false
 
     private struct Queued {
         let generation: Int
@@ -230,8 +234,17 @@ final class ReadAloudPlayer {
         isPlaying = false
         word = max(0, (script?.count ?? 1) - 1)
         updateNowPlaying()
-        deactivateSoon()
+        awaitingMore = false
+        // The owner may carry straight on (the next chapter, read ahead):
+        // then the session never drops, and iOS keeps the app running.
         onFinish?()
+        if !isPlaying { deactivateSoon(after: awaitingMore ? 30 : 1.2) }
+    }
+
+    /// Called from `onFinish` when more text follows shortly (a chapter that
+    /// is still loading): the audio session stays active for a while.
+    func expectMore() {
+        awaitingMore = true
     }
 
     private func clamp(_ w: Int) -> Int { min(max(0, w), max(0, (script?.count ?? 1) - 1)) }
@@ -244,14 +257,22 @@ final class ReadAloudPlayer {
 
     // MARK: Synthesizer callbacks (hopped to the main actor by SpeechDelegate)
 
-    fileprivate func didStart(_ id: ObjectIdentifier) {
-        guard let q = queued[id], q.generation == generation, let first = q.words.first else { return }
+    /// The queue entry of this very utterance. Callbacks carry the object
+    /// itself, so a late one can never match a newer utterance that happens
+    /// to reuse a freed one's address.
+    private func entry(_ utterance: AVSpeechUtterance) -> Queued? {
+        guard let q = queued[ObjectIdentifier(utterance)], q.utterance === utterance else { return nil }
+        return q
+    }
+
+    fileprivate func didStart(_ utterance: AVSpeechUtterance) {
+        guard let q = entry(utterance), q.generation == generation, let first = q.words.first else { return }
         setWord(first)
         updateNowPlaying()
     }
 
-    fileprivate func willSpeak(_ id: ObjectIdentifier, at location: Int) {
-        guard let q = queued[id], q.generation == generation, !q.offsets.isEmpty else { return }
+    fileprivate func willSpeak(_ utterance: AVSpeechUtterance, at location: Int) {
+        guard let q = entry(utterance), q.generation == generation, !q.offsets.isEmpty else { return }
         var lo = 0
         var hi = q.offsets.count - 1
         var hit = 0
@@ -267,13 +288,16 @@ final class ReadAloudPlayer {
         setWord(q.words[hit])
     }
 
-    fileprivate func didFinish(_ id: ObjectIdentifier) {
-        guard let q = queued.removeValue(forKey: id), q.generation == generation else { return }
+    fileprivate func didFinish(_ utterance: AVSpeechUtterance) {
+        guard let q = entry(utterance) else { return }
+        queued.removeValue(forKey: ObjectIdentifier(utterance))
+        guard q.generation == generation else { return }
         fill(startingAt: nil)
     }
 
-    fileprivate func didCancel(_ id: ObjectIdentifier) {
-        queued.removeValue(forKey: id)
+    fileprivate func didCancel(_ utterance: AVSpeechUtterance) {
+        guard entry(utterance) != nil else { return }
+        queued.removeValue(forKey: ObjectIdentifier(utterance))
     }
 
     // MARK: Voice
@@ -292,9 +316,9 @@ final class ReadAloudPlayer {
         try? session.setActive(true)
     }
 
-    private func deactivateSoon() {
+    private func deactivateSoon(after seconds: Double = 1.2) {
         let gen = generation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             onMain {
                 guard let self, !self.isPlaying, self.generation == gen else { return }
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -311,6 +335,11 @@ final class ReadAloudPlayer {
             let options = AVAudioSession.InterruptionOptions(
                 rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
             onMain { self?.interrupted(type, options) }
+        })
+        // The calming steps come first: the voice pauses when they open.
+        observers.append(center.addObserver(forName: AppNavigator.calmingStepsOpened, object: nil,
+                                            queue: .main) { [weak self] _ in
+            onMain { self?.pause() }
         })
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil,
                                             queue: .main) { [weak self] note in
@@ -399,30 +428,35 @@ final class ReadAloudPlayer {
 }
 
 /// AVSpeechSynthesizer's delegate: hops every callback onto the main actor,
-/// in order (the main queue is serial).
+/// in order (the main queue is serial), carrying the utterance itself.
 private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
     weak var player: ReadAloudPlayer?
 
+    /// The utterance across the hop (only ever touched on the main thread).
+    private struct Ref: @unchecked Sendable {
+        let utterance: AVSpeechUtterance
+    }
+
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
-        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didStart(id) } }
+        let ref = Ref(utterance: utterance)
+        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didStart(ref.utterance) } }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange,
                            utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
+        let ref = Ref(utterance: utterance)
         let location = characterRange.location
-        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.willSpeak(id, at: location) } }
+        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.willSpeak(ref.utterance, at: location) } }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
-        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didFinish(id) } }
+        let ref = Ref(utterance: utterance)
+        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didFinish(ref.utterance) } }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
-        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didCancel(id) } }
+        let ref = Ref(utterance: utterance)
+        DispatchQueue.main.async { [weak player = self.player] in onMain { player?.didCancel(ref.utterance) } }
     }
 }
 

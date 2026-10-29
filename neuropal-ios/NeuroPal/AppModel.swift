@@ -1,9 +1,12 @@
 import Network
 import NPCore
 import NPDay
+import NPReader
 import NPTheme
 import Observation
 import SwiftUI
+import UIKit
+import WidgetKit
 
 /// The composition root: builds the session (real server or mock) and the
 /// stores, once per launch. Each window has its own navigator (two iPad
@@ -20,6 +23,11 @@ final class AppModel {
     @ObservationIgnored private var connectivity: ConnectivityWatcher?
     /// Every window reports phase changes; each is acted on once.
     @ObservationIgnored private var handledPhase: AppSession.Phase?
+    /// The window in front (the last one opened or brought forward): where
+    /// a tapped notification opens.
+    @ObservationIgnored private weak var frontNavigator: AppNavigator?
+    @ObservationIgnored private var booted = false
+    @ObservationIgnored private var pendingRoute: NPRoute?
 
     init(options: LaunchOptions) {
         self.options = options
@@ -60,22 +68,63 @@ final class AppModel {
             dayStore = DayStore()
             preferences = AppPreferences()
         }
+        // Page images (ticket URLs) and anything else loaded through the
+        // shared session stay in memory only, never on disk.
+        URLCache.shared = URLCache(memoryCapacity: 24 << 20, diskCapacity: 0)
+        let themeStore = self.themeStore
+        session.onSessionEnd = {
+            // What the account leaves on this device goes with its session
+            // (the day — check-ins, anchors — stays: it's the person's, not
+            // the account's).
+            AccountTraces.remove()
+            ReaderAccount.forget()
+            themeStore.forgetServer()
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        NotificationRouter.shared.onOpen = { [weak self] route in self?.openFromNotification(route) }
+    }
+
+    /// A window came to the front.
+    func windowBecameActive(_ navigator: AppNavigator) {
+        frontNavigator = navigator
+    }
+
+    /// A notification was tapped: its place opens in the window in front,
+    /// once the session check is done (like the launch route).
+    private func openFromNotification(_ route: NPRoute) {
+        if booted, let navigator = frontNavigator {
+            navigator.open(route)
+        } else {
+            pendingRoute = route
+        }
     }
 
     /// Every window calls this when it appears. The first one boots the
     /// session and takes the launch route; later ones wait for the boot.
     func start(navigator: AppNavigator) async {
+        frontNavigator = navigator
         if let bootTask {
             await bootTask.value
             return
         }
         // The calming steps never wait for the network.
         if options.route == .calm { navigator.open(.calm) }
+        // A fresh install starts signed out (a Keychain session can outlive
+        // an uninstall) — judged now, not in App.init: prewarming can build
+        // the app before the first unlock, when the defaults read as empty.
+        if let keychain = session.store as? KeychainSessionStore, UIApplication.shared.isProtectedDataAvailable {
+            keychain.forgetSessionFromAnEarlierInstall()
+        }
         let task = Task { await session.boot() }
         bootTask = task
         watchConnectivity()
         await task.value
+        booted = true
         if let route = options.route, route != .calm { navigator.open(route) }
+        if let route = pendingRoute {
+            pendingRoute = nil
+            (frontNavigator ?? navigator).open(route)
+        }
     }
 
     /// The session changed phase: boot finished signed in, a sign-in, a new
@@ -85,8 +134,10 @@ final class AppModel {
         handledPhase = phase
         guard phase == .signedIn else { return }
         // The look follows the account: runs after boot, sign-in, a server
-        // switch and reconnecting.
-        Task { await themeStore.syncWithServer(session.api) }
+        // switch and reconnecting. Another account adopts its own look
+        // instead of receiving the last one's.
+        let account = session.user.map { "\(AppSession.origin(session.host))#\($0.id)" }
+        Task { await themeStore.syncWithServer(session.api, account: account) }
     }
 
     /// The app came to the foreground: check the session again, at most

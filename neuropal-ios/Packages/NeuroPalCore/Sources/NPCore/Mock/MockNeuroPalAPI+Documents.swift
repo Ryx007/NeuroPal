@@ -69,6 +69,19 @@ extension MockNeuroPalAPI {
         MockIngest.shared.forget(id)
     }
 
+    /// Reads it again: back through the stages (~13 s) to ready.
+    public func reingestDocument(id: String) async throws {
+        await pause()
+        try requireSession()
+        try lock.withLock {
+            guard let i = documentsStore.firstIndex(where: { $0.id == id }) else { throw APIError.notFound }
+            documentsStore[i].status = .pending
+            documentsStore[i].progress = 0
+            documentsStore[i].ingestError = nil
+        }
+        MockIngest.shared.begin(id, text: MockIngest.shared.text(for: id))
+    }
+
     public func documentText(id: String) async throws -> DocumentText {
         await pause()
         try requireSession()

@@ -66,12 +66,25 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
     private let service: String
     private let lock = NSLock()
 
+    /// Touches neither the Keychain nor the defaults: the app may be built
+    /// during prewarming, before the first unlock, when both read as empty.
+    /// Call `forgetSessionFromAnEarlierInstall()` at boot.
     public init(defaults: UserDefaults = .standard, keychain: any KeychainBackend = SystemKeychain(),
                 service: String = KeychainSessionStore.service) {
         self.defaults = defaults
         self.keychain = keychain
         self.service = service
-        if !defaults.bool(forKey: Self.installedKey) {
+    }
+
+    /// A fresh install starts signed out: a session left in the Keychain by
+    /// an earlier install of the app (Keychain items outlive an uninstall;
+    /// UserDefaults don't) is deleted, once. Call it at boot, before the
+    /// first `load`, and only while the device's protected data is
+    /// available — before the first unlock the defaults read as empty and
+    /// every install would look fresh.
+    public func forgetSessionFromAnEarlierInstall() {
+        lock.withLock {
+            guard !defaults.bool(forKey: Self.installedKey) else { return }
             keychain.delete(service: service, account: Self.account)
             defaults.set(true, forKey: Self.installedKey)
         }

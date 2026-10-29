@@ -167,6 +167,8 @@ struct LibraryList: View {
                 await model.rename(doc, title: title, subtitle: subtitle, api: session.api)
             }
             .npTheme(theme)
+            // The shell's room for Pal's bubble is for the list, not this sheet.
+            .contentMargins(.bottom, nil, for: .scrollContent)
             .presentationDetents([.medium])
             .presentationBackground(theme.surfaceContainer)
         }
@@ -188,16 +190,16 @@ struct LibraryList: View {
     @ViewBuilder
     private func row(_ doc: NPDocument) -> some View {
         let isSelected = selection != nil && nav.openDocumentID == doc.id
+        let failed = doc.status == .failed
+        let retry: (() -> Void)? = failed ? { readAgain(doc) } : nil
         Group {
             if selection != nil {
-                DocumentRow(document: doc, selected: isSelected)
+                DocumentRow(document: doc, selected: isSelected, onRetry: retry, retrying: model.retrying.contains(doc.id))
                     .tag(doc.id)
                     .focusEffectDisabled()
             } else {
-                Button { nav.openDocumentID = doc.id } label: {
-                    DocumentRow(document: doc)
-                }
-                .buttonStyle(.plain)
+                DocumentRow(document: doc, onOpen: { nav.openDocumentID = doc.id }, onRetry: retry,
+                            retrying: model.retrying.contains(doc.id))
             }
         }
         .libraryRow()
@@ -209,6 +211,9 @@ struct LibraryList: View {
             if doc.isReady {
                 Button { nav.open(.ask(documentID: doc.id)) } label: { Label("Ask", systemImage: "sparkles") }
                     .tint(theme.accentFill)
+            } else if failed {
+                Button { readAgain(doc) } label: { Label("Try again", systemImage: "arrow.clockwise") }
+                    .tint(theme.accentFill)
             }
         }
         .contextMenu {
@@ -216,13 +221,27 @@ struct LibraryList: View {
             if doc.isReady {
                 Button { nav.open(.ask(documentID: doc.id)) } label: { Label("Ask about this", systemImage: "sparkles") }
             }
+            if failed {
+                Button { readAgain(doc) } label: { Label("Try again", systemImage: "arrow.clockwise") }
+            }
             Button { renaming = doc } label: { Label("Rename", systemImage: "pencil") }
             Divider()
             Button(role: .destructive) { deleting = doc } label: { Label("Delete", systemImage: "trash") }
         }
-        .accessibilityAction(named: "Ask about this") { nav.open(.ask(documentID: doc.id)) }
+        .accessibilityAction(named: failed ? "Try again" : "Ask about this") {
+            if failed { readAgain(doc) } else { nav.open(.ask(documentID: doc.id)) }
+        }
         .accessibilityAction(named: "Rename") { renaming = doc }
         .accessibilityAction(named: "Delete") { deleting = doc }
+    }
+
+    /// "Try again" on a file that couldn't be read.
+    private func readAgain(_ doc: NPDocument) {
+        Task {
+            if await model.reingest(doc, api: session.api) {
+                AccessibilityNotification.Announcement("Reading “\(doc.title)” again").post()
+            }
+        }
     }
 
     private var filterMenu: some View {

@@ -4,8 +4,10 @@ import Observation
 
 /// An open EPUB: the manifest, the chapter on screen, its token stream and
 /// read-aloud through the shared player, rolling into the next chapter at
-/// the end. Progress is (chapter + fraction) / chapters, with the spine
-/// index in `lastPage` and the token in `lastWordIndex` (as in the Expo app).
+/// the end — at once from words read ahead (EpubReadAhead), so it carries
+/// on with the phone locked. Progress is (chapter + fraction) / chapters,
+/// with the spine index in `lastPage` and the token in `lastWordIndex` (as
+/// in the Expo app).
 @MainActor
 @Observable
 final class EpubModel {
@@ -31,8 +33,12 @@ final class EpubModel {
     private(set) var silent = false
     var notice: String?
 
-    @ObservationIgnored let handler = EpubSchemeHandler()
+    @ObservationIgnored let handler: EpubSchemeHandler
     @ObservationIgnored let bridge = EpubBridge()
+    @ObservationIgnored let readAhead: EpubReadAhead
+    /// The page shows the chapter in `spine` (its words came from it): only
+    /// then does the highlight follow the voice.
+    @ObservationIgnored private var pageReady = false
     @ObservationIgnored private(set) var pageAnchorsJSON = "[]"
     @ObservationIgnored private var pendingWord = 0
     /// Where in the next chapter to start, as a fraction, when only the
@@ -51,8 +57,16 @@ final class EpubModel {
 
     init(document: NPDocument) {
         self.document = document
+        let handler = EpubSchemeHandler()
+        self.handler = handler
+        readAhead = EpubReadAhead(handler: handler)
         bridge.onMessage = { [weak self] message in self?.handle(message) }
         saver.action = { [weak self] in await self?.saveNow() }
+        handler.renewBase = { [weak self] in await self?.renewTicket() }
+        handler.onMainDocumentFailed = { [weak self] web, error in
+            guard let self, let web, web === self.bridge.webView else { return }
+            self.chapterFailed(error)
+        }
     }
 
     var isPlaying: Bool { player.isPlaying && player.isReading(document.id) }
@@ -63,11 +77,14 @@ final class EpubModel {
     func open(api: any NeuroPalAPI) async {
         self.api = api
         guard manifest == nil else { return }
+        problem = nil
         do {
             let m = try await api.epubManifest(documentID: document.id)
             let progress = try? await api.readingProgress(id: document.id)
-            let ticket = try? await api.ticket(documentID: document.id)
-            handler.base = Self.folder(api.epubBaseURL(documentID: document.id, ticket: ticket?.ticket))
+            // The book's files load with this ticket (the page can't send
+            // the session): without one nothing would show.
+            let ticket = try await api.ticket(documentID: document.id)
+            handler.base = Self.folder(api.epubBaseURL(documentID: document.id, ticket: ticket.ticket))
             manifest = m
             guard !m.spine.isEmpty else {
                 problem = "This book has no chapters to show."
@@ -106,6 +123,46 @@ final class EpubModel {
         }
     }
 
+    /// "Try again" after a problem: open the book again, or reload the chapter.
+    func retry() async {
+        problem = nil
+        guard manifest != nil else {
+            if let api { await open(api: api) }
+            return
+        }
+        let w = word
+        tokens = nil
+        chapterURL = nil
+        go(to: spine, word: w)
+    }
+
+    /// The server stopped taking the book's ticket (it lasts hours): a new
+    /// one, and the folder it opens.
+    private func renewTicket() async -> URL? {
+        guard let api, let ticket = try? await api.ticket(documentID: document.id) else { return nil }
+        return Self.folder(api.epubBaseURL(documentID: document.id, ticket: ticket.ticket))
+    }
+
+    /// The chapter on screen didn't load.
+    private func chapterFailed(_ error: Error) {
+        watchdog?.cancel()
+        if player.isReading(document.id), player.scriptID == scriptID(spine) {
+            // The voice reads it from the words read ahead: it carries on.
+            notice = "This chapter's page didn't load. Reading aloud carries on."
+            return
+        }
+        problem = Self.chapterProblem(error)
+    }
+
+    static func chapterProblem(_ error: Error) -> String {
+        let offline: Set<URLError.Code> = [.notConnectedToInternet, .networkConnectionLost, .timedOut,
+                                           .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed]
+        if let e = error as? URLError, offline.contains(e.code) {
+            return "You're offline right now. Try again when you're connected."
+        }
+        return "This chapter didn't load. Try again in a moment."
+    }
+
     /// The folder URL with a trailing slash, so relative paths resolve inside it.
     static func folder(_ url: URL) -> URL {
         let s = url.absoluteString
@@ -114,32 +171,58 @@ final class EpubModel {
 
     /// Show a chapter (or an anchor in it); `autoplay` keeps the voice going.
     func go(to index: Int, word: Int = 0, anchor: String? = nil, autoplay: Bool = false) {
-        guard let manifest, manifest.spine.indices.contains(index) else { return }
+        guard manifest?.spine.indices.contains(index) == true else { return }
         if index == spine, tokens != nil, chapterURL != nil {
-            if let anchor { bridge.seekAnchor(anchor) } else { seek(to: word, play: autoplay || isPlaying) }
+            if let anchor {
+                // The page may still be loading this chapter (read ahead): it seeks once it's there.
+                if pageReady { bridge.seekAnchor(anchor) } else { pendingAnchor = anchor }
+            } else {
+                seek(to: word, play: autoplay || isPlaying)
+            }
             return
         }
         if !autoplay, isPlaying { player.pause() }
-        spine = index
         tokens = nil
-        selection = nil
-        silent = false
         pendingWord = word
         pendingFraction = nil
         pendingAnchor = anchor
         self.autoplay = autoplay
-        let href = manifest.spine[index].href
-        let anchors = manifest.pageList.filter { Self.samePath($0.href, href) }
-            .map { ["page": $0.page, "anchor": $0.anchor ?? ""] }
-        if let data = try? JSONSerialization.data(withJSONObject: anchors), let json = String(data: data, encoding: .utf8) {
-            pageAnchorsJSON = json
-        } else {
-            pageAnchorsJSON = "[]"
-        }
-        chapterURL = EpubRuntime.url(for: href)
+        show(chapter: index)
+    }
+
+    /// Load chapter `index` into the page.
+    private func show(chapter index: Int) {
+        guard let manifest, manifest.spine.indices.contains(index) else { return }
+        spine = index
+        selection = nil
+        silent = false
+        pageReady = false
+        pageAnchorsJSON = anchorsJSON(index)
+        chapterURL = EpubRuntime.url(for: manifest.spine[index].href)
         loadID += 1
         watch()
         saveSoon()
+    }
+
+    /// The print pages that start in chapter `index`, for the runtime.
+    private func anchorsJSON(_ index: Int) -> String {
+        guard let manifest, manifest.spine.indices.contains(index) else { return "[]" }
+        let href = manifest.spine[index].href
+        let anchors = manifest.pageList.filter { Self.samePath($0.href, href) }
+            .map { ["page": $0.page, "anchor": $0.anchor ?? ""] }
+        guard let data = try? JSONSerialization.data(withJSONObject: anchors),
+              let json = String(data: data, encoding: .utf8) else { return "[]" }
+        return json
+    }
+
+    /// The next two chapters, read ahead while the voice is in this book.
+    private func readAheadNext() {
+        guard let manifest, player.isReading(document.id) else { return }
+        let next = (spine + 1)..<min(manifest.spine.count, spine + 3)
+        readAhead.want(next.compactMap { i in
+            EpubRuntime.url(for: manifest.spine[i].href)
+                .map { EpubReadAhead.Chapter(spine: i, url: $0, pageAnchorsJSON: anchorsJSON(i)) }
+        })
     }
 
     /// If the runtime never reports (scripts unavailable), show the page anyway.
@@ -167,8 +250,28 @@ final class EpubModel {
         switch message {
         case .tokens(let t):
             watchdog?.cancel()
-            tokens = t
+            pageReady = true
             silent = false
+            if player.isReading(document.id), player.scriptID == scriptID(spine) {
+                // The voice is in this chapter already (read ahead, or the
+                // book reopened while it read): the page joins it.
+                tokens = t
+                pendingWord = 0
+                pendingFraction = nil
+                autoplay = false
+                word = t.clamp(player.word)
+                player.load(script(t), documentID: document.id, at: word)
+                hook()
+                if let anchor = pendingAnchor {
+                    pendingAnchor = nil
+                    bridge.seekAnchor(anchor)
+                } else {
+                    highlight(word, scroll: true)
+                }
+                readAheadNext()
+                return
+            }
+            tokens = t
             let target = pendingFraction.map { Int($0 * Double(t.words.count)) } ?? pendingWord
             pendingWord = 0
             pendingFraction = nil
@@ -179,11 +282,14 @@ final class EpubModel {
                 pendingAnchor = nil
                 bridge.seekAnchor(anchor)
             } else if w > 0 {
-                bridge.highlight(w, scroll: true)
+                highlight(w, scroll: true)
             }
             if autoplay {
                 autoplay = false
-                startVoice(from: w)
+                // A chapter without words (figures only) is passed over.
+                if t.isEmpty { chapterFinished() } else { startVoice(from: w) }
+            } else {
+                readAheadNext()
             }
         case .tap(let i):
             seek(to: i, play: true)
@@ -216,9 +322,12 @@ final class EpubModel {
 
     // MARK: Read aloud
 
+    /// The player's name for chapter `index` of this book.
+    private func scriptID(_ index: Int) -> String { "\(document.id)#\(index)" }
+
     private func script(_ t: EpubTokens) -> SpeechScript {
         let units = t.units
-        return SpeechScript(id: "\(document.id)#\(spine)", speech: t.speech, units: units,
+        return SpeechScript(id: scriptID(spine), speech: t.speech, units: units,
                             pauses: Array(repeating: 0.15, count: units.count), title: document.title,
                             subtitle: tocTitle)
     }
@@ -242,6 +351,7 @@ final class EpubModel {
         player.load(script(t), documentID: document.id, at: w)
         hook()
         player.play(from: w)
+        readAheadNext()
     }
 
     private func hook() {
@@ -252,15 +362,46 @@ final class EpubModel {
 
     private func voiceMoved(to w: Int) {
         word = w
-        bridge.highlight(w, scroll: true)
+        highlight(w, scroll: true)
         saveSoon()
     }
 
+    /// Lights word `w` in the page — once the page shows this chapter.
+    private func highlight(_ w: Int, scroll: Bool) {
+        guard pageReady else { return }
+        bridge.highlight(w, scroll: scroll)
+    }
+
     private func chapterFinished() {
-        if spine + 1 < chapterCount {
-            go(to: spine + 1, word: 0, autoplay: true)
-        } else {
+        let next = spine + 1
+        guard next < chapterCount else {
             saveSoon()
+            return
+        }
+        if let words = readAhead.tokens(for: next) {
+            carryOn(into: next, with: words)
+        } else {
+            // Not read ahead (yet): the voice waits for the page, and the
+            // audio session stays up meanwhile.
+            player.expectMore()
+            go(to: next, word: 0, autoplay: true)
+        }
+    }
+
+    /// Straight on into chapter `index` from its words read ahead; the page
+    /// loads it meanwhile (when it can) and the highlight joins in then.
+    private func carryOn(into index: Int, with words: EpubTokens) {
+        pendingWord = 0
+        pendingFraction = nil
+        pendingAnchor = nil
+        autoplay = false
+        show(chapter: index)
+        tokens = words
+        word = 0
+        if words.isEmpty {
+            chapterFinished() // figures only: on to the next one
+        } else {
+            startVoice(from: 0)
         }
     }
 
@@ -268,7 +409,7 @@ final class EpubModel {
         guard let t = tokens, !t.isEmpty else { return }
         let w = t.clamp(index)
         word = w
-        bridge.highlight(w, scroll: false)
+        highlight(w, scroll: false)
         if play {
             startVoice(from: w)
         } else if player.isReading(document.id) {
@@ -281,18 +422,22 @@ final class EpubModel {
         guard let t = tokens else { return }
         let target = forward ? (t.sentenceStart(after: word) ?? word) : t.sentenceStart(before: word)
         seek(to: target, play: isPlaying)
-        if !isPlaying { bridge.highlight(target, scroll: true) }
+        if !isPlaying { highlight(target, scroll: true) }
     }
 
     func step(paragraph forward: Bool) {
         guard let t = tokens else { return }
         if forward, t.paragraphStart(after: word) == nil, spine + 1 < chapterCount {
-            go(to: spine + 1, autoplay: isPlaying)
+            if isPlaying, let words = readAhead.tokens(for: spine + 1) {
+                carryOn(into: spine + 1, with: words)
+            } else {
+                go(to: spine + 1, autoplay: isPlaying)
+            }
             return
         }
         let target = forward ? (t.paragraphStart(after: word) ?? word) : t.paragraphStart(before: word)
         seek(to: target, play: isPlaying)
-        if !isPlaying { bridge.highlight(target, scroll: true) }
+        if !isPlaying { highlight(target, scroll: true) }
     }
 
     func clearSelection() {
@@ -306,7 +451,7 @@ final class EpubModel {
         if let excerpt = citation.excerpt, let i = t.index(matching: excerpt) {
             if isPlaying { player.pause() }
             word = i
-            bridge.highlight(i, scroll: true)
+            highlight(i, scroll: true)
             saveSoon()
         } else {
             notice = "That passage is in another chapter. Use Contents to get there."

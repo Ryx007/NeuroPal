@@ -1,4 +1,5 @@
 import Foundation
+import NPCore
 
 /// The in-page half of the EPUB reader, ported from the Expo app's
 /// epubRuntime.js. The chapter is the publisher's XHTML, shown as shipped;
@@ -13,8 +14,11 @@ import Foundation
 ///     `buildChapterHtml`) comes before any of the book's markup — no
 ///     scripts, resources only from the book's own origin, no forms, frames
 ///     or fetches, no referrer — and is also sent as a response header;
-///   - the book's scripts, handlers, javascript: URLs, meta refreshes and
-///     <base> tags are stripped as a second layer;
+///   - the book's scripts, handlers, javascript: URLs, meta and <base>
+///     tags are stripped as a second layer (NPCore's EpubSanitizer, off the
+///     main thread);
+///   - the page may only ever be the chapter the app loaded (EpubBridge's
+///     navigation policy): no refresh, link or form moves it elsewhere;
 ///   - every file loads through the app's `npbook:` scheme handler, which
 ///     only serves paths inside the book (the document ticket never enters
 ///     the page).
@@ -60,47 +64,16 @@ enum EpubRuntime {
     static func chapterHTML(_ xhtml: String, themeCSS: String) -> String {
         let inject = "<meta http-equiv=\"Content-Security-Policy\" content=\"\(csp)\">"
             + "<meta name=\"referrer\" content=\"no-referrer\">"
+            + "<meta http-equiv=\"x-dns-prefetch-control\" content=\"off\">"
             + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
             + "<style id=\"np-theme\">\(themeCSS)</style>"
         return "<!doctype html>" + inject + sanitize(xhtml)
     }
 
+    /// The book's active content stripped (NPCore's EpubSanitizer: scripts,
+    /// meta and base tags, handlers, javascript: addresses).
     static func sanitize(_ source: String) -> String {
-        var html = source
-        html = html.replacingOccurrences(of: #"^\s*<\?xml[^>]*\?>"#, with: "", options: [.regularExpression, .caseInsensitive])
-        html = html.replacingOccurrences(of: #"^\s*<!doctype[^>]*>"#, with: "", options: [.regularExpression, .caseInsensitive])
-        html = html.replacingOccurrences(of: #"<script\b[^<>]*>[\s\S]*?</script\s*>"#, with: "",
-                                         options: [.regularExpression, .caseInsensitive])
-        html = html.replacingOccurrences(of: #"<script\b[^<>]*/>"#, with: "", options: [.regularExpression, .caseInsensitive])
-        html = html.replacingOccurrences(of: #"<base\b(?:[^<>"']|"[^"]*"|'[^']*')*>"#, with: "",
-                                         options: [.regularExpression, .caseInsensitive])
-        html = replace(#"<meta\b(?:[^<>"']|"[^"]*"|'[^']*')*>"#, in: html) { tag in
-            tag.range(of: #"http-equiv|name\s*=\s*["']?\s*referrer"#, options: [.regularExpression, .caseInsensitive]) != nil
-                ? "" : tag
-        }
-        // Attributes only inside tags — the chapter's text stays untouched.
-        html = replace(#"<[a-zA-Z][^<>]*>"#, in: html) { tag in
-            var t = tag.replacingOccurrences(of: #"[\s/]+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)"#, with: " ",
-                                             options: [.regularExpression, .caseInsensitive])
-            t = t.replacingOccurrences(of: #"((?:xlink:)?href|src)\s*=\s*(["'])\s*javascript:[^"']*\2"#, with: "$1=$2#$2",
-                                       options: [.regularExpression, .caseInsensitive])
-            return t
-        }
-        return html
-    }
-
-    private static func replace(_ pattern: String, in s: String, _ transform: (String) -> String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return s }
-        let ns = s as NSString
-        var out = ""
-        var last = 0
-        for match in regex.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
-            out += ns.substring(with: NSRange(location: last, length: match.range.location - last))
-            out += transform(ns.substring(with: match.range))
-            last = NSMaxRange(match.range)
-        }
-        out += ns.substring(from: last)
-        return out
+        EpubSanitizer.sanitize(source)
     }
 
     /// App CSS on top of the publisher's: page frame, palette, typography.
@@ -129,15 +102,16 @@ enum EpubRuntime {
         a, a * { color: \(c.accentText) !important; }
         img, svg, video { max-width: 100% !important; height: auto !important; }
         ::selection { background: \(c.accent)44; }
-        ::highlight(np-karaoke) { background-color: \(c.accent)55; color: inherit; text-decoration: underline 3px \(c.accentText); }
         .np-word-active { background-color: \(c.accent)55; border-radius: 3px; text-decoration: underline 3px \(c.accentText); }
         .np-eq-active { outline: 2px solid \(c.accentText); outline-offset: 2px; border-radius: 3px; }
         """
     }
 
-    /// The runtime, with this chapter's print-page anchors.
-    static func script(pageAnchorsJSON: String) -> String {
-        "var __NP_PAGE_ANCHORS = \(pageAnchorsJSON);\n" + runtime
+    /// The runtime, with this chapter's print-page anchors and the number
+    /// of this load (every message carries it, so one from an older page
+    /// can be told apart).
+    static func script(pageAnchorsJSON: String, load: Int = -1) -> String {
+        "var __NP_PAGE_ANCHORS = \(pageAnchorsJSON);\nvar __NP_LOAD = \(load);\n" + runtime
     }
 
     static let runtime = #"""
@@ -148,12 +122,19 @@ enum EpubRuntime {
       var TOKENS = [];
       var PIDS = [];
       var NODE_FIRST = new Map();
-      var hasHighlightAPI = typeof window.Highlight === 'function' && window.CSS && CSS.highlights;
+      // Words light up by a class on a span (each paragraph's words are
+      // wrapped as the voice reaches it), not with the CSS Custom Highlight
+      // API: WebKit leaves old ::highlight paint behind as the page scrolls
+      // (a trail of lit words), while a class change always repaints.
+      var hasHighlightAPI = false;
       var lastScrollAt = 0;
       var touchedAt = 0;
 
       function send(m) {
-        try { window.webkit.messageHandlers.np.postMessage(m); } catch (e) {}
+        try {
+          m.load = typeof __NP_LOAD === 'number' ? __NP_LOAD : -1;
+          window.webkit.messageHandlers.np.postMessage(m);
+        } catch (e) {}
       }
 
       var BLOCK = /^(P|DIV|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|FIGCAPTION|TD|TH|DT|DD|PRE|SECTION|ARTICLE|ASIDE)$/;

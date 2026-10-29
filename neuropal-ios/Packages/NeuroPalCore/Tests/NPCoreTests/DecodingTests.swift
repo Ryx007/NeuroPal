@@ -119,6 +119,22 @@ struct DecodingTests {
         let steps = try await StubServer(always: .json(200, #"{"steps":["Open the file","Read the first line","Stop for water"],"provider":"gemini","model":"g"}"#))
             .api(token: "t").palBreakdown(task: "Read")
         #expect(steps.steps.count == 3)
+        #expect(!steps.crisis)
+        #expect(steps.reply == nil)
+        // A crisis-sounding task never reaches the model: the careful reply, no steps.
+        let careful = try await StubServer(always: .json(200, #"{"steps":[],"crisis":true,"reply":"I’m really glad you told me."}"#))
+            .api(token: "t").palBreakdown(task: "x")
+        #expect(careful.crisis)
+        #expect(careful.steps.isEmpty)
+        #expect(careful.reply == "I’m really glad you told me.")
+        let bare = try await StubServer(always: .json(200, #"{"crisis":true,"reply":"Call someone you trust."}"#))
+            .api(token: "t").palBreakdown(task: "x")
+        #expect(bare.crisis && bare.steps.isEmpty)
+        // Without steps and without the flag it's not a breakdown.
+        await #expect(throws: APIError.decoding("PalBreakdown")) {
+            _ = try await StubServer(always: .json(200, #"{"reply":"?"}"#)).api(token: "t").palBreakdown(task: "x")
+        }
+        #expect(PalBreakdown(steps: ["a"]).crisis == false)
         let crisis = try await StubServer(always: .json(200, #"{"reply":"I’m really glad you told me.","crisis":true}"#))
             .api(token: "t").palChat(message: "x", context: nil)
         #expect(crisis.crisis)

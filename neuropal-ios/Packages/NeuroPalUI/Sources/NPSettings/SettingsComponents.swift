@@ -1,3 +1,4 @@
+import NPCore
 import NPTheme
 import NPTokens
 import SwiftUI
@@ -41,9 +42,11 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// `-NPSettingsPane look` (a launch argument, for screenshots) opens a pane.
+    /// `-NPSettingsPane look` (a launch argument, for screenshots) opens a
+    /// pane — debug builds in mock mode only.
     static var launchPane: SettingsPane? {
-        UserDefaults.standard.string(forKey: "NPSettingsPane").flatMap(SettingsPane.init(rawValue:))
+        guard DebugLaunch.mock else { return nil }
+        return DebugLaunch.string("NPSettingsPane").flatMap(SettingsPane.init(rawValue:))
     }
 }
 

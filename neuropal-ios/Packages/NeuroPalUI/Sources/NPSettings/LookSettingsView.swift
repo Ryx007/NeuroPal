@@ -1,4 +1,5 @@
 import NPCore
+import NPDay
 import NPTheme
 import NPTokens
 import SwiftUI
@@ -80,8 +81,8 @@ struct LookSettingsView: View {
         .onAppear {
             hue = Double(Tokens.hueOf(current.signal.acc))
             if UIDevice.current.userInterfaceIdiom == .pad { fineOpen = true }
-            // Screenshot hook: `-NPSettingsAsk "calm it down"` asks Pal on open.
-            if let text = UserDefaults.standard.string(forKey: "NPSettingsAsk"), !text.isEmpty, proposal == nil {
+            // Screenshot hook (debug builds, mock mode): `-NPSettingsAsk "calm it down"` asks Pal on open.
+            if DebugLaunch.mock, let text = DebugLaunch.string("NPSettingsAsk"), !text.isEmpty, proposal == nil {
                 ask = text
                 submitAsk(text)
             }
@@ -400,7 +401,7 @@ struct LookSettingsView: View {
     private func proposalCard(_ p: Proposal) -> some View {
         NPCard(padding: 14, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                PalFigure(pal: current.pal, size: 40).accessibilityHidden(true)
+                PalFigure(pal: Tokens.normalizePal(current.pal), palette: theme.palette, size: 40).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(p.title)
                         .font(theme.font(.displaySemi, size: 17, relativeTo: .headline))

@@ -224,12 +224,17 @@ enum MathText {
     ]
 }
 
-/// A tiny recursive reader over LaTeX math source.
-private struct MathRenderer {
+/// A tiny recursive reader over LaTeX math source. Every way of nesting —
+/// braces, `^`/`_` chains, `\frac\frac…`, `\sqrt[…]` — goes through `atom()`,
+/// which stops descending past `maxNesting` (the rest isn't rendered), so a
+/// hostile or broken formula can never exhaust the stack.
+struct MathRenderer {
     let c: [Character]
     let speech: Bool
     var i = 0
     var depth = 0
+    var nesting = 0
+    static let maxNesting = 48
 
     init(_ source: String, speech: Bool) {
         c = Array(source)
@@ -261,6 +266,13 @@ private struct MathRenderer {
 
     mutating func atom() -> String {
         guard i < c.count else { return "" }
+        nesting += 1
+        defer { nesting -= 1 }
+        guard nesting <= Self.maxNesting else {
+            // Too deep: stop here (every loop above ends at the end of the input).
+            i = c.count
+            return ""
+        }
         let ch = c[i]
         switch ch {
         case "\\":
@@ -468,6 +480,12 @@ private struct MathRenderer {
     mutating func optionalArgument() -> String? {
         guard i < c.count, c[i] == "[" else { return nil }
         i += 1
+        nesting += 1
+        defer { nesting -= 1 }
+        guard nesting <= Self.maxNesting else {
+            i = c.count
+            return nil
+        }
         return sequence(until: "]")
     }
 

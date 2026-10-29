@@ -33,6 +33,9 @@ public protocol NeuroPalAPI: AnyObject, Sendable {
     func upload(fileURL: URL, title: String?) async throws -> NPDocument
     func renameDocument(id: String, title: String, subtitle: String?) async throws -> NPDocument
     func deleteDocument(id: String) async throws
+    /// POST /api/documents/:id/reingest — read a document again (a failed
+    /// one resumes where it stopped). It goes back to `pending`.
+    func reingestDocument(id: String) async throws
     func documentText(id: String) async throws -> DocumentText
     func readingProgress(id: String) async throws -> ReadingProgress
     func saveReadingProgress(id: String, _ update: ReadingProgressUpdate) async throws
@@ -63,6 +66,9 @@ public protocol NeuroPalAPI: AnyObject, Sendable {
 public extension NeuroPalAPI {
     /// Default (the fixtures have no PDF files): not found.
     func downloadOriginalFile(documentID: String) async throws -> URL { throw APIError.notFound }
+
+    /// Default: a server without the route.
+    func reingestDocument(id: String) async throws { throw APIError.notFound }
 
     func originalFileURL(documentID: String, ticket: String?) -> URL {
         var c = URLComponents(url: host, resolvingAgainstBaseURL: false)!

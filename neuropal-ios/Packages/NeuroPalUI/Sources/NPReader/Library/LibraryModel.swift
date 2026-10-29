@@ -166,6 +166,34 @@ final class LibraryModel {
         }
     }
 
+    // MARK: Reading a failed file again
+
+    /// Documents being sent back to the server for another read.
+    private(set) var retrying: Set<String> = []
+
+    /// POST /reingest: the document goes back to the stages (the list polls
+    /// while it's processing). True when the server took it.
+    func reingest(_ doc: NPDocument, api: any NeuroPalAPI) async -> Bool {
+        guard !retrying.contains(doc.id) else { return false }
+        retrying.insert(doc.id)
+        defer { retrying.remove(doc.id) }
+        do {
+            try await api.reingestDocument(id: doc.id)
+            if let i = documents.firstIndex(where: { $0.id == doc.id }) {
+                documents[i].status = .pending
+                documents[i].progress = 0
+                documents[i].ingestError = nil
+            }
+            await refresh(api)
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            notice = "Couldn't start reading “\(doc.title)” again. \(ReaderCopy.problem(error))"
+            return false
+        }
+    }
+
     // MARK: Rename and delete
 
     func rename(_ doc: NPDocument, title: String, subtitle: String?, api: any NeuroPalAPI) async -> Bool {

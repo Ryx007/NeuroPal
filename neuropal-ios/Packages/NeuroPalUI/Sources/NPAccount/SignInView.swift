@@ -33,13 +33,17 @@ public struct SignInView: View {
     @State private var cooldownUntil: Date?
     @State private var server: ServerState = .checking
     @State private var editingServer: Bool
+    @State private var switchingServer = false
     @FocusState private var focus: Field?
+    private let serverText: String?
 
     /// `creatingAccount`: open on "Create your account"; `editingServer`:
-    /// with the server address open (both for screenshots).
-    public init(creatingAccount: Bool = false, editingServer: Bool = false) {
+    /// with the server address open; `serverText`: an address already typed
+    /// into it (all for screenshots).
+    public init(creatingAccount: Bool = false, editingServer: Bool = false, serverText: String? = nil) {
         _mode = State(initialValue: creatingAccount ? .signUp : .signIn)
-        _editingServer = State(initialValue: editingServer)
+        _editingServer = State(initialValue: editingServer || serverText != nil)
+        self.serverText = serverText
     }
 
     public var body: some View {
@@ -114,7 +118,7 @@ public struct SignInView: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
             .padding(.top, 18)
-            .accessibilityLabel("I need help right now — open the calming steps")
+            .accessibilityLabel("Need help right now? Open the calming steps")
 
             Text("Your documents and notes are stored on your NeuroPal server, never sold. Questions you ask are answered by the AI service that server uses.")
                 .font(theme.font(.body, size: 13, relativeTo: .footnote))
@@ -134,20 +138,20 @@ public struct SignInView: View {
                              focus: $focus, id: .name, onSubmit: { focus = .email })
             }
             LabeledField(label: "Email", text: $email, prompt: "you@example.com",
-                         invalid: failure?.fields.contains(.email) == true,
+                         invalid: failure?.fields.contains(.email) == true, errorText: problem(.email),
                          contentType: .username, keyboard: .emailAddress, submitLabel: .next,
                          focus: $focus, id: .email, onSubmit: { focus = .password })
             LabeledField(label: "Password", text: $password,
                          prompt: signingUp ? "Choose a password" : "Your password", secure: true,
                          helper: signingUp ? "At least \(Self.minPassword) characters" : nil,
-                         invalid: failure?.fields.contains(.password) == true,
+                         invalid: failure?.fields.contains(.password) == true, errorText: problem(.password),
                          contentType: signingUp ? .newPassword : .password,
                          submitLabel: signingUp && needsInvite ? .next : (signingUp ? .join : .go),
                          focus: $focus, id: .password,
                          onSubmit: { if signingUp && needsInvite { focus = .invite } else { Task { await submit() } } })
             if signingUp && needsInvite {
                 LabeledField(label: "Invite code", text: $inviteCode, prompt: "From whoever runs this server",
-                             invalid: failure?.fields.contains(.invite) == true,
+                             invalid: failure?.fields.contains(.invite) == true, errorText: problem(.invite),
                              submitLabel: .join, focus: $focus, id: .invite, onSubmit: { Task { await submit() } })
             }
         }
@@ -177,7 +181,7 @@ public struct SignInView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.npPrimary)
-        .disabled(busy || wait > 0)
+        .disabled(busy || wait > 0 || switchingServer)
     }
 
     @ViewBuilder private var modeSwitch: some View {
@@ -185,6 +189,9 @@ public struct SignInView: View {
             Button {
                 failure = nil
                 mode = mode == .signIn ? .signUp : .signIn
+                Announce.say(mode == .signUp
+                             ? "Create your account. Name, email and password."
+                             : "Welcome back. Sign in with your email and password.")
             } label: {
                 Text(mode == .signIn ? "No account yet? Create one" : "Already have an account? Sign in")
                     .font(theme.font(.bodySemi, size: 15, relativeTo: .callout))
@@ -246,7 +253,8 @@ public struct SignInView: View {
                     .accessibilityHint("Checks the server again")
                 }
                 if editingServer {
-                    ServerAddressEditor(onDone: { editingServer = false })
+                    ServerAddressEditor(preset: serverText, connecting: $switchingServer,
+                                        onDone: { editingServer = false })
                 }
             }
         }
@@ -272,7 +280,9 @@ public struct SignInView: View {
         }
         .buttonStyle(.plain)
         .layoutPriority(1)
-        .accessibilityLabel(editingServer ? "Close the server address" : "Change the server address")
+        // The server can't change under a sign-in that's on its way.
+        .disabled(busy || session.isAuthenticating || switchingServer)
+        .accessibilityLabel(editingServer ? "Done with the server address" : "Change the server address")
     }
 
     private var serverDown: Bool { server == .down && !session.isChecking }
@@ -309,9 +319,13 @@ public struct SignInView: View {
 
     private func loadConfig() async {
         server = .checking
+        let asked = session.host
         do {
             let c = try await session.api.authConfig()
+            guard session.host == asked else { return }
             server = .ready(c)
+            // A NeuroPal server answered: a newly chosen address is kept.
+            session.serverAnswered()
             // A single-user server signs in by itself: hand back to the session check.
             if c.localMode { await session.recheck() }
         } catch is CancellationError {
@@ -323,12 +337,18 @@ public struct SignInView: View {
         }
     }
 
+    /// The error line's words, for VoiceOver on the field at fault.
+    private func problem(_ field: Field) -> String? {
+        guard let failure, failure.fields.contains(field) else { return nil }
+        return failure.text
+    }
+
     private func fail(_ text: String, fields: Set<Field> = []) {
         failure = Failure(text: text, fields: fields)
     }
 
     private func submit() async {
-        if busy { return }
+        if busy || switchingServer { return }
         if let until = cooldownUntil, until > Date() { return }
         let mail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let invite = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -62,7 +62,8 @@ public struct AccountSettingsView: View {
                 }
                 .foregroundStyle(theme.error)
                 .disabled(busy)
-                .accessibilityLabel("Sign out on every device, including this one")
+                .accessibilityLabel("Sign out everywhere")
+                .accessibilityHint("Signs you out on every device, this one too")
             }
             if let error {
                 ErrorLine(text: error)
@@ -94,10 +95,12 @@ public struct AccountSettingsView: View {
                 note = "Password changed. Other devices were signed out."
             })
             .npTheme(theme)
+            .contentMargins(.bottom, nil, for: .scrollContent) // the bubble's room is the tab's, not the sheet's
         }
         .sheet(isPresented: $changingServer) {
             ServerSheet()
                 .npTheme(theme)
+                .contentMargins(.bottom, nil, for: .scrollContent)
         }
     }
 
@@ -173,14 +176,17 @@ struct ChangePasswordSheet: View {
                         .foregroundStyle(theme.onSurfaceVariant)
                         .fixedSize(horizontal: false, vertical: true)
                     LabeledField(label: "Current password", text: $current, secure: true,
-                                 invalid: invalid.contains(.current), contentType: .password, submitLabel: .next,
+                                 invalid: invalid.contains(.current), errorText: problem(.current),
+                                 contentType: .password, submitLabel: .next,
                                  focus: $focus, id: .current, onSubmit: { focus = .new })
                     LabeledField(label: "New password", text: $new, secure: true,
                                  helper: "At least \(Self.minLength) characters",
-                                 invalid: invalid.contains(.new), contentType: .newPassword, submitLabel: .next,
+                                 invalid: invalid.contains(.new), errorText: problem(.new),
+                                 contentType: .newPassword, submitLabel: .next,
                                  focus: $focus, id: .new, onSubmit: { focus = .confirm })
                     LabeledField(label: "New password again", text: $confirm, secure: true,
-                                 invalid: invalid.contains(.confirm), contentType: .newPassword, submitLabel: .done,
+                                 invalid: invalid.contains(.confirm), errorText: problem(.confirm),
+                                 contentType: .newPassword, submitLabel: .done,
                                  focus: $focus, id: .confirm, onSubmit: { Task { await save() } })
                     ErrorLine(text: failure)
                     Button {
@@ -240,11 +246,20 @@ struct ChangePasswordSheet: View {
             try await session.changePassword(current: current, new: new)
             onChanged()
             dismiss()
+        } catch is CancellationError {
+            // The server changed the password, but this device was signed
+            // out (or moved to another server) before the answer came.
+            failure = "Your password was changed. This device was signed out meanwhile: sign in again with the new password."
         } catch APIError.server(status: 401, let message) {
             show(message.isEmpty ? "The current password is not right" : AccountWords.sentence(message), .current)
         } catch {
             failure = AccountWords.message(for: error)
         }
+    }
+
+    /// The error line's words, for VoiceOver on the field at fault.
+    private func problem(_ field: Field) -> String? {
+        invalid.contains(field) ? failure : nil
     }
 
     private func show(_ text: String, _ field: Field) {

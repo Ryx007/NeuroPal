@@ -7,6 +7,11 @@ import SwiftUI
 struct NeuroPalApp: App {
     @State private var model = AppModel(options: LaunchOptions.current)
 
+    init() {
+        // Before launch finishes, so a notification tap that launched the app arrives.
+        NotificationRouter.install()
+    }
+
     var body: some Scene {
         WindowGroup {
             SceneRoot(model: model)
@@ -24,7 +29,7 @@ struct SceneRoot: View {
 
     var body: some View {
         RootView(widgetGallery: model.options.widgetGallery, creatingAccount: model.options.signUp,
-                 editingServer: model.options.serverForm)
+                 editingServer: model.options.serverForm, serverText: model.options.serverText)
             .environment(model.session)
             .environment(navigator)
             .environment(model.themeStore)
@@ -35,7 +40,9 @@ struct SceneRoot: View {
             }
             .task { await model.start(navigator: navigator) }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await model.becameActive() } }
+                guard phase == .active else { return }
+                model.windowBecameActive(navigator)
+                Task { await model.becameActive() }
             }
             .onChange(of: model.session.phase) { _, phase in
                 model.sessionPhaseChanged(to: phase)
