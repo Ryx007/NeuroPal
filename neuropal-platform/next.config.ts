@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   basePath,
   images: { unoptimized: true },
+  // Several dev servers can share this folder (one per developer agent):
+  // NP_DIST_DIR=.next-<name> npx next dev -p <port>. Builds use .next.
+  distDir: process.env.NP_DIST_DIR || ".next",
   reactStrictMode: true,
 };
 

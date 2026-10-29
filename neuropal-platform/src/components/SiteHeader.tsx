@@ -9,6 +9,7 @@ const NAV = [
   { href: "/learn/", label: "Learn" },
   { href: "/appearance/", label: "Make it yours" },
   { href: "/sign-in/", label: "Sign in" },
+  { href: "/app/", label: "Open the app" },
 ];
 
 const norm = (p: string) => p.replace(/\/+$/, "") || "/";
