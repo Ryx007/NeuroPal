@@ -9,11 +9,12 @@ struct NeuroPalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(widgetGallery: model.options.widgetGallery)
                 .environment(model.session)
                 .environment(model.navigator)
                 .environment(model.themeStore)
                 .environment(model.dayStore)
+                .environment(model.preferences)
                 .onOpenURL { url in
                     if let route = DeepLink.route(for: url) { model.navigator.open(route) }
                 }

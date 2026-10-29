@@ -14,6 +14,7 @@ final class AppModel {
     let navigator = AppNavigator()
     let themeStore: ThemeStore
     let dayStore: DayStore
+    let preferences: AppPreferences
 
     init(options: LaunchOptions) {
         self.options = options
@@ -26,6 +27,13 @@ final class AppModel {
                 makeAPI: { host in MockNeuroPalAPI(host: host, token: signedIn ? "mock-token" : nil) })
             themeStore = ThemeStore(appearance: options.appearance, persist: false)
             dayStore = DayStore(persist: false)
+            preferences = AppPreferences(defaults: nil)
+        } else if let host = options.host {
+            // A real server for this launch only — nothing read or saved.
+            session = AppSession(host: host, store: MemorySessionStore(), makeAPI: { h in HTTPNeuroPalAPI(host: h) })
+            themeStore = ThemeStore(persist: false)
+            dayStore = DayStore(persist: false)
+            preferences = AppPreferences(defaults: nil)
         } else {
             // SKELETON: the Core agent swaps in the Keychain store and the
             // saved server address.
@@ -34,6 +42,7 @@ final class AppModel {
                 makeAPI: { host in HTTPNeuroPalAPI(host: host) })
             themeStore = ThemeStore()
             dayStore = DayStore()
+            preferences = AppPreferences()
         }
     }
 

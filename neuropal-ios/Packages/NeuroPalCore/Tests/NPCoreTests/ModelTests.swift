@@ -39,9 +39,18 @@ import Testing
 }
 
 @MainActor
-@Test func bootWithMockSignsIn() async {
-    let session = AppSession(store: MemorySessionStore(), makeAPI: { _ in MockNeuroPalAPI(latency: .zero) })
+@Test func bootWithASavedSessionSignsIn() async {
+    let host = URL(string: "https://mock.neuropal.invalid")!
+    let store = MemorySessionStore(StoredSession(host: AppSession.origin(host), token: "mock-token"))
+    let session = AppSession(host: host, store: store, makeAPI: { h in MockNeuroPalAPI(host: h, token: nil, latency: .zero) })
     await session.boot()
     #expect(session.phase == .signedIn)
     #expect(session.user?.email == MockFixtures.user.email)
+}
+
+@MainActor
+@Test func bootWithoutASessionAsksToSignIn() async {
+    let session = AppSession(store: MemorySessionStore(), makeAPI: { h in MockNeuroPalAPI(host: h, token: nil, latency: .zero) })
+    await session.boot()
+    #expect(session.phase == .signedOut)
 }

@@ -134,6 +134,10 @@ targets:
     dependencies:
       - package: NeuroPalCore
         products: [NPTokens, NPCore, NPDay]
+      # The widget views live in NPHome so the app can show them too
+      # (WidgetGalleryView, -NPScreen widgets).
+      - package: NeuroPalUI
+        products: [NPTheme, NPHome]
 schemes:
   NeuroPal:
     build:

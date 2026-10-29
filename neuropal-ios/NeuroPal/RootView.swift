@@ -11,12 +11,14 @@ struct RootView: View {
     @Environment(AppSession.self) private var session
     @Environment(AppNavigator.self) private var nav
     @Environment(ThemeStore.self) private var themeStore
+    let widgetGallery: Bool
 
     var body: some View {
         @Bindable var nav = nav
         ThemedRoot(store: themeStore) {
             Group {
                 switch session.phase {
+                case _ where widgetGallery: WidgetGalleryView()
                 case .booting: SplashView()
                 case .signedOut: SignInView()
                 case .signedIn, .offline: MainView()

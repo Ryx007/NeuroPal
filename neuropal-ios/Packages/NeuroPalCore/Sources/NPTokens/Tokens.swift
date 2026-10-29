@@ -50,6 +50,32 @@ public enum Tokens {
         home.tiles.filter { !$0.hidden } // SKELETON: rules not applied yet
     }
 
+    /// palSay(pal, key, vars): one of Pal's assistant lines (PAL_LINES) in
+    /// the user's talk style; a key the style lacks falls back to Gentle,
+    /// unknown keys give ""; {placeholders} without a value stay as written.
+    public static func palSay(_ pal: Appearance.Pal, _ key: String, _ vars: [String: String] = [:]) -> String {
+        let lines = data["palLines"]
+        let line = lines?[pal.talk]?[key]?.stringValue ?? lines?["Gentle"]?[key]?.stringValue ?? ""
+        var out = ""
+        var rest = Substring(line)
+        while let open = rest.firstIndex(of: "{"), let close = rest[open...].firstIndex(of: "}") {
+            out += rest[..<open]
+            let name = String(rest[rest.index(after: open)..<close])
+            let isWord = !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+            out += (isWord ? vars[name] : nil) ?? String(rest[open...close])
+            rest = rest[rest.index(after: close)...]
+        }
+        return out + rest
+    }
+
+    /// palFaceInk(body): eye/mouth ink that reads on Pal's body colour.
+    /// SKELETON — port from pal.js (contrast-based).
+    public static func palFaceInk(_ bodyHex: String) -> String { "#141416" }
+
+    /// palVisor(body, accent): the accent, unless it would vanish on the body.
+    /// SKELETON — port from pal.js.
+    public static func palVisor(_ bodyHex: String, _ accentHex: String) -> String { accentHex }
+
     /// effectiveMotion(level, reduceMotion): the OS Reduce Motion setting
     /// always wins — "Still" means no animation anywhere.
     public static func effectiveMotion(_ level: String, reduceMotion: Bool) -> String {
