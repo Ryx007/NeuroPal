@@ -24,12 +24,21 @@ name: neuropal-v2
 x-restart: &restart
   restart: unless-stopped
 
+# The server's /etc/resolv.conf points at systemd-resolved, which isn't
+# running. The host still resolves names through its local BIND, but
+# Docker's DNS on these networks has nothing to forward to ("DNS resolver has
+# no external nameservers"). So the containers that reach the internet (the
+# AI providers, arXiv, the Ollama registry, Cloudflare) ask public resolvers
+# directly. Nothing outside this project changes.
+x-dns: &dns [1.1.1.1, 9.9.9.9]
+
 services:
   api:
     <<: *restart
     build:
       context: ../../neuropal-backend
     image: neuropal-api:local
+    dns: *dns
     env_file: .env
     environment:
       NODE_ENV: production
@@ -110,6 +119,7 @@ services:
   ollama:
     <<: *restart
     image: ollama/ollama:0.40.10
+    dns: *dns
     environment:
       # The embedder stays loaded for 10 minutes after use, then frees its
       # ~0.5 GB (the server is shared). One request at a time is plenty.
@@ -126,6 +136,7 @@ services:
   # nomic-embed-text; another model would invalidate every stored vector.
   ollama-pull:
     image: ollama/ollama:0.40.10
+    dns: *dns
     depends_on: [ollama]
     environment:
       OLLAMA_HOST: http://ollama:11434
@@ -144,6 +155,7 @@ services:
   cloudflared:
     <<: *restart
     image: cloudflare/cloudflared:2026.10.3
+    dns: *dns
     profiles: [tunnel]
     command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
     volumes:
