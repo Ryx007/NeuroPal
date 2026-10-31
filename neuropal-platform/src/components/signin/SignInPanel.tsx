@@ -13,6 +13,7 @@ import {
   sessionStore,
   userLabel,
 } from "@/lib/api";
+import { endSession } from "@/lib/neuropal/localData";
 import { useStored } from "@/lib/store";
 import styles from "./signin.module.css";
 
@@ -127,7 +128,13 @@ export function SignInPanel() {
     setPassword("");
     setAuthBusy(false);
     if (r.ok && r.data?.token) {
-      sessionStore.set({ token: r.data.token, base: b, user: r.data.user ?? null });
+      // Only the public fields: the full user (with its look) never sits in storage.
+      const u = r.data.user;
+      sessionStore.set({
+        token: r.data.token,
+        base: b,
+        user: u ? { id: u.id, email: u.email, name: u.name, displayName: u.displayName } : null,
+      });
       setAuth({ tone: "ok", message: `Signed in as ${userLabel(r.data.user)}. This tab stays signed in until you close it.` });
     } else if (r.ok) {
       setAuth({ tone: "error", message: "The server answered, but without a sign-in token." });
@@ -139,8 +146,9 @@ export function SignInPanel() {
   };
 
   const signOut = () => {
-    sessionStore.clear();
-    setAuth({ tone: "info", message: "Signed out. The token is gone from this tab." });
+    // The same exit as the app: the account's local data goes with the session.
+    endSession("signed-out");
+    setAuth({ tone: "info", message: "Signed out. The token and this account’s data are gone from this browser." });
   };
 
   const baseId = `${id}-base`;

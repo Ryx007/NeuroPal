@@ -9,12 +9,177 @@
 > the original spec but predates most of what's below.
 >
 > _Written 2026-08-04 after the port-split + collaborator-prep session;
-> §0 added 2026-10-23 for the v2 platform branch, round 2 on 2026-10-24._
+> §0 added 2026-10-23 for the v2 platform branch, round 2 on 2026-10-24,
+> round 3 (native iOS + iPadOS app, web app) on 2026-10-29; the owner's
+> priority (Android + web first, native iOS last) on 2026-10-31._
 > _Author: Claude (Opus/Sonnet/Fable across the session), owner "Ryx"._
 
 ---
 
-## 0. v2 PLATFORM BUILD-OUT (branch `v2-platform`, 2026-10-23) — read first
+## 0. v2 PLATFORM BUILD-OUT (branches `v2-platform` → `v3-apple-web`, 2026-10-23…29) — read first
+
+### Round 3 (2026-10-29): native iPhone + iPad app and the web app — branch `v3-apple-web`, PR #3
+
+The owner asked for an iOS + iPadOS app and a web version **now**, in
+parallel, while the cross-platform choice (Expo vs Flutter) stays open. The
+branch is stacked on `v2-platform` (PR #3 → base `v2-platform`). There are now
+four clients to keep in step: Expo, Flutter, native iOS, web.
+
+How it was built: I wrote the foundation (both skeletons, shared contracts,
+build tooling), then six agents worked in parallel, each owning its folders
+(iOS: core/account/shell, tokens/theme/Settings, Library/Reader/Ask,
+Home/Pal/widgets; web: shell/Home/Pal/Settings, Library/Reader/Ask).
+Independent reviews followed (see "Reviews" below).
+
+- **Native app — `neuropal-ios/`** (SwiftUI, iOS 18+, iPhone + iPad; README in the folder):
+  - The project is **generated**: `brew install xcodegen && cd neuropal-ios && xcodegen generate`.
+    Never commit `NeuroPal.xcodeproj`.
+  - `Packages/NeuroPalCore` (macOS + iOS, `swift test`): `NPTokens` (Swift
+    port of `packages/tokens`, proven against `cases.json` + ~2 000 extra
+    JS-computed cases), `NPCore` (models, `NeuroPalAPI` = HTTP + offline
+    mock, `AppSession` with every Expo boot rule, Keychain session bound to
+    the server address, `ServerAddress` — http only on local networks,
+    `AppNavigator`, `neuropal://` links, App Group files), `NPDay` (check-in
+    rules, anchors, minimum day, Pal's offline logic; the crisis pattern is
+    byte-identical to the backend's — a test reads both files).
+  - `Packages/NeuroPalUI`: `NPTheme` (both skins, fonts per role,
+    Signal's living field, primitives, look sync with the server),
+    `NPAccount` (sign-in, invite sign-up, server form, account settings),
+    `NPReader` (library; TextKit 2 reader with word-by-word read-aloud
+    on AVSpeechSynthesizer + lock-screen controls; PDFKit "Original" view;
+    sandboxed EPUB WKWebView with a strict CSP; Ask with citation chips),
+    `NPHome` (Home tiles, check-in slider, anchors, calming steps, widget
+    views), `NPPal` (the assistant's five tools, the bubble), `NPSettings`.
+  - iPhone: tab bar + Pal bubble. iPad: sidebar (`TabView .sidebarAdaptable`),
+    Library as a split view with Ask in an inspector, ⌘1–⌘4 / ⌘⇧P.
+  - Widgets (`NeuroPalWidgets/`): check-in (App Intent buttons; Overwhelmed
+    opens `neuropal://calm`), next anchor, continue reading, lock-screen
+    accessories. They read `day.json` / `appearance.json` / `reading.json`
+    in the App Group `group.io.neuropal.ios`.
+  - **Mac loop:** `scripts/mac-build.sh build iphone|ipad`, `test`,
+    `shot <name> iphone|ipad <launch args>`, `ui-test`. One machine-wide
+    `lockf` lock serialises Xcode work. Screenshots never need a server:
+    `-NPMock 1 -NPScreen home|library|reader|ask|pal|calm|settings|widgets`
+    (all options in `NeuroPal/LaunchOptions.swift`, debug builds only).
+  - CI: `ios.yml` job "Native iOS app (simulator)" (XcodeGen, unsigned
+    simulator build, `swift test`: 212 tests — NPTokens 21, NPDay 57,
+    NPCore 134). `workflow_dispatch` on a `wip/*` branch builds a snapshot
+    when the Mac is unreachable.
+- **Web app — `neuropal-platform` `/app/`** (desktop-first, works at 390 px):
+  - The public site moved into the route group `src/app/(site)/` (same URLs);
+    `/app/` has its own frame: `src/app/app/*`, screens in
+    `src/components/app/*`, logic in `src/lib/neuropal/*`.
+  - Routes: `/app/` Home, `/app/library/`, `/app/read/?doc=<id>` (reader +
+    Ask; a query parameter because the export is static), `/app/pal/`,
+    `/app/settings/`, `/app/calm/` (works signed out).
+  - Sign-in inside the app; the session is per tab by default, or kept on
+    this device (localStorage) when the user ticks it. Every end of a
+    session goes through `lib/neuropal/localData.endSession()`, which
+    clears that account's local data; the look syncs both ways
+    (`lib/neuropal/lookSync.ts`, merge rule `lookForServer` in
+    `lib/appearanceStore.ts`, shared with the studio).
+  - Read-aloud uses the Web Speech API (`onboundary` word events, a WPM
+    estimate when a voice sends none). EPUB chapters render in a sandboxed
+    iframe (no same-origin, a nonce'd runtime only).
+  - Checks: `scripts/qa/dev-api.cjs <port>` starts a real public-mode API
+    on an in-memory MongoDB with seeded documents and a **labelled fake AI**;
+    `scripts/qa/web-reader.mjs` and `web-shell.mjs` drive Chromium through
+    every screen (both skins, 1440 and 390, axe on each state);
+    `web-shell-crisis.mjs` checks the crisis pattern against the backend;
+    `markdown-timing.mjs` keeps the answer renderer linear. CI job "Web app
+    (browser checks, real backend)" runs them all (reader 179 checks,
+    shell 127). Poppler must be installed for the page-image checks.
+  - Hosting: it's static (`npm run build` → `out/`). Served from
+    `https://ryx007.work/app/`, it is already allowed by the VPS
+    `CORS_ORIGINS`; any other origin must be added there.
+- **Backend:** `GET /api/documents/:id/file` (the original PDF for native
+  viewers; pdf/arxiv only; attachment, `private, no-store`, CSP sandbox,
+  only from inside STORAGE_ROOT); `/api/pal/breakdown` answers a
+  crisis-sounding task with `{steps:[], crisis:true, reply}`. Backend 47/47.
+- **Tokens:** `sync.js` now also writes the Swift port's constant tables
+  (`NPTokens/Resources/tokens-data.json`) and its fixtures
+  (`cases.json` + `extra-cases.json` from `scripts/extra-cases.mjs`);
+  `--check` covers them.
+
+**Reviews (round 3):** three independent reviews (iOS core; iOS features; the web app),
+then three fix agents. Everything rated high is fixed:
+  - **Crisis safety, every client + the server:** "Break it down" never
+    ran the crisis check, so "I want to end my life" could become steps
+    (offline: template steps). The apps now check first, and the server's
+    `/api/pal/breakdown` answers `{steps:[], crisis:true, reply}` without
+    the model. The apps' check also skipped whitespace variants ("kill
+    myself" with two spaces, a tab or an NBSP) that the server catches;
+    they now normalise like the server.
+  - **iOS session:** a sign-in reply arriving after a server switch could
+    bind the token to the wrong server (now dropped); a percent-escaped
+    server address crashed every launch (fixed, and a new address is only
+    saved after it answers); http addresses get an "isn't encrypted"
+    warning and the token goes over http only to the kind of address it
+    was saved for; the debug launch options are compiled out of Release
+    (`DebugLaunch`, process arguments only).
+  - **Web, shared browsers:** sign-out (and a forced 401) now clears the
+    previous account's day data, Pal chat and upload queue; a queued
+    upload can no longer land in the next account's library; personal data
+    carries a hashed owner, so another account's session wipes it first.
+    Document tickets follow the token (a password change no longer breaks
+    books); the Markdown renderer is linear on garbled input; and the web
+    app now syncs the look both ways (`lookSync.ts`).
+  - **iOS, other:** reading positions use the same word stream as Expo
+    and the web (`ReaderWords`, fixture generated from the JS); sign-out
+    purges Pal's chat, the reading snapshot, cached page images and
+    downloaded PDFs (day.json stays, as on Expo); EPUB sanitiser moved to
+    `EpubSanitizer` with tests (strips until stable, only the exact
+    chapter URL may load), next chapters are read ahead so read-aloud
+    carries on with the screen locked; "Sit with me" schedules an end
+    notification; lock-screen widgets redact personal text and the
+    check-in intent needs an unlocked device; day.json writes are
+    file-coordinated between app and widget.
+  Residual risks, documented: http to a private address can still meet the
+  same address on another network (warned); the app and widget were only
+  tested as two threads, not two processes; no real-device run yet.
+
+**Owner's priority (2026-10-31):** keep all four clients. New work goes to
+**Android (Expo + Flutter) and the web app first**. The native iOS app is the
+lowest priority until the Apple Developer account is sorted: features are
+ported to it later, and its CI job stays as it is.
+
+**Waiting on the owner (round 3):**
+- **VPS access** (from round 2). The owner runs `ssh-copy-id -i
+  ~/.ssh/neuropal_vps.pub root@161.97.154.212` on the MacBook Air. The key
+  has been there since 2026-10-24 (ED25519, comment
+  `neuropal-deploy@ryxs-macbook-air`). The cloud workspace can't make SSH
+  connections, so Claude reaches the server only through the Mac. The Mac
+  must be awake, with the desktop app open.
+- **Where the web app lives** (e.g. `https://ryx007.work/app/`).
+- **Later, for iOS:**
+  - An **Apple Developer team**: set `DEVELOPMENT_TEAM` in
+    `neuropal-ios/project.yml`, and register the App Group
+    `group.io.neuropal.ios` for `io.neuropal.ios` and
+    `io.neuropal.ios.widgets`.
+  - **`sudo DevToolsSecurity -enable` once on the Mac.** Until then the UI
+    test target (`ui-test`, accessibility audits) can't start ("failed to
+    bless service hub").
+- **Still from round 2:** the friend's exposed databases, free Gemini vs
+  "never trains models", Classic's primary-button gradient.
+
+**Traps from round 3 (don't re-derive):**
+- XcodeGen: add the shared fonts as a **folder** (`type: folder`) and list
+  them in `UIAppFonts` as `fonts/<file>.ttf`; `includes:` + `group:` doubled
+  the path.
+- Simulator builds use ad-hoc signing (`CODE_SIGN_IDENTITY=-`), which embeds
+  the entitlements, so the App Group works without a team. Unsigned builds
+  (`CODE_SIGNING_ALLOWED=NO`, CI) have no App Group: `SharedContainer`
+  falls back to Application Support.
+- A freshly booted simulator sometimes refuses the first `simctl install`
+  ("Failed to create promise"); `mac-build.sh` retries once.
+- `swift test` prints one "Test run with N tests" line PER test target.
+- Several `next dev` servers can share the folder with
+  `NP_DIST_DIR=.next-<name>`; `next dev` then rewrites `tsconfig.json`
+  (restore it) and writes `AGENTS.md` (git-ignored).
+- Turbopack/Next 16: `useSearchParams` in a statically exported page needs a
+  `<Suspense>` boundary.
+- The Mac link drops now and then; a long build keeps running there. Poll
+  with `read_process_output` again instead of restarting it.
 
 ### Round 2 (2026-10-24): cloud server, sign-in, keyboard, check-in slider, Pal assistant + widget
 

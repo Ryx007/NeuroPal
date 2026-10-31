@@ -254,7 +254,8 @@ function chatTask({ ctx, history, message }) {
 // ---------------------------------------------------------------------------
 // POST /api/pal/breakdown
 // body: { task }  (≤ 500 chars)
-// returns: { steps: [string], provider, model }
+// returns: { steps: [string], provider, model } — or, for a task that sounds
+// like a crisis, { steps: [], crisis: true, reply } without calling the model.
 // 502 when the model's steps are unusable (the app then uses its own).
 // ---------------------------------------------------------------------------
 router.post(
@@ -268,6 +269,11 @@ router.post(
         const task = raw.replace(/\s+/g, ' ').trim();
         if (task.length > TASK_MAX_CHARS) {
             return res.status(422).json({ error: `task must be ${TASK_MAX_CHARS} characters or fewer` });
+        }
+        // A task that sounds like a crisis never reaches the model, the cap or
+        // the budget: the app shows this careful reply with the calming steps.
+        if (looksLikeCrisis(task)) {
+            return res.json({ steps: [], crisis: true, reply: CRISIS_REPLY });
         }
         if (overCap(req, res, 'breakdown')) return undefined;
         if (!spendAiBudget(req, res)) return undefined;

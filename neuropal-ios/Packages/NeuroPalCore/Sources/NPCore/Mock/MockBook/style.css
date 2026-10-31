@@ -1,0 +1,7 @@
+body { font-family: serif; line-height: 1.5; }
+h1 { font-size: 1.6em; margin-top: 0.4em; }
+h2 { font-size: 1.2em; margin-top: 1.4em; }
+.note { font-style: italic; }
+figure { margin: 1.4em 0; text-align: center; }
+figure img { width: 100%; max-width: 420px; }
+figcaption { font-size: 0.85em; font-style: italic; margin-top: 0.4em; }

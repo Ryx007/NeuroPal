@@ -36,7 +36,7 @@ import {
   type DiffRow,
   type SignalSettings,
 } from "@/lib/appearance";
-import { appearanceStore } from "@/lib/appearanceStore";
+import { appearanceStore, lookForServer } from "@/lib/appearanceStore";
 import {
   apiBaseStore,
   getAppearance,
@@ -241,13 +241,8 @@ export function AppearanceStudio() {
       return;
     }
     const remote = current.data?.appearance ? normalizeAppearance(current.data.appearance) : null;
-    const local = appearanceStore.get();
-    const merged: Appearance = {
-      ...local,
-      pal: remote ? remote.pal : local.pal,
-      home: remote ? remote.home : local.home,
-      updatedAt: force || !local.updatedAt ? new Date().toISOString() : local.updatedAt,
-    };
+    // One merge rule for the studio and the app's look sync (appearanceStore).
+    const merged: Appearance = lookForServer(appearanceStore.get(), remote, null, { force });
     const r = await putAppearance(apiBase, token, merged);
     if (r.ok) {
       setSync({ busy: false, message: `Saved to your NeuroPal at ${host}.`, conflict: null });

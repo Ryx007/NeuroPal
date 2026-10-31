@@ -11,9 +11,6 @@ import {
 import "@/styles/tokens.css";
 import "./globals.css";
 import { AppearanceProvider } from "@/components/AppearanceProvider";
-import { Backdrop } from "@/components/Backdrop";
-import { SiteFooter } from "@/components/SiteFooter";
-import { SiteHeader } from "@/components/SiteHeader";
 import { NO_FLASH_SCRIPT } from "@/lib/noFlash";
 
 // Signal type: Archivo (variable width axis), Atkinson Hyperlegible Next and Mono.
@@ -60,19 +57,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>
-        <AppearanceProvider>
-          <a className="np-skip" href="#main">
-            Skip to content
-          </a>
-          <Backdrop />
-          <div className="np-shell">
-            <SiteHeader />
-            <main id="main" tabIndex={-1}>
-              {children}
-            </main>
-            <SiteFooter />
-          </div>
-        </AppearanceProvider>
+        {/* The site's pages ((site)/layout.tsx) and the app (app/layout.tsx)
+            each bring their own chrome; both share the look. */}
+        <AppearanceProvider>{children}</AppearanceProvider>
       </body>
     </html>
   );

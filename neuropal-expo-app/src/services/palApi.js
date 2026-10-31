@@ -3,7 +3,8 @@
 // configured, known to be down, in mock mode, rate-limited or failing, the
 // caller gets a local answer plus a `reason` it can say out loud.
 //
-//   requestBreakdown(task)        → { steps, source, reason?, message? }
+//   requestBreakdown(task)        → { steps, source, reason?, message? } or, for a
+//                                   task that sounds like a crisis, { steps: [], crisis: true, reply }
 //   sendPalChat(message, context) → { reply, crisis, source, reason?, message? }
 //   clearPalChat()                → true when the server copy is gone
 //
@@ -42,10 +43,13 @@ export async function requestBreakdown(task, { signal } = {}) {
   const clean = String(task || "").trim().slice(0, TASK_MAX_CHARS);
   const local = (reason, message) => ({ steps: localBreakdown(clean), source: "local", reason, message });
   if (!clean) return local("error", "Write the task first.");
+  // Safety first, and offline: never turn a crisis into a to-do list.
+  if (looksLikeCrisis(clean)) return { steps: [], crisis: true, reply: CRISIS_REPLY, source: "local" };
   const skip = unreachable();
   if (skip) return local(skip);
   try {
     const { data } = await apiClient.post("pal/breakdown", { task: clean }, { timeout: AI_TIMEOUT_MS, signal });
+    if (data?.crisis) return { steps: [], crisis: true, reply: String(data.reply || CRISIS_REPLY), source: "server" };
     const steps = cleanSteps(data?.steps);
     if (!steps) return local("error", "The server's steps didn't come out right.");
     return { steps, source: "server" };
