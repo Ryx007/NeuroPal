@@ -11,6 +11,7 @@
 |---|---|
 | Second app version | **Flutter for Android and iOS.** Swift only for iOS-native extras Flutter cannot do (WidgetKit widgets, Live Activities, later the Apple Watch app). |
 | Order | **Expo leads.** The existing Expo app gets the v2 design and new modules first; the Flutter app starts with the reader (Module 0) and catches up feature by feature. |
+| Priority (2026-10-31) | **Android and web first.** All four clients stay. New work lands first in Expo, Flutter and the web app (`/app/`). The native iOS app (`neuropal-ios/`) comes last until the Apple Developer account is sorted. |
 | Web | **Two web surfaces:** the existing Expo web build (the NeuroPal app in a browser, served by `neuropal-web` on :8081) **plus** a separate Next.js platform site (`neuropal-platform/`): landing, accounts, the science-for-anyone lessons, WebGL/WebGPU. |
 | Where work happens | Coded in a cloud workspace, pushed as branches/PRs to `Ryx007/NeuroPal`. Android APKs are built there and handed over; iOS builds are verified on GitHub's macOS runners and installed from a Mac. |
 | Look | Two skins, one system: **Classic** (the original, unchanged: 4 themes × 4 accents) and **Signal** (brutal glass, red on graphite by default, every token user-adjustable). Signed off from the v2 render. |

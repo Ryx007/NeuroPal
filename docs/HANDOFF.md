@@ -10,7 +10,8 @@
 >
 > _Written 2026-08-04 after the port-split + collaborator-prep session;
 > §0 added 2026-10-23 for the v2 platform branch, round 2 on 2026-10-24,
-> round 3 (native iOS + iPadOS app, web app) on 2026-10-29._
+> round 3 (native iOS + iPadOS app, web app) on 2026-10-29; the owner's
+> priority (Android + web first, native iOS last) on 2026-10-31._
 > _Author: Claude (Opus/Sonnet/Fable across the session), owner "Ryx"._
 
 ---
@@ -137,18 +138,29 @@ then three fix agents. Everything rated high is fixed:
   same address on another network (warned); the app and widget were only
   tested as two threads, not two processes; no real-device run yet.
 
+**Owner's priority (2026-10-31):** keep all four clients. New work goes to
+**Android (Expo + Flutter) and the web app first**. The native iOS app is the
+lowest priority until the Apple Developer account is sorted: features are
+ported to it later, and its CI job stays as it is.
+
 **Waiting on the owner (round 3):**
-- **The cross-platform decision.** Four clients now exist; keeping all of
-  them in step doubles the work of every feature.
-- **Apple Developer team** for device builds and TestFlight: set
-  `DEVELOPMENT_TEAM` in `neuropal-ios/project.yml` and register the App Group
-  `group.io.neuropal.ios` for `io.neuropal.ios` and `io.neuropal.ios.widgets`.
-- **`sudo DevToolsSecurity -enable` once on the Mac** — until then the UI
-  test target (`ui-test`, accessibility audits) can't start ("failed to
-  bless service hub").
+- **VPS access** (from round 2). The owner runs `ssh-copy-id -i
+  ~/.ssh/neuropal_vps.pub root@161.97.154.212` on the MacBook Air. The key
+  has been there since 2026-10-24 (ED25519, comment
+  `neuropal-deploy@ryxs-macbook-air`). The cloud workspace can't make SSH
+  connections, so Claude reaches the server only through the Mac. The Mac
+  must be awake, with the desktop app open.
 - **Where the web app lives** (e.g. `https://ryx007.work/app/`).
-- Still from round 2: VPS access, the friend's exposed databases, free
-  Gemini vs "never trains models", Classic's primary-button gradient.
+- **Later, for iOS:**
+  - An **Apple Developer team**: set `DEVELOPMENT_TEAM` in
+    `neuropal-ios/project.yml`, and register the App Group
+    `group.io.neuropal.ios` for `io.neuropal.ios` and
+    `io.neuropal.ios.widgets`.
+  - **`sudo DevToolsSecurity -enable` once on the Mac.** Until then the UI
+    test target (`ui-test`, accessibility audits) can't start ("failed to
+    bless service hub").
+- **Still from round 2:** the friend's exposed databases, free Gemini vs
+  "never trains models", Classic's primary-button gradient.
 
 **Traps from round 3 (don't re-derive):**
 - XcodeGen: add the shared fonts as a **folder** (`type: folder`) and list
