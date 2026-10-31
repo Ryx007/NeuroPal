@@ -29,6 +29,11 @@ cd /opt/neuropal/deploy/vps
 ./tunnel.sh         # prints a Cloudflare link once; then https://api.ryx007.work
 ```
 
+Approve the Cloudflare link within about 9 minutes. After that, cloudflared
+gives up ("Failed to fetch resource"); run `./tunnel.sh` again for a new
+link. From the Mac, both scripts run in one go:
+`ssh -t -i ~/.ssh/neuropal_vps root@161.97.154.212 'cd /opt/neuropal/deploy/vps && ./bootstrap.sh && ./tunnel.sh'`.
+
 `bootstrap.sh` doesn't install Docker. The server is shared, so installing
 system packages is a deliberate step of its own.
 

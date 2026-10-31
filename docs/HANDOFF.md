@@ -143,14 +143,50 @@ then three fix agents. Everything rated high is fixed:
 lowest priority until the Apple Developer account is sorted: features are
 ported to it later, and its CI job stays as it is.
 
+**VPS deployment (2026-10-31):**
+- **Access.** The owner authorised the MacBook Air's key `~/.ssh/neuropal_vps`
+  (ED25519, comment `neuropal-deploy@ryxs-macbook-air`) for
+  `root@161.97.154.212`. The cloud workspace can't make SSH connections, so
+  Claude runs `ssh -i ~/.ssh/neuropal_vps root@161.97.154.212 …` on the Mac
+  through Desktop Commander. The Mac must be awake, with the desktop app
+  open. Rule from the owner: the server is his, but change nothing outside
+  NeuroPal's own folder and containers.
+- **Installed** in `/opt/neuropal`, branch `v3-apple-web`. Compose project
+  `neuropal-v2`, all running:
+  - The API is healthy.
+  - MongoDB, Qdrant, the nightly backup.
+  - Ollama with `nomic-embed-text` (768 dims, ~0.9 s for a cold embed).
+
+  No host port is published (checked against the list of listening ports
+  before the install). Sign-up with the invite code, a wrong code (403),
+  login, `/me` and the document list were checked from inside the server.
+  The throwaway account was removed; there are 0 accounts. Gemini and arXiv
+  are reachable from the API container.
+- **The server is shared and tight on memory.** It runs Nextcloud +
+  OnlyOffice, Zulip (~2.5 GB), SOGo, Portainer, mail with ClamAV, and
+  Virtualmin sites, including `ryx007.work` itself (nginx, PHP,
+  `/home/ryx007.work/public_html`). It has 8 GB, no swap, and ~1.7 GB was
+  free before NeuroPal. NeuroPal uses ~0.4 GB idle and ~0.75 GB with the
+  embedder loaded. The caps and `oom_score_adj` are in the compose
+  (commit 2eca460).
+- **Not public yet.** Two `tunnel.sh` Cloudflare links expired unapproved,
+  so `api.ryx007.work` has no DNS record yet. `GEMINI_API_KEY` is empty, so
+  the AI answers need a key. The owner finishes both with one command on
+  the Mac:
+  ```
+  ssh -t -i ~/.ssh/neuropal_vps root@161.97.154.212 'cd /opt/neuropal/deploy/vps && ./bootstrap.sh && ./tunnel.sh'
+  ```
+  It runs a hidden Gemini-key prompt, restarts the stack and prints the
+  invite code. Then it shows the Cloudflare link, which must be approved
+  within ~9 minutes.
+
 **Waiting on the owner (round 3):**
-- **VPS access** (from round 2). The owner runs `ssh-copy-id -i
-  ~/.ssh/neuropal_vps.pub root@161.97.154.212` on the MacBook Air. The key
-  has been there since 2026-10-24 (ED25519, comment
-  `neuropal-deploy@ryxs-macbook-air`). The cloud workspace can't make SSH
-  connections, so Claude reaches the server only through the Mac. The Mac
-  must be awake, with the desktop app open.
-- **Where the web app lives** (e.g. `https://ryx007.work/app/`).
+- **Finish the VPS** with the command above (the AI key + the Cloudflare
+  approval).
+- **Where the web app lives.** `ryx007.work` is a Virtualmin PHP site on the
+  VPS, so `/app/` there means adding files to it. The alternative that
+  touches nothing: a subdomain such as `app.ryx007.work`, served by the
+  `neuropal-v2` stack through the same tunnel.
 - **Later, for iOS:**
   - An **Apple Developer team**: set `DEVELOPMENT_TEAM` in
     `neuropal-ios/project.yml`, and register the App Group
@@ -163,6 +199,21 @@ ported to it later, and its CI job stays as it is.
   "never trains models", Classic's primary-button gradient.
 
 **Traps from round 3 (don't re-derive):**
+- **VPS DNS.** `/etc/resolv.conf` is a dangling link to systemd-resolved,
+  which is inactive. The host still resolves names through its local BIND
+  (glibc falls back to 127.0.0.1), but a cold name can fail once, so retry.
+  Docker's DNS on user-defined networks has no upstream ("DNS resolver has
+  no external nameservers"). That's why the internet-facing containers in
+  the compose set `dns: [1.1.1.1, 9.9.9.9]`. Don't "fix" the host's file:
+  it isn't NeuroPal's.
+- **`cloudflared tunnel login` waits about 9 minutes** (10 long polls). Then
+  it fails with "Failed to fetch resource" ("Failed to write the
+  certificate") and `tunnel.sh` exits; re-run it for a fresh link.
+- **`pgrep -f` matches its own wait loop** when that loop's text contains the
+  pattern. Anchor the pattern: `pgrep -f "^bash ./tunnel.sh"`.
+- **CI `web-app`:** two dev APIs started together raced on mongodb-memory-
+  server's binary download (ENOENT on `*.tgz.downloading`). The second one
+  now waits for the first (d6985a8).
 - XcodeGen: add the shared fonts as a **folder** (`type: folder`) and list
   them in `UIAppFonts` as `fonts/<file>.ttf`; `includes:` + `group:` doubled
   the path.
@@ -208,9 +259,9 @@ a sign-up key (invite code) · react-native-keyboard-controller.
   - `tunnel.sh`: Cloudflare login, tunnel + DNS route, then starts
     cloudflared.
 
-  **Not deployed yet.** It needs either SSH access (the owner runs
-  `ssh-copy-id -i ~/.ssh/neuropal_vps.pub root@161.97.154.212` on the Mac) or
-  the owner running `install.sh` as root on the VPS.
+  **Installed on 2026-10-31.** It is in `/opt/neuropal`, branch
+  `v3-apple-web`. It runs privately until the Cloudflare step is approved;
+  see "VPS deployment (2026-10-31)" in the round 3 notes.
 - **Backend for a public server** (`a19ca09`; BRAIN §4 has the endpoints):
   - Sessions: JWT, 30 days, refreshed by `/auth/me` up to 90 days from
     sign-in. Sign out everywhere and password change both bump

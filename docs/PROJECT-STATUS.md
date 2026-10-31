@@ -7,9 +7,13 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-10-31 — **the owner's priority: Android (Expo +
-Flutter) and the web app first, the native iOS app last** until the Apple
-Developer account is sorted. All four clients stay. 2026-10-29 — **round 3 on branch `v3-apple-web` (PR #3,
+_Last updated: 2026-10-31 — **the backend is installed on the VPS**
+(`/opt/neuropal`, compose project `neuropal-v2`, running privately).
+`https://api.ryx007.work` goes live once the owner approves the Cloudflare
+login and adds the AI key: one command, in HANDOFF §0 "VPS deployment".
+**The owner's priority: Android (Expo + Flutter) and the web app first, the
+native iOS app last** until the Apple Developer account is sorted. All four
+clients stay. 2026-10-29 — **round 3 on branch `v3-apple-web` (PR #3,
 stacked on `v2-platform`)**: a native SwiftUI app for iPhone + iPad
 (`neuropal-ios/` — sign-in, library, word-by-word read-aloud reader with
 PDF and EPUB, Ask, Home, calming steps, Pal, widgets, Settings; simulator
