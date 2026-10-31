@@ -23,7 +23,7 @@ phone / laptop ──HTTPS──▶ Cloudflare edge ──tunnel──▶ cloudf
 ## First install (as root on the VPS)
 
 ```bash
-git clone --branch v2-platform https://github.com/Ryx007/NeuroPal.git /opt/neuropal
+git clone --branch v3-apple-web https://github.com/Ryx007/NeuroPal.git /opt/neuropal
 cd /opt/neuropal/deploy/vps
 ./bootstrap.sh      # secrets → .env, asks for the Gemini key, builds, starts
 ./tunnel.sh         # prints a Cloudflare link once; then https://api.ryx007.work
@@ -60,6 +60,19 @@ scripts/pull-backup.sh      # on the Mac: rsyncs backups/ to ~/NeuroPal-backups
 ```
 
 ## Limits worth knowing
+
+- **Memory.** The server is shared: 8 GB, no swap, about 1.7 GB free before
+  NeuroPal. NeuroPal's containers are capped:
+  - API 1 GB.
+  - MongoDB 512 MB, with a 0.25 GB cache.
+  - Qdrant 512 MB.
+  - Ollama 1 GB. The embedder unloads after 10 idle minutes, so the first
+    question after a pause takes a second or two longer.
+
+  If the server ever runs out of memory, the kernel stops NeuroPal's
+  containers first (`oom_score_adj`), never the other services. A big book
+  can then fail to process; use "Try again". The `NP_*` keys in `.env` raise
+  the caps (see `env.template`). A swap file would give everything more room.
 
 - **Uploads over 100 MB** fail: Cloudflare's free plan caps a request body
   at 100 MB. Bigger books need chunked upload (not built yet).
