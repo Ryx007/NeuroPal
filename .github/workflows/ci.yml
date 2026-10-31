@@ -139,8 +139,15 @@ jobs:
         working-directory: neuropal-platform
         run: |
           node scripts/qa/dev-api.cjs 4420 > "$RUNNER_TEMP/api-reader.log" 2>&1 &
-          node scripts/qa/dev-api.cjs 4410 > "$RUNNER_TEMP/api-shell.log" 2>&1 &
           npm run serve > "$RUNNER_TEMP/serve.log" 2>&1 &
+          # The first API downloads the MongoDB binary. A second one started
+          # at the same time races it on the download's final rename (ENOENT
+          # on mongodb-binaries/*.tgz.downloading), so it waits.
+          for i in $(seq 1 90); do
+            grep -q "dev-api" "$RUNNER_TEMP/api-reader.log" && break
+            sleep 2
+          done
+          node scripts/qa/dev-api.cjs 4410 > "$RUNNER_TEMP/api-shell.log" 2>&1 &
           for i in $(seq 1 90); do
             if grep -q "dev-api" "$RUNNER_TEMP/api-reader.log" && grep -q "dev-api" "$RUNNER_TEMP/api-shell.log" \
               && curl -sf http://127.0.0.1:4321/ > /dev/null; then exit 0; fi
