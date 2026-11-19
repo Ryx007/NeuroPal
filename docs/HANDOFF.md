@@ -82,7 +82,8 @@ reviews (server, Expo + web, Flutter) and fix passes for every finding.
   the owner's finishing command (AI key + Cloudflare approval) is pending.
 - **Tests / CI:** backend 106 (`day.merge`, `day.sync`, `keyedQueue`,
   `uploadName`), Expo `npm test` 61, web `day-model.mjs` 20 +
-  `web-day-sync.mjs` 81 + `web-study.mjs`, Flutter (see the Flutter job).
+  `web-day-sync.mjs` 81 + `web-study.mjs`, Flutter 324 (6 skipped; plus a
+  live two-phone day-sync test against a dev API, `NP_TEST_API`).
   CI's web-app job runs on `ubuntu-24.04` (Playwright has no Chromium build
   for 26.04) with three dev APIs (4420 reader, 4410 shell + day sync, 4430
   study).
@@ -101,6 +102,14 @@ reviews (server, Expo + web, Flutter) and fix passes for every finding.
   static export.
 - Reviewers work in a separate `git worktree` snapshot so fix agents can
   edit the main tree at the same time.
+- CI's Expo job sets `EXPO_PUBLIC_USE_MOCK=true` for the whole job (for the
+  bundles), so `npm test` sees it too: tests of the real-server path must
+  set the flag themselves before importing `network.js`.
+- The two Android apps have different debug signing keys (Expo: the React
+  Native template's `android/app/debug.keystore`; Flutter:
+  `~/.android/debug.keystore` of the build machine). Each stays the same
+  across builds, so updates install in place; a new build machine for
+  Flutter means uninstalling first.
 
 ### Round 3 (2026-10-29): native iPhone + iPad app and the web app — branch `v3-apple-web`, PR #3
 
