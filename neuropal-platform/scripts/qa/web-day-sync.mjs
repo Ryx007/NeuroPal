@@ -5,14 +5,18 @@
 //   2. the dev server:  NP_DIST_DIR=.next-day npx next dev -p 4312
 //   3. node scripts/qa/web-day-sync.mjs [--web http://localhost:4312] [--api http://127.0.0.1:4422] [--out <dir>]
 // Checks: a check-in, a new anchor, an edit, a tick, a deleted task (and its
-// Undo) and a brain-dump line made on A show up on B; an edit made on B while
-// offline syncs when it reconnects; with the switch off B stays local (and on
+// Undo) and a brain-dump line made on A show up on B; a brain-dump line longer
+// than a task title moved to the minimum day stays whole in the dump; an edit
+// made on B while offline syncs when it reconnects; a 401 from the sync says
+// that signing in again resumes it (nobody is signed out), and another 4xx
+// stops it until the next start; with the switch off B stays local (and on
 // again adds its day back); an anchor made through the API with `icon` and
 // `location` survives an edit here; sign out → sign in brings the day back;
-// two tabs don't answer each other's writes (sync requests counted); an
-// erase elsewhere empties the day here. Settings with the new section: axe
-// with zero violations in both skins at 1440×900 and 390×844, screenshots.
-// Any console error fails.
+// two tabs don't answer each other's writes (sync requests counted); a tab
+// that hasn't heard yet that another account took the browser never writes
+// its day as that account's; an erase elsewhere empties the day here.
+// Settings with the new section: axe with zero violations in both skins at
+// 1440×900 and 390×844, screenshots. Any console error fails.
 import AxeBuilderModule from "@axe-core/playwright";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
@@ -118,8 +122,9 @@ async function device(browser, { vp = VIEWPORTS[0], skin = SKINS[0], signedIn = 
   return ctx;
 }
 
-async function tab(ctx, label, path, { quietErrors = [] } = {}) {
+async function tab(ctx, label, path, { quietErrors = [], init = null } = {}) {
   const page = await ctx.newPage();
+  if (init) await page.addInitScript(init[0], init[1]);
   counts.set(label, 0);
   page.on("request", (r) => {
     if (r.url() === SYNC && r.method() === "POST") counts.set(label, (counts.get(label) ?? 0) + 1);
@@ -186,6 +191,23 @@ async function axe(page, label) {
 
 const daySection = (page) => page.locator("section#day");
 const statusLine = (page) => daySection(page).locator("p[data-tone]");
+
+// The API is another origin: an answer made up here needs CORS headers, or
+// the browser refuses it and the app sees no answer at all.
+const CORS = {
+  "access-control-allow-origin": new URL(WEB).origin,
+  "access-control-allow-headers": "authorization, content-type, accept",
+  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+};
+/** From now on this page's day syncs get `status` from the "server". */
+const answerSyncWith = (page, status) =>
+  page.route(SYNC, (route) =>
+    route.request().method() === "OPTIONS"
+      ? route.fulfill({ status: 204, headers: CORS })
+      : route.fulfill({ status, headers: { ...CORS, "content-type": "application/json" }, body: JSON.stringify({ error: "Refused" }) }),
+  );
+const THOUGHT =
+  "Email Milena about the SPAD array calibration: ask whether the new beam splitter arrived, whether Friday's coincidence run can move to Monday, and who keeps the lab key over the weekend.";
 
 // ---- run ----------------------------------------------------------------------------------
 
@@ -277,6 +299,31 @@ try {
     check(await shows(b.getByText("Ask Milena about the SPAD array", { exact: true })), "B shows A's brain-dump line");
   }
 
+  // A brain-dump line longer than a task title, moved to the minimum day (§8 "Text limits").
+  {
+    const field = a.getByLabel("A thought, a worry, a to-do");
+    let sent = nextSync(a);
+    await field.fill(THOUGHT);
+    await field.press("Enter");
+    check(await sent, "A's long brain-dump line went up");
+    sent = nextSync(a);
+    await a.locator("li").filter({ hasText: THOUGHT }).getByRole("button", { name: /^Minimum day/ }).click();
+    check(
+      await shows(a.getByRole("status").filter({ hasText: /to your minimum day\. The full note stays in your brain dump\.$/ })),
+      "moving a long line says the full note stays in the brain dump",
+      `status: ${await a.getByRole("status").first().innerText().catch(() => "?")}`,
+    );
+    check(await shows(a.getByText(THOUGHT, { exact: true })), "…and the whole line is still in the dump");
+    check(await sent, "the move went up");
+    await a.screenshot({ path: `${OUT}/a-dump-long-line-moved.png`, fullPage: true });
+    const server = (await api("/me/day", token)).data;
+    const task = server.tasks.find((t) => !t.deletedAt && t.title.endsWith("…") && THOUGHT.startsWith(t.title.slice(0, -1)));
+    check(task && task.title.length <= 120, `the task is a shortened copy within a task title (${task?.title.length ?? "no"} characters: “${task?.title.slice(-24) ?? ""}”)`, `server tasks: ${JSON.stringify(server.tasks.map((t) => t.title))}`);
+    check(server.dump.some((d) => !d.deletedAt && d.text === THOUGHT), "the server keeps the whole line in the dump: its end isn't lost");
+    const local = await stored(a);
+    check(local.tasks.some((t) => t.title === task?.title) && local.dump.some((d) => d.text === THOUGHT), "this browser holds what the server holds");
+  }
+
   console.log("\nan edit made on B while offline syncs when it reconnects");
   {
     await B.setOffline(true);
@@ -314,6 +361,48 @@ try {
     await b.unroute(SYNC);
     await syncNow(b);
     check(await shows(statusLine(b).filter({ hasText: /^Synced at / })), "the server answers again: “Synced at …”");
+  }
+
+  console.log("\na 401 from a day sync: the line says signing in again resumes it, and nobody is signed out");
+  {
+    await answerSyncWith(b, 401);
+    await b.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    check(
+      await shows(statusLine(b).filter({ hasText: /^Your session has ended\. Sign in again and your day syncs again\.$/ })),
+      "the Settings line says the session ended and that signing in again resumes sync (not “Synced at …”)",
+      `B's line: ${await statusLine(b).innerText().catch(() => "?")}`,
+    );
+    check(await shows(daySection(b).getByRole("switch", { name: "Keep my day in sync" })), "B is still signed in: a background sync never signs anyone out");
+    await daySection(b).scrollIntoViewIfNeeded();
+    await daySection(b).screenshot({ path: `${OUT}/b-settings-session-ended.png` });
+    await b.unroute(SYNC);
+    // Signing in again is a new token; a new start stands in for it here (the halt belongs to this tab's start).
+    const back = nextSync(b, 15000);
+    await b.reload({ waitUntil: "networkidle" });
+    check(await back, "after a new start it syncs again");
+    check(await shows(statusLine(b).filter({ hasText: /^Synced at / })), "…and the line says “Synced at …”");
+  }
+
+  console.log("\nthe server refuses the day (another 4xx): sync stops until the next start, and the line says so");
+  {
+    await answerSyncWith(b, 413);
+    const before = counts.get("B");
+    await b.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    check(
+      await shows(statusLine(b).filter({ hasText: /^Sync stopped: your server refused the day\. It tries again the next time you open the app\./ })),
+      "the Settings line says sync stopped, and when it tries again",
+      `B's line: ${await statusLine(b).innerText().catch(() => "?")}`,
+    );
+    await sleep(6500); // past the retry ladder's first step (5 s)
+    await b.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await sleep(500);
+    check(counts.get("B") - before === 1, `one try, then nothing: not retried like a 5xx (${counts.get("B") - before} sent)`);
+    await daySection(b).screenshot({ path: `${OUT}/b-settings-stopped.png` });
+    await b.unroute(SYNC);
+    const back = nextSync(b, 15000);
+    await b.reload({ waitUntil: "networkidle" });
+    check(await back, "the next start syncs again");
+    check(await shows(statusLine(b).filter({ hasText: /^Synced at / })), "…and the line says “Synced at …”");
   }
 
   console.log("\nwith the switch off, B stays local");
@@ -438,6 +527,58 @@ try {
     await two.close();
   }
 
+  console.log("\ntwo accounts in two tabs: a tab that hasn't heard yet that the browser changed hands never writes its day as the other's");
+  {
+    const regB = await post("/auth/register", { email: `qa-day-b-${Date.now().toString(36)}@example.com`, password: "qa-day-password-b", name: "Bea", inviteCode: "np-dev" });
+    const bodyB = await regB.json();
+    const sessionB = { token: bodyB.token, base: API, user: { id: bodyB.user?.id, email: bodyB.user?.email, name: bodyB.user?.name } };
+    // One tab-only session per tab. `deaf`: the tab never hears the other
+    // tab's storage events, the stand-in for one that hasn't heard yet.
+    const signInTab = ({ s, deaf }) => {
+      if (!sessionStorage.getItem("__qa_acct")) {
+        sessionStorage.setItem("__qa_acct", "1");
+        sessionStorage.setItem("np.session", JSON.stringify(s));
+      }
+      if (deaf) {
+        const add = window.addEventListener.bind(window);
+        window.addEventListener = (type, listener, options) => (type === "storage" ? undefined : add(type, listener, options));
+      }
+    };
+    const C = await device(browser, { signedIn: false });
+    const one = await tab(C, "C-A", "/app/pal/?tool=dump", { init: [signInTab, { s: session, deaf: true }] });
+    const secret = `A's private thought ${Date.now().toString(36)}`;
+    const field = one.getByLabel("A thought, a worry, a to-do");
+    const sent = nextSync(one);
+    await field.fill(secret);
+    await field.press("Enter");
+    check(await sent, "account A's line went up from tab 1");
+    // Tab 1's next sync is held on its way to the server…
+    let release = () => {};
+    const gate = new Promise((r) => (release = r));
+    await one.route(SYNC, async (route) => {
+      if (route.request().method() === "POST") await gate;
+      await route.continue();
+    });
+    const held = nextSync(one, 30000);
+    await one.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await sleep(500);
+    // …while account B signs in in tab 2: this browser's day becomes B's.
+    const two = await tab(C, "C-B", "/app/pal/?tool=dump", { init: [signInTab, { s: sessionB, deaf: false }] });
+    check(!JSON.stringify((await stored(two)) ?? {}).includes(secret), "B's sign-in cleared A's day from this browser");
+    // Tab 1 still believes the day is A's. Its answer arrives now.
+    release();
+    check(await held, "tab 1's held sync came back");
+    await sleep(1500);
+    const after = await stored(two);
+    check(!JSON.stringify(after ?? {}).includes(secret), "tab 1 didn't write A's day where B's lives (it read the owner from storage, in the day's lock)", `stored now: ${JSON.stringify(after)?.slice(0, 160)}`);
+    check((await two.getByText(secret, { exact: true }).count()) === 0, "tab 2 never shows A's line");
+    await syncNow(two);
+    const serverB = (await api("/me/day", sessionB.token)).data;
+    check(!JSON.stringify(serverB).includes(secret), "B's account on the server has nothing of A's day");
+    await one.unroute(SYNC);
+    await C.close();
+  }
+
   console.log("\nSettings › Your day: both skins, 1440×900 and 390×844");
   for (const vp of VIEWPORTS) {
     for (const skin of SKINS) {
@@ -468,8 +609,10 @@ try {
     check((await b.getByRole("slider").getAttribute("aria-valuetext")) === "Not checked in yet", "…Home shows no check-in");
   }
 
-  // The requests this script aborts on purpose (offline, unreachable) are logged by the browser itself.
-  const real = allErrors.filter((e) => !/Download the React DevTools|net::ERR_INTERNET_DISCONNECTED|Failed to load resource: net::ERR_CONNECTION_REFUSED/.test(e));
+  // The requests this script aborts or answers itself on purpose (offline, unreachable, 401, 413) are logged by the browser itself.
+  const real = allErrors.filter(
+    (e) => !/Download the React DevTools|net::ERR_INTERNET_DISCONNECTED|Failed to load resource: net::ERR_CONNECTION_REFUSED|Failed to load resource: the server responded with a status of (401|413)/.test(e),
+  );
   check(real.length === 0, "no console errors", `console errors:\n     ${real.slice(0, 8).join("\n     ")}`);
   await A.close();
   await B.close();

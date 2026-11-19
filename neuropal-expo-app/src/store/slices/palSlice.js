@@ -1,6 +1,7 @@
 import { createSlice, current, isDraft, nanoid } from "@reduxjs/toolkit";
 
-import { adoptDump, canonical, cleanDumpTombs, isDayBody, stamps, stampsFrom, withTombstone } from "../../services/dayModel.js";
+import { TEXT_MAX, adoptDump, canonical, cleanDumpTombs, cleanText, isDayBody, shortTitle, stamps, stampsFrom, withTombstone } from "../../services/dayModel.js";
+import { addTask, addTodo } from "./homeSlice.js";
 
 // Pal as a buddy: the floating bubble + the assistant sheet (PalSheet).
 //
@@ -41,6 +42,8 @@ const initialState = {
 
 const validSection = (s) => (PAL_SECTIONS.includes(s) ? s : null);
 const text = (v, max = 2000) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+// A brain-dump line syncs: the server's own text rule, so it comes back unchanged.
+const dumpText = (v) => cleanText(v, TEXT_MAX.dump);
 const isoNow = () => new Date().toISOString();
 
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
@@ -63,7 +66,7 @@ const palSlice = createSlice({
       state.bubbleHidden = Boolean(p.bubbleHidden);
       // Fields this app doesn't use (from the server) are kept.
       state.dump = cleanList(p.dump, 1000, (d) =>
-        text(d.text) ? { ...withoutUnsafe(d), id: String(d.id || nanoid()), text: text(d.text), at: String(d.at || isoNow()) } : null
+        dumpText(d.text) ? { ...withoutUnsafe(d), id: String(d.id || nanoid()), text: dumpText(d.text), at: String(d.at || isoNow()) } : null
       );
       state.dumpGone = cleanDumpTombs(p.dumpGone);
       state.chat = cleanList(p.chat, Infinity, (m) =>
@@ -127,7 +130,7 @@ const palSlice = createSlice({
         if (state.dump.length > 1000) state.dump.length = 1000;
       },
       prepare(value) {
-        return { payload: { id: nanoid(), text: text(value), at: isoNow() } };
+        return { payload: { id: nanoid(), text: dumpText(value), at: isoNow() } };
       },
     },
     // The text is gone at once; the tombstone carries the deletion to the
@@ -261,6 +264,20 @@ export const {
   sitCleared,
   saveSitNote,
 } = palSlice.actions;
+
+// The brain dump's "Minimum day" / "To-do" buttons. A task or to-do keeps
+// less text than a dump line (§8 "Text limits"), so a line that doesn't fit
+// whole stays in the dump and its end is never lost; the target gets a
+// shortened copy (whole words, "…"). Returns true when the line stayed (the
+// sheet says so).
+export const moveDumpLine = (item, where) => (dispatch) => {
+  if (!item || typeof item.text !== "string") return false;
+  const title = shortTitle(item.text, where === "day" ? TEXT_MAX.taskTitle : TEXT_MAX.todoTitle);
+  const fits = title === dumpText(item.text);
+  dispatch(where === "day" ? addTask(title) : addTodo(title));
+  if (fits) dispatch(removeDump(item.id));
+  return !fits;
+};
 
 // What AppProviders writes to storage.
 export function persistedPal(pal) {

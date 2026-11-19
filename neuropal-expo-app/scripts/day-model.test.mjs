@@ -2,13 +2,18 @@
 // that changes the day, run through the real slices.
 //   cd neuropal-expo-app && node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/day-model.test.mjs
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { createRequire, register } from "node:module";
+import { mock, test } from "node:test";
+
+import { configureStore } from "@reduxjs/toolkit";
 
 import {
   EPOCH,
+  TEXT_MAX,
   TOMBSTONE_CAP,
   buildSyncBody,
   canonical,
+  cleanText,
   describeDaySync,
   later,
   localDate,
@@ -23,6 +28,9 @@ import { buildSnapshot } from "../src/widgets/model.js";
 const DAY1 = "2026-11-19";
 const DAY2 = "2026-11-20";
 const NOW = "2026-11-19T17:20:00.000Z";
+// A starter deleted before sync (contract §8 "Old saves"): beats an untouched
+// starter, never a real edit.
+const STARTER_GONE = "1970-01-01T00:00:00.001Z";
 const t = (offsetMs, base = NOW) => new Date(Date.parse(base) + offsetMs).toISOString();
 
 // An action from the real action creator (its payload shape and id), at a
@@ -128,7 +136,7 @@ test("a 0.3.0 save keeps every item, and gets the contract's stamps", () => {
     enabled: true,
     gen: 0,
     owner: null,
-    gone: { tasks: [], anchors: [{ id: "a-4", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: NOW }], todos: [] },
+    gone: { tasks: [], anchors: [{ id: "a-4", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: STARTER_GONE }], todos: [] },
     lastSyncAt: null,
   });
   assert.equal(s.dayStamp, DAY1);
@@ -138,11 +146,14 @@ test("a starter deleted before sync is sent as a deletion, and only for old save
   const old = save030();
   old.tasks = old.tasks.filter((x) => x.id !== "mvd-2");
   const s = homeReducer(undefined, at(H.hydrateHome(old)));
-  assert.deepEqual(s.sync.gone.tasks, [{ id: "mvd-2", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: NOW }]);
+  assert.deepEqual(s.sync.gone.tasks, [{ id: "mvd-2", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: STARTER_GONE }]);
   assert.equal(byId(s.tasks, "mvd-2"), undefined);
-  // The tombstone wins over a 1970 starter on the server (deletedAt >= updatedAt).
+  // The tombstone wins over a 1970 starter on the server (deletedAt >= updatedAt),
+  // and its stamp doesn't depend on when this phone migrated.
   const body = buildSyncBody(s, freshPal());
-  assert.ok(body.tasks.some((x) => x.id === "mvd-2" && x.deletedAt === NOW && x.title === undefined));
+  assert.ok(body.tasks.some((x) => x.id === "mvd-2" && x.deletedAt === STARTER_GONE && x.title === undefined));
+  const migratedLater = homeReducer(undefined, at(H.hydrateHome(old), "2026-12-01T09:00:00.000Z", "2026-12-01"));
+  assert.deepEqual(migratedLater.sync.gone.tasks, s.sync.gone.tasks);
   // A save that already syncs, or one with no task list at all, adds none.
   const again = homeReducer(undefined, at(H.hydrateHome(JSON.parse(JSON.stringify(H.persistedHome(s))))));
   assert.equal(again.sync.gone.tasks.length, 1, "hydrating again adds no second tombstone");
@@ -355,15 +366,41 @@ test("an edit, tick or delete always lands after the stamp it replaces (fast clo
 
 // ---- tombstones and Undo -------------------------------------------------------
 
-test("tombstones: one per id, the newest 500 kept", () => {
+test("tombstones: one per id, the newest 3000 kept (like the server)", () => {
+  assert.equal(TOMBSTONE_CAP, 3000);
+  const kept = Array.from({ length: TOMBSTONE_CAP }, (_, i) => ({ id: `old-${i}`, createdAt: EPOCH, updatedAt: EPOCH, deletedAt: t(-1e6 + i) }));
+  const todos = Array.from({ length: 20 }, (_, i) => ({ id: `td-${i}`, title: `n${i}`, done: false, createdAt: t(i), updatedAt: t(i) }));
   let s = freshHome();
-  const many = [];
-  for (let i = 0; i < TOMBSTONE_CAP + 20; i += 1) many.push({ id: `td-${i}`, title: `n${i}`, done: false, createdAt: t(i), updatedAt: t(i) });
-  s = { ...s, todos: many };
-  for (let i = 0; i < many.length; i += 1) s = run(s, at(H.removeTodo(`td-${i}`), t(10000 + i)));
+  s = { ...s, todos, sync: { ...s.sync, gone: { ...s.sync.gone, todos: kept } } };
+  for (let i = 0; i < todos.length; i += 1) s = run(s, at(H.removeTodo(`td-${i}`), t(10000 + i)));
+  s = run(s, at(H.removeTodo("td-0"), t(20000))); // already gone: no second tombstone
   assert.equal(s.sync.gone.todos.length, TOMBSTONE_CAP);
-  assert.equal(s.sync.gone.todos[0].id, "td-20", "the oldest went first");
+  assert.equal(s.sync.gone.todos[0].id, "old-20", "the oldest went first");
+  assert.equal(s.sync.gone.todos.at(-1).id, "td-19");
   assert.equal(new Set(s.sync.gone.todos.map((x) => x.id)).size, TOMBSTONE_CAP);
+});
+
+test("\"Clear done\" on a long to-do list: after the sync none of them comes back", () => {
+  const serverNow = Date.parse(NOW) + 60e3;
+  const syncWith = (stored, home, pal) => {
+    const req = dayMerge.normalizeRequest(JSON.parse(JSON.stringify(buildSyncBody(home, pal))), serverNow);
+    const sections = dayMerge.mergeSections(stored, req.sections);
+    return { sections, answer: JSON.parse(JSON.stringify(dayMerge.dayBody({ gen: 1, rev: 1, sections }, [], serverNow, false))) };
+  };
+  const todos = Array.from({ length: 900 }, (_, i) => ({ id: `td-${i}`, title: `Done thing ${i}`, done: true, createdAt: t(i), updatedAt: t(i) }));
+  // 2400 older deletions are already kept: with the old cap of 500 most new ones would be dropped.
+  const older = Array.from({ length: 2400 }, (_, i) => ({ id: `old-${i}`, createdAt: EPOCH, updatedAt: EPOCH, deletedAt: t(-1e6 + i) }));
+  let s = freshHome();
+  s = { ...s, todos, sync: { ...s.sync, gen: 1, gone: { ...s.sync.gone, todos: older } } };
+  const first = syncWith(dayMerge.emptySections(), s, freshPal());
+  s = run(s, at(H.adoptDay(first.answer), t(61e3)));
+  assert.equal(s.todos.length, 900, "the server has them all");
+  s = run(s, at(H.clearDoneTodos(), t(62e3)));
+  assert.equal(s.todos.length, 0);
+  const second = syncWith(first.sections, s, freshPal());
+  s = run(s, at(H.adoptDay(second.answer), t(63e3)));
+  assert.deepEqual(s.todos, [], "no cleared to-do came back from the server's copy");
+  assert.equal(second.answer.todos.filter((x) => !x.deletedAt).length, 0);
 });
 
 test("Undo of a deleted task / anchor / to-do: an edit after the deletion, with everything it had", () => {
@@ -536,6 +573,25 @@ test("adopt with erased: the answer replaces everything, no exception", () => {
   assert.equal(s.sync.gen, 4);
 });
 
+test("adopt with erased: Home's current state and level are cleared too, unless a newer check-in came with it", () => {
+  const s = run(freshHome(), H.recordCheckin({ state: "red", level: 0.9, at: "2026-11-19T10:00:00.000Z" }));
+  assert.deepEqual([s.nervousState, s.nervousLevel], ["red", 0.9]);
+  const erased = { v: 1, gen: 4, rev: 9, serverTime: NOW, erased: true, anchors: [], tasks: [], todos: [], dump: [], checkins: [] };
+  const cleared = run(s, at(H.adoptDay(erased)));
+  assert.deepEqual([cleared.nervousState, cleared.nervousLevel], [undefined, undefined], "the erased day has no check-in to show");
+  assert.equal(buildSnapshot({ home: cleared, look: {}, palette: {}, now: new Date(NOW) }).state, null, "the widget shows no check-in either");
+  // An answer without a check-in list still erases them (the web app does the same).
+  const { checkins, ...noList } = erased;
+  void checkins;
+  assert.deepEqual(run(s, at(H.adoptDay(noList))).checkins, []);
+  // A check-in made elsewhere after the erase, newer than ours: Home follows it.
+  const followed = run(s, at(H.adoptDay({ ...erased, checkins: [{ at: "2026-11-19T11:00:00.000Z", state: "green", level: 0.2 }] })));
+  assert.deepEqual([followed.nervousState, followed.nervousLevel], ["green", 0.2]);
+  // Not erased, nothing newer: Home keeps its state, as before.
+  const kept = run(s, at(H.adoptDay({ ...erased, erased: false, checkins: [{ at: "2026-11-19T10:00:00.000Z", state: "red", level: 0.9 }] })));
+  assert.deepEqual([kept.nervousState, kept.nervousLevel], ["red", 0.9]);
+});
+
 test("adopt: check-ins replaced (newest 200); Home follows a newer one, not an older one", () => {
   let s = run(freshHome(), H.recordCheckin({ state: "green", level: 0.1, at: "2026-11-19T10:00:00.000Z" }));
   const list = [];
@@ -607,6 +663,98 @@ test("adopt: broken items are skipped, unsafe keys dropped, a wrong v is ignored
   assert.equal(ignored, s);
 });
 
+// ---- text limits (§8 "Text limits") ------------------------------------------------
+
+// The server's own merge (neuropal-backend), read only.
+const dayMerge = createRequire(import.meta.url)("../../neuropal-backend/src/services/dayMerge.js");
+
+// A long thought from the brain dump (186 characters).
+const THOUGHT =
+  "Email Milena about the SPAD array calibration: ask whether the new beam splitter arrived, whether Friday's coincidence run can move to Monday, and who keeps the lab key over the weekend.";
+const words = (n) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
+
+const newStore = () =>
+  configureStore({ reducer: { home: homeReducer, pal: palReducer }, middleware: (g) => g({ serializableCheck: false, immutableCheck: false }) });
+
+test("the phone cleans text exactly like the server (limits in UTF-16 units, never half an emoji)", () => {
+  assert.deepEqual(TEXT_MAX, { taskTitle: 120, taskSubtitle: 120, todoTitle: 200, anchorTitle: 120, anchorSubtitle: 200, dump: 2000 });
+  const samples = ["  Email   Milena  ", "x".repeat(130), `${"y".repeat(119)}😀z`, "lone \uD800 surrogate", "tab\there\nnew line", "é".repeat(2100), `${" ".repeat(9)}q${" ".repeat(300)}`, words(80)];
+  for (const s of samples) for (const max of [120, 200, 2000]) assert.equal(cleanText(s, max), dayMerge.cleanText(s, max), `${s.slice(0, 20)}… at ${max}`);
+});
+
+test("titles, subtitles and dump lines are kept within the server's limits as they are written", () => {
+  let s = freshHome();
+  s = run(s, at(H.addTask(`  ${words(40)}  `)), at(H.addTodo(words(60))));
+  const task = s.tasks.at(-1);
+  assert.equal(task.title, cleanText(words(40), 120));
+  assert.ok(task.title.length <= 120 && words(40).startsWith(task.title));
+  assert.equal(s.todos[0].title, cleanText(words(60), 200));
+  assert.ok(s.todos[0].title.length <= 200 && s.todos[0].title.length > 120, "a to-do keeps more than a task");
+  s = run(s, at(H.renameTask({ id: task.id, title: `Read   ${words(50)}` }), t(1000)));
+  assert.equal(byId(s.tasks, task.id).title, cleanText(`Read ${words(50)}`, 120));
+  // the emoji at the limit is dropped whole, never cut in half
+  s = run(s, at(H.addTask(`${"y".repeat(119)}😀 and more`), t(2000)));
+  assert.equal(s.tasks.at(-1).title, "y".repeat(119));
+  s = run(s, at(H.addAnchor({ title: words(40), subtitle: words(60), hour: 9, minute: 0 }), t(3000)));
+  const anchor = s.anchors.find((a) => a.title.startsWith("word0"));
+  assert.deepEqual([anchor.title, anchor.subtitle], [cleanText(words(40), 120), cleanText(words(60), 200)]);
+  s = run(s, at(H.updateAnchor({ id: anchor.id, title: `New ${words(40)}`, subtitle: `New ${words(60)}` }), t(4000)));
+  const edited = byId(s.anchors, anchor.id);
+  assert.deepEqual([edited.title, edited.subtitle], [cleanText(`New ${words(40)}`, 120), cleanText(`New ${words(60)}`, 200)]);
+  assert.equal(edited.updatedAt, t(4000));
+  // an empty name never replaces the anchor's name (the server would drop the anchor)
+  assert.equal(byId(run(s, at(H.updateAnchor({ id: anchor.id, title: "   " }), t(5000))).anchors, anchor.id).title, edited.title);
+  const p = palReducer(freshPal(), P.addDump(words(400)));
+  assert.equal(p.dump[0].text, cleanText(words(400), 2000));
+});
+
+test("what the phone keeps is what the server keeps: the first sync cuts nothing", () => {
+  let s = freshHome();
+  s = run(s, at(H.addTask(THOUGHT)), at(H.addTodo(words(60))), at(H.addAnchor({ title: words(40), subtitle: words(60), hour: 9, minute: 0 })));
+  let p = palReducer(freshPal(), P.addDump(words(400)));
+  const mine = (home, pal) => [home.tasks.at(-1).title, home.todos.at(-1).title, home.anchors.find((a) => a.title.startsWith("word0")).subtitle, pal.dump[0].text];
+  const before = mine(s, p);
+  const serverNow = Date.parse(NOW) + 1000;
+  const req = dayMerge.normalizeRequest(JSON.parse(JSON.stringify(buildSyncBody(s, p))), serverNow);
+  const sections = dayMerge.mergeSections(dayMerge.emptySections(), req.sections);
+  const answer = JSON.parse(JSON.stringify(dayMerge.dayBody({ gen: 1, rev: 1, sections }, req.checkins || [], serverNow, false)));
+  s = run(s, at(H.adoptDay(answer), t(2000)));
+  p = palReducer(p, at(H.adoptDay(answer), t(2000)));
+  assert.deepEqual(mine(s, p), before, "the server kept every character the phone had");
+  assert.equal(before[0].length, 120, "the task title was cut on the phone, as it was typed, not by the sync");
+});
+
+test("brain dump → minimum day / to-do: a line that fits moves; a longer one stays whole in the dump", () => {
+  const store = newStore();
+  store.dispatch(P.addDump("Order the SPAD cable"));
+  store.dispatch(P.addDump(THOUGHT));
+  const [long, short] = store.getState().pal.dump;
+  // 186 characters don't fit a task title (120): the task gets the start, the line stays.
+  assert.equal(store.dispatch(P.moveDumpLine(long, "day")), true, "kept: the sheet says the full note stays");
+  const task = store.getState().home.tasks.at(-1);
+  assert.equal(task.title, "Email Milena about the SPAD array calibration: ask whether the new beam splitter arrived, whether Friday's coincidence…");
+  assert.ok(task.title.length <= 120, "whole words and an ellipsis, within a task title");
+  assert.equal(store.getState().pal.dump.find((d) => d.id === long.id)?.text, THOUGHT, "the whole line is still in the dump");
+  assert.deepEqual(store.getState().pal.dumpGone, []);
+  // A to-do takes 200: the same line fits there, so it moves.
+  assert.equal(store.dispatch(P.moveDumpLine(long, "todo")), false);
+  assert.equal(store.getState().home.todos.at(-1).title, THOUGHT);
+  assert.equal(store.getState().pal.dump.some((d) => d.id === long.id), false);
+  // A short line moves to the minimum day as before; a line too long for a to-do stays too.
+  assert.equal(store.dispatch(P.moveDumpLine(short, "day")), false);
+  assert.equal(store.getState().home.tasks.at(-1).title, "Order the SPAD cable");
+  store.dispatch(P.addDump(words(60)));
+  const longer = store.getState().pal.dump[0];
+  assert.equal(store.dispatch(P.moveDumpLine(longer, "todo")), true);
+  const todo = store.getState().home.todos.at(-1).title;
+  assert.ok(todo.endsWith("…") && todo.length <= 200 && words(60).startsWith(todo.slice(0, -1)), todo);
+  assert.ok(/ word\d+…$/.test(todo), "cut after a whole word");
+  assert.ok(store.getState().pal.dump.some((d) => d.id === longer.id));
+  // Nothing of the long thought is lost anywhere: the dump has it whole.
+  const everywhere = JSON.stringify(store.getState());
+  assert.ok(everywhere.includes(THOUGHT));
+});
+
 // ---- whose day it is ------------------------------------------------------------
 
 test("whose day: join, keep, reset", () => {
@@ -675,8 +823,268 @@ test("the status line under the switch", () => {
   assert.equal(describeDaySync({ enabled: true, phase: "syncing", lastSyncAt: null, now }), "Syncing with your server…");
   assert.match(describeDaySync({ enabled: true, phase: "offline", lastSyncAt, now }), /^Can't sync right now/);
   assert.match(describeDaySync({ enabled: true, phase: "ok", lastSyncAt: new Date(2026, 10, 18, 9, 0).toISOString(), now }), /on 18 Nov at 09:00/);
-  for (const phase of ["demo", "unconfigured", "unavailable", "signed-out", "waiting", "offline", "syncing", "ok", "idle"]) {
+  // After a 401 the line never says "Synced …": signing in again is what resumes it.
+  assert.equal(describeDaySync({ enabled: true, phase: "ended", lastSyncAt, now }), "Your session ended. Sign in again and your day syncs again. Until then it's safe on this phone.");
+  assert.match(describeDaySync({ enabled: true, phase: "stopped", lastSyncAt, now }), /^Sync stopped: your server refused the day\. It tries again the next time the app starts\./);
+  for (const phase of ["demo", "unconfigured", "unavailable", "stopped", "ended", "signed-out", "waiting", "offline", "syncing", "ok", "idle"]) {
     const line = describeDaySync({ enabled: true, phase, lastSyncAt: null, now });
     assert.ok(line && !line.includes("!"), phase);
+  }
+});
+
+// ---- the sync loop and the API layer -----------------------------------------------
+// services/daySync.js and services/network.js with the real slices, the real
+// session code (store/ApiLink.js) and real axios. Stand-ins: React Native
+// (AppState, Platform), the phone's storage (SecureStore, AsyncStorage), the
+// health probe (fetch), the server (an axios adapter) and the clock (fake
+// timers).
+
+const SRC = new URL("../src/", import.meta.url).href;
+const RN_STUB = `data:text/javascript,${encodeURIComponent(`
+const listeners = new Set();
+export const AppState = {
+  currentState: "active",
+  addEventListener(type, fn) { listeners.add(fn); return { remove() { listeners.delete(fn); } }; },
+  emit(next) { AppState.currentState = next; for (const fn of [...listeners]) fn(next); },
+};
+export const Platform = { OS: "android", select: (o) => (o && "android" in o ? o.android : o && o.default) };
+`)}`;
+// Metro finds "./network" without its extension; Node needs it.
+register(
+  `data:text/javascript,${encodeURIComponent(`
+const SRC = ${JSON.stringify(SRC)};
+const RN = ${JSON.stringify(RN_STUB)};
+export async function resolve(specifier, context, next) {
+  if (specifier === "react-native") return { url: RN, shortCircuit: true };
+  if (context.parentURL?.startsWith(SRC) && /^\\.\\.?\\//.test(specifier) && !/\\.[a-z]+$/.test(specifier)) return next(specifier + ".js", context);
+  return next(specifier, context);
+}`)}`
+);
+
+const secure = new Map();
+const kv = new Map();
+globalThis.require = (id) => {
+  if (id === "expo-secure-store") {
+    return { getItemAsync: async (k) => secure.get(k) ?? null, setItemAsync: async (k, v) => void secure.set(k, String(v)), deleteItemAsync: async (k) => void secure.delete(k) };
+  }
+  if (id === "@react-native-async-storage/async-storage") {
+    return { default: { getItem: async (k) => kv.get(k) ?? null, setItem: async (k, v) => void kv.set(k, String(v)), removeItem: async (k) => void kv.delete(k) } };
+  }
+  throw new Error(`no stand-in for ${id}`);
+};
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => (String(url).endsWith("/healthz") ? { ok: true, status: 200 } : realFetch(url, init));
+process.env.EXPO_PUBLIC_API_BASE_URL = "http://np.test";
+
+const link = await import("../src/store/ApiLink.js");
+const net = await import("../src/services/network.js");
+const RN = await import(RN_STUB);
+const A = await import("../src/store/slices/authSlice.js");
+const { AxiosError } = (await import("axios")).default;
+
+const settle = async (turns = 8) => {
+  for (let i = 0; i < turns; i += 1) await new Promise((r) => setImmediate(r));
+};
+async function until(cond, turns = 80) {
+  for (let i = 0; i < turns && !cond(); i += 1) await settle(1);
+  return cond();
+}
+await link.apiReady;
+await settle(); // the first health probe answers before the clock is faked
+
+// The server: every request is recorded; `srv.handler` answers { status, data }.
+// `dropAuth` makes the request look as if it left without its token.
+const srv = { requests: [], handler: async () => ({ status: 500, data: {} }) };
+net.apiClient.defaults.adapter = async (config) => {
+  const h = config.headers;
+  const auth = (h && (typeof h.get === "function" ? h.get("Authorization") : h.Authorization)) || null;
+  const req = { url: config.url, auth, body: typeof config.data === "string" && config.data ? JSON.parse(config.data) : null };
+  srv.requests.push(req);
+  const { status, data, dropAuth } = await srv.handler(req);
+  if (dropAuth) config.headers.delete("Authorization");
+  const response = { status, statusText: String(status), data, headers: {}, config, request: {} };
+  if (status >= 200 && status < 300) return response;
+  throw new AxiosError(`Request failed with status code ${status}`, "ERR_BAD_RESPONSE", config, {}, response);
+};
+const echo = (req) => ({
+  status: 200,
+  data: { v: 1, gen: 1, rev: srv.requests.length, serverTime: NOW, erased: false, anchors: req.body.anchors, tasks: req.body.tasks, todos: req.body.todos, dump: req.body.dump, checkins: req.body.checkins },
+});
+const refuse = (status, extra = {}) => async () => ({ status, data: { error: "Refused" }, ...extra });
+
+function deferred() {
+  let resolve;
+  const p = new Promise((r) => (resolve = r));
+  return { p, resolve };
+}
+
+function signedInStore(userId = "user-a") {
+  const store = configureStore({
+    reducer: { home: homeReducer, pal: palReducer, auth: A.default },
+    middleware: (g) => g({ serializableCheck: false, immutableCheck: false }),
+  });
+  store.dispatch(A.hydrateUser({ id: userId }));
+  return store;
+}
+
+// A fresh copy of the loop each time (it keeps "until the next start" state),
+// on fake timers.
+let loops = 0;
+async function withLoop(fn) {
+  mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const stops = [];
+  try {
+    const loop = await import(new URL(`../src/services/daySync.js?run=${(loops += 1)}`, import.meta.url).href);
+    srv.requests.length = 0;
+    await fn({ status: () => loop.getDaySyncStatus().phase, start: (store) => stops.push(loop.startDaySync(store)) });
+  } finally {
+    stops.forEach((stop) => stop());
+    mock.timers.reset();
+  }
+}
+
+// Seconds (from now) at which a request went out, over `seconds` of fake time.
+async function requestTimes(seconds) {
+  const times = [];
+  for (let s = 1; s <= seconds; s += 1) {
+    const n = srv.requests.length;
+    mock.timers.tick(1000);
+    await settle(2);
+    if (srv.requests.length > n) times.push(s);
+  }
+  return times;
+}
+
+test("a 401 from day sync never signs anyone out; the next ordinary request still does", async () => {
+  await link.saveSessionToken("tok-1");
+  const signOuts = [];
+  const off = link.onUnauthorized(() => signOuts.push("signed out"));
+  try {
+    srv.handler = refuse(401);
+    const err = await net.syncDayApi({ v: 1 }).catch((e) => e);
+    assert.equal(err?.response?.status, 401);
+    await settle();
+    assert.deepEqual(signOuts, [], "a background sync never interrupts");
+    assert.equal(await err.isCurrentSession(), true, "the 401 answered the session held now");
+    await net.fetchAnnotationsApi("doc-1").catch(() => {});
+    await settle();
+    assert.deepEqual(signOuts, ["signed out"], "an ordinary request ends the session, as before");
+  } finally {
+    off();
+  }
+});
+
+test("day sync: a 401 for the session held now stops it and says so, signs nobody out; a new session lets it go on", () =>
+  withLoop(async ({ start, status }) => {
+    await link.saveSessionToken("tok-1");
+    const signOuts = [];
+    const off = link.onUnauthorized(() => signOuts.push("signed out"));
+    try {
+      const store = signedInStore();
+      srv.handler = async (req) => (req.auth === "Bearer tok-2" ? echo(req) : { status: 401, data: { error: "Sign in again" } });
+      start(store);
+      assert.ok(await until(() => status() === "ended"), `phase: ${status()}`);
+      // Changes, the foreground, ten minutes: nothing more goes out with the ended session.
+      store.dispatch(H.addTask("Read one page"));
+      mock.timers.tick(3000);
+      await settle(20);
+      RN.AppState.emit("background");
+      RN.AppState.emit("active");
+      await settle(20);
+      mock.timers.tick(10 * 60 * 1000);
+      await settle(20);
+      assert.equal(srv.requests.length, 1);
+      assert.equal(status(), "ended");
+      assert.deepEqual(signOuts, [], "nobody was signed out by a background sync");
+      assert.equal(store.getState().auth.loggedIn, true);
+      // A new session is stored (a new password): the store doesn't change, yet the next change syncs.
+      await link.saveSessionToken("tok-2");
+      store.dispatch(H.addTask("Read two pages"));
+      mock.timers.tick(3000);
+      assert.ok(await until(() => status() === "ok"), `phase: ${status()}`);
+      assert.equal(srv.requests.at(-1).auth, "Bearer tok-2");
+      assert.ok(srv.requests.at(-1).body.tasks.some((x) => x.title === "Read two pages"));
+    } finally {
+      off();
+    }
+  }));
+
+test("day sync: a late 401 for a token replaced meanwhile (a new password) stops nothing", () =>
+  withLoop(async ({ start, status }) => {
+    await link.saveSessionToken("tok-old");
+    const store = signedInStore();
+    const first = deferred();
+    srv.handler = (req) => (srv.requests.length === 1 ? first.p : echo(req));
+    start(store);
+    assert.ok(await until(() => srv.requests.length === 1));
+    assert.equal(srv.requests[0].auth, "Bearer tok-old");
+    await link.saveSessionToken("tok-new"); // same account: nothing changes in the store
+    first.resolve({ status: 401, data: { error: "Sign in again" } });
+    await settle(20);
+    assert.notEqual(status(), "ended");
+    store.dispatch(H.addTask("Read one page"));
+    mock.timers.tick(3000);
+    assert.ok(await until(() => status() === "ok"), `phase: ${status()}`);
+    assert.equal(srv.requests.at(-1).auth, "Bearer tok-new");
+    assert.ok(srv.requests.at(-1).body.tasks.some((x) => x.title === "Read one page"));
+  }));
+
+test("day sync: signed out and in again while a request was out: its late 401 stops nothing", () =>
+  withLoop(async ({ start, status }) => {
+    await link.saveSessionToken("tok-a1");
+    const store = signedInStore("user-a");
+    const first = deferred();
+    srv.handler = (req) => (srv.requests.length === 1 ? first.p : echo(req));
+    start(store);
+    assert.ok(await until(() => srv.requests.length === 1));
+    await link.clearSession();
+    store.dispatch(A.resetAuth());
+    await link.saveSessionToken("tok-a2");
+    store.dispatch(A.hydrateUser({ id: "user-a" }));
+    first.resolve({ status: 401, data: { error: "Sign in again" } });
+    await settle(20);
+    store.dispatch(H.addTask("Read one page"));
+    mock.timers.tick(3000);
+    assert.ok(await until(() => status() === "ok"), `phase: ${status()}`);
+    assert.equal(srv.requests.at(-1).auth, "Bearer tok-a2");
+  }));
+
+test("day sync: a 401 that keeps answering another session is retried on the ladder, never in a loop", () =>
+  withLoop(async ({ start }) => {
+    await link.saveSessionToken("tok-1");
+    srv.handler = refuse(401, { dropAuth: true });
+    start(signedInStore());
+    assert.ok(await until(() => srv.requests.length === 1));
+    assert.deepEqual(await requestTimes(6 * 60), [5, 35, 335]);
+  }));
+
+test("day sync: another 4xx stops until the next start and the line says so; 408 and 429 are retried like a 5xx", async () => {
+  await link.saveSessionToken("tok-1");
+  for (const code of [413, 422, 400]) {
+    await withLoop(async ({ start, status }) => {
+      const store = signedInStore();
+      srv.handler = refuse(code);
+      start(store);
+      assert.ok(await until(() => status() === "stopped"), `${code}: phase ${status()}`);
+      store.dispatch(H.addTask("x"));
+      for (let s = 0; s < 20 * 60; s += 10) {
+        mock.timers.tick(10_000);
+        await settle(2);
+      }
+      RN.AppState.emit("background");
+      RN.AppState.emit("active");
+      await settle(10);
+      assert.equal(srv.requests.length, 1, `${code}: one request in 20 minutes`);
+      assert.equal(status(), "stopped");
+    });
+  }
+  for (const code of [408, 429]) {
+    await withLoop(async ({ start, status }) => {
+      srv.handler = refuse(code);
+      start(signedInStore());
+      assert.ok(await until(() => srv.requests.length === 1));
+      assert.deepEqual(await requestTimes(6 * 60), [5, 35, 335], `${code}: retried after 5 s, 30 s, then 5 minutes`);
+      assert.equal(status(), "offline");
+    });
   }
 });

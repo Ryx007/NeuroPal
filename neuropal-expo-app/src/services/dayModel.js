@@ -12,12 +12,60 @@
 import { createMockTasks, mockAnchors } from "../data/mockData.js";
 
 export const EPOCH = "1970-01-01T00:00:00.000Z";
+// A starter deleted before tombstones existed (contract §8 "Old saves"): one
+// millisecond after the starter's stamps beats every untouched copy of it but
+// never a real edit, whichever device migrated first.
+export const STARTER_GONE = "1970-01-01T00:00:00.001Z";
 export const SECTIONS = ["anchors", "tasks", "todos"];
 export const CHECKIN_CAP = 200;
 export const CHECKIN_MERGE_MS = 60 * 1000;
-export const TOMBSTONE_CAP = 500; // per section, like the server
+// Per section, like the server: a device that keeps fewer than it can delete
+// between two syncs ("Clear done" on a long list) brings the rest back.
+export const TOMBSTONE_CAP = 3000;
 export const DUMP_CAP = 1000;
 export const ID_RE = /^[A-Za-z0-9._:-]{1,64}$/;
+
+// The server's text limits (§4, §8 "Text limits"). Text is kept within them
+// here, so the first sync never cuts anything silently.
+export const TEXT_MAX = Object.freeze({
+  taskTitle: 120,
+  taskSubtitle: 120,
+  todoTitle: 200,
+  anchorTitle: 120,
+  anchorSubtitle: 200,
+  dump: 2000,
+});
+
+// A lone surrogate can't be stored as UTF-8: the server replaces it, so we do too.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+// The server's text rule (§4): trim, inner whitespace to one space, cut to the
+// limit in UTF-16 units without splitting a surrogate pair. Cleaning a cleaned
+// text changes nothing, so what the server keeps is exactly what we have.
+export function cleanText(value, max) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  let s = String(value).replace(LONE_SURROGATE, "�").replace(/\s+/g, " ").trim();
+  if (s.length > max) {
+    s = s.slice(0, max);
+    const last = s.charCodeAt(s.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) s = s.slice(0, -1);
+    s = s.trimEnd();
+  }
+  return s;
+}
+
+// A longer text as a title of at most `max`: whole words, ending in "…", so
+// it reads as the start of something longer (the brain dump keeps the whole
+// line when one is moved). A text that fits comes back cleaned, uncut.
+export function shortTitle(value, max) {
+  const full = cleanText(value, Infinity);
+  if (full.length <= max) return full;
+  let s = cleanText(full, max - 1);
+  // Inside a word: back to the space before it (unless that loses too much).
+  const space = s.lastIndexOf(" ");
+  if (full[s.length] !== " " && space >= max * 0.6) s = s.slice(0, space);
+  return `${s.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CHECKIN_STATES = new Set(["green", "yellow", "red"]);
@@ -298,7 +346,7 @@ export function migrateHome(saved, base, { now, today }) {
       if (!Array.isArray(p[section])) continue;
       const have = new Set(next[section].map((it) => it.id));
       for (const s of starters) {
-        if (!have.has(s.id)) next.sync.gone[section] = withTombstone(next.sync.gone[section], tombstone(s.id, EPOCH, EPOCH, now));
+        if (!have.has(s.id)) next.sync.gone[section] = withTombstone(next.sync.gone[section], tombstone(s.id, EPOCH, EPOCH, STARTER_GONE));
       }
     }
   }
@@ -334,7 +382,14 @@ export function tombstoneFor(item, now) {
 }
 
 export function withTombstone(list, tomb) {
-  return capTombs([...(Array.isArray(list) ? list : []).filter((t) => t.id !== tomb.id), tomb]);
+  return withTombstones(list, [tomb]);
+}
+
+// Many at once, in one pass: "Clear done" on a long list must stay quick even
+// with thousands of tombstones kept.
+export function withTombstones(list, tombs) {
+  const ids = new Set(tombs.map((t) => t.id));
+  return capTombs([...(Array.isArray(list) ? list : []).filter((t) => !ids.has(t.id)), ...tombs]);
 }
 
 // For a new task or to-do: now, but never before the list's last createdAt,
@@ -506,16 +561,20 @@ export function newestCheckinMs(list) {
 
 // The home half of an answer (the dump half is adoptDump). Returns only what
 // the answer has; `follow` is the check-in Home's state and slider follow
-// when it is newer than every check-in this device had.
+// when it is newer than every check-in this device had. `clearState`: the day
+// was erased everywhere and nothing newer came with it, so Home's current
+// state and level go too (§8, as in the web app).
 export function adoptHome(home, body, { today }) {
   const erased = body.erased === true;
   const sync = isObj(home.sync) ? home.sync : defaultSyncMeta();
-  const out = { sections: {}, checkins: null, follow: null, gen: sync.gen };
+  const out = { sections: {}, checkins: null, follow: null, clearState: false, gen: sync.gen };
   for (const section of SECTIONS) {
     const r = adoptList(home[section], sync.gone && sync.gone[section], body[section], section, erased);
     if (r) out.sections[section] = r;
   }
-  const checkins = adoptCheckins(body.checkins);
+  // After an erase the answer replaces everything, check-ins included, even
+  // when it has no list for them.
+  const checkins = adoptCheckins(erased && !Array.isArray(body.checkins) ? [] : body.checkins);
   if (checkins) {
     out.checkins = checkins;
     const newest = checkins[checkins.length - 1];
@@ -523,6 +582,7 @@ export function adoptHome(home, body, { today }) {
       out.follow = { state: newest.state, level: newest.level };
     }
   }
+  out.clearState = erased && !out.follow;
   if (Number.isInteger(body.gen) && body.gen > 0) out.gen = body.gen;
   // Derive done / status for the adopted items before anyone reads them.
   const view = { tasks: out.sections.tasks ? out.sections.tasks.live : [], anchors: out.sections.anchors ? out.sections.anchors.live : [] };
@@ -571,6 +631,10 @@ export function describeDaySync({ enabled, phase, lastSyncAt, now = new Date() }
       return "No server is set up, so your day stays on this phone.";
     case "unavailable":
       return "Your server can't keep the day yet, so it stays on this phone.";
+    case "stopped":
+      return "Sync stopped: your server refused the day. It tries again the next time the app starts. Your day is safe on this phone.";
+    case "ended":
+      return "Your session ended. Sign in again and your day syncs again. Until then it's safe on this phone.";
     case "signed-out":
       return "Your day syncs once you're signed in.";
     case "waiting":

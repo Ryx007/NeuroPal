@@ -1,8 +1,9 @@
 "use client";
 // "Brain dump": get it out of your head. Sort it later, or never. Anything can
-// move to today's minimum day; Delete has Undo. Stored on this device.
+// move to today's minimum day (a line longer than a task title takes stays
+// here too, whole); Delete has Undo. Stored on this device.
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { addDump, addTask, removeDump, restoreDump, type DumpItem } from "@/lib/neuropal/day";
+import { addDump, moveDumpToDay, removeDump, restoreDump, type DumpItem } from "@/lib/neuropal/day";
 import { palSay, type PalLook } from "@/lib/neuropal/look";
 import { ListCheckIcon, PlusIcon, TrashIcon, UndoIcon } from "../common/icons";
 import styles from "./pal.module.css";
@@ -31,9 +32,10 @@ export function DumpPanel({ pal, items }: { pal: PalLook; items: DumpItem[] }) {
   };
 
   const toDay = (d: DumpItem) => {
-    addTask(d.text);
-    removeDump(d.id);
-    setStatus({ text: `Added “${d.text}” to your minimum day.` });
+    const moved = moveDumpToDay(d);
+    if (!moved) return;
+    const added = `Added “${moved.title}” to your minimum day.`;
+    setStatus({ text: moved.kept ? `${added} The full note stays in your brain dump.` : added });
     focusAfter.current = "input";
   };
 

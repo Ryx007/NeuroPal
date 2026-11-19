@@ -12,6 +12,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Toast from "../toast";
 
 import { getCurrentCoords } from "../../services/locationAnchors";
+import { TEXT_MAX } from "../../store/slices/homeSlice";
 import { usePalette } from "../../theme/ThemeProvider";
 import { withAlpha } from "../primitives";
 
@@ -165,6 +166,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           <TextInput
             value={title}
             onChangeText={setTitle}
+            maxLength={TEXT_MAX.anchorTitle}
             placeholder="What? (e.g. Evening meds)"
             placeholderTextColor={palette.onSurfaceVariant}
             accessibilityLabel="Anchor title"
@@ -182,6 +184,7 @@ export function AnchorEditor({ visible, anchor, onSave, onDelete, onClose }) {
           <TextInput
             value={subtitle}
             onChangeText={setSubtitle}
+            maxLength={TEXT_MAX.anchorSubtitle}
             placeholder="Details (optional)"
             placeholderTextColor={palette.onSurfaceVariant}
             accessibilityLabel="Anchor details"

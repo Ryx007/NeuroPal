@@ -37,6 +37,7 @@ const at = (iso, today = iso.slice(0, 10)) => {
 };
 const plus = (c, ms, today = c.today) => at(new Date(c.ms + ms).toISOString(), today);
 const EPOCH = "1970-01-01T00:00:00.000Z";
+const STARTER_GONE = "1970-01-01T00:00:00.001Z";
 const ISO_MS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const ids = (list) => list.map((x) => x.id);
@@ -94,7 +95,12 @@ await test("an old save: untouched starters get 1970, the rest now (a millisecon
   ]);
   assert.deepEqual([day.state, day.level], ["yellow", 0.52]);
   assert.deepEqual(day.dump, [{ id: "d-1", text: "Is the SPAD driver updated?", at: "2026-11-19T07:00:00.000Z" }]);
-  assert.deepEqual(day.sync, { ...m.emptySync(true), gone: { anchors: [], dump: [], tasks: [{ id: "mvd-3", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: c.now }] } }, "on by default, never synced; the starter it lacks was deleted");
+  assert.deepEqual(
+    day.sync,
+    { ...m.emptySync(true), gone: { anchors: [], dump: [], tasks: [{ id: "mvd-3", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: STARTER_GONE }] } },
+    "on by default, never synced, nobody's yet; the starter it lacks was deleted (1970 + 1 ms: beats an untouched starter, never a real edit)",
+  );
+  assert.deepEqual(m.readSave(clone(OLD), at("2026-12-01T09:00:00.000Z")).day.sync.gone.tasks, day.sync.gone.tasks, "the same stamp whenever the browser migrated");
   const view = m.dayView(day);
   assert.deepEqual(view.tasks.map((t) => t.done), [true, false, true, false]);
   assert.equal(view.anchors[0].status, "done");
@@ -209,16 +215,20 @@ await test("a deletion always holds: deletedAt is never before updatedAt, even f
 
 // ---- tombstones and Undo --------------------------------------------------------------------
 
-await test("tombstones are kept apart (never shown), sent, and capped at the newest 500", () => {
+await test("tombstones are kept apart (never shown), sent, and capped at the newest 3000, like the server", () => {
+  assert.equal(m.TOMBSTONE_CAP, 3000);
   const c = at("2026-11-19T10:00:00.000Z");
-  let d = m.newDay(c);
-  for (let i = 0; i < 510; i += 1) d = m.addTask(d, `t-${i}`, `Task ${i}`, "", plus(c, i));
-  for (let i = 0; i < 510; i += 1) d = m.removeTask(d, `t-${i}`, plus(c, 1000 + i)).day;
-  assert.equal(d.sync.gone.tasks.length, 500);
-  assert.ok(!d.sync.gone.tasks.some((t) => t.id === "t-0" || t.id === "t-9"), "the oldest go first");
+  const kept = Array.from({ length: 3000 }, (_, i) => ({ id: `old-${i}`, createdAt: EPOCH, updatedAt: EPOCH, deletedAt: plus(c, -1e6 + i).now }));
+  let d = { ...m.newDay(c), sync: { ...m.emptySync(), gone: { anchors: [], tasks: kept, dump: [] } } };
+  for (let i = 0; i < 10; i += 1) d = m.addTask(d, `t-${i}`, `Task ${i}`, "", plus(c, i));
+  for (let i = 0; i < 10; i += 1) d = m.removeTask(d, `t-${i}`, plus(c, 1000 + i)).day;
+  assert.equal(d.sync.gone.tasks.length, 3000);
+  assert.ok(!d.sync.gone.tasks.some((t) => t.id === "old-0" || t.id === "old-9"), "the oldest go first");
+  assert.ok(d.sync.gone.tasks.some((t) => t.id === "old-10") && d.sync.gone.tasks.some((t) => t.id === "t-9"));
   assert.deepEqual(ids(m.dayView(d).tasks), ["mvd-1", "mvd-2", "mvd-3"]);
   const req = m.buildRequest(d);
-  assert.equal(req.tasks.filter((t) => t.deletedAt).length, 500);
+  assert.equal(req.tasks.filter((t) => t.deletedAt).length, 3000);
+  assert.equal(m.readSave(clone(d), c).day.sync.gone.tasks.length, 3000, "all of them read back from storage");
 });
 
 await test("Undo: a task comes back as it was (an edit), tick included; the dump writes the text again under a new id", () => {
@@ -303,7 +313,7 @@ await test("the request: the sections the web app knows (never todos), tombstone
   assert.ok(!("flexMinutes" in expo) && !("category" in expo), "optional fields it came without stay out (never null)");
   assert.deepEqual(req.anchors.find((a) => a.id === "a-1"), { id: "a-1", createdAt: "2026-11-19T10:00:00.003Z", updatedAt: "2026-11-19T10:00:00.003Z", deletedAt: plus(c, 1000).now });
   assert.deepEqual(req.dump, [{ id: "d-1", deletedAt: plus(c, 2000).now }]);
-  assert.deepEqual(req.tasks.filter((t) => t.deletedAt), [{ id: "mvd-3", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: c.now }], "the starter deleted before sync goes as a tombstone");
+  assert.deepEqual(req.tasks.filter((t) => t.deletedAt), [{ id: "mvd-3", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: STARTER_GONE }], "the starter deleted before sync goes as a tombstone");
   for (const t of req.tasks.filter((x) => x.deletedAt === null)) {
     assert.ok(!("done" in t) && !("status" in t));
     for (const k of ["createdAt", "updatedAt"]) assert.match(t[k], ISO_MS);
@@ -535,6 +545,53 @@ await test("an erase elsewhere: the stale browser's day is replaced; switched of
   assert.equal(back.sync.gen, 3);
 });
 
+// ---- the brain dump → minimum day (§8 "Text limits") -------------------------------------------
+
+await test("brain dump → minimum day: a line that fits moves; a longer one stays whole in the dump, and the server keeps both", () => {
+  const srv = serverFor();
+  const c = at("2026-11-19T10:00:00.000Z");
+  const thought =
+    "Email Milena about the SPAD array calibration: ask whether the new beam splitter arrived, whether Friday's coincidence run can move to Monday, and who keeps the lab key over the weekend.";
+  let d = m.addDump(m.addDump(m.newDay(c), "d-short", "Order the SPAD cable", c), "d-long", thought, plus(c, 1));
+  const long = m.moveDumpToTask(d, "d-long", "t-long", plus(c, 1000));
+  assert.equal(long.kept, true, "kept: the panel says the full note stays");
+  assert.equal(long.title, "Email Milena about the SPAD array calibration: ask whether the new beam splitter arrived, whether Friday's coincidence…", "whole words and an ellipsis (the same as the phone)");
+  assert.ok(long.title.length <= m.TITLE_MAX);
+  assert.equal(long.day.tasks.at(-1).title, long.title);
+  assert.equal(m.shortTitle("x".repeat(300), 120), `${"x".repeat(119)}…`, "one long word: cut, never more than the limit");
+  assert.equal(m.shortTitle("  fits   as it is ", 120), "fits as it is");
+  assert.equal(long.day.dump.find((x) => x.id === "d-long")?.text, thought, "the whole line stays in the dump");
+  assert.deepEqual(long.day.sync.gone.dump, []);
+  const short = m.moveDumpToTask(long.day, "d-short", "t-short", plus(c, 2000));
+  assert.equal(short.kept, false);
+  assert.equal(short.day.tasks.at(-1).title, "Order the SPAD cable");
+  assert.equal(short.day.dump.some((x) => x.id === "d-short"), false, "a line that fits leaves the dump");
+  assert.deepEqual(ids(short.day.sync.gone.dump), ["d-short"]);
+  assert.equal(m.moveDumpToTask(short.day, "d-gone", "t-x", c), null, "nothing to move");
+  // Through the server's merge: nothing is cut on the way, the end of the thought is still kept.
+  d = m.adoptAnswer(short.day, srv.sync(m.buildRequest(short.day), plus(c, 3000).ms), plus(c, 3000), short.day.sync.edit).day;
+  assert.equal(srv.state.sections.tasks.find((x) => x.id === "t-long").title, long.title);
+  assert.equal(srv.state.sections.dump.find((x) => x.id === "d-long").text, thought);
+  assert.deepEqual([d.tasks.find((x) => x.id === "t-long").title, d.dump.find((x) => x.id === "d-long").text], [long.title, thought]);
+});
+
+// ---- whose day it is: the account label -----------------------------------------------------------
+
+await test("an adopted answer labels the day with its account; the label survives storage and every local change", () => {
+  const c = at("2026-11-19T10:00:00.000Z");
+  assert.equal(m.emptySync().account, null);
+  assert.equal(m.newDay(c).sync.account, null, "a new day is nobody's until its first sync");
+  let d = m.adoptAnswer(m.newDay(c), answer(), c, "", "acct-a").day;
+  assert.equal(d.sync.account, "acct-a");
+  d = m.markEdited(m.addTask(d, "t-1", "Read one page", "", plus(c, 1000)), c.today, "e-1");
+  d = m.setSyncEnabled(m.setSyncEnabled(d, false), true);
+  d = m.noteResult(d, "offline", plus(c, 2000));
+  assert.equal(d.sync.account, "acct-a");
+  assert.equal(m.readSave(clone(d), c).day.sync.account, "acct-a");
+  assert.equal(m.adoptAnswer(d, answer(), plus(c, 3000), "e-1").day.sync.account, "acct-a", "an adopt without an account keeps the label");
+  for (const bad of [42, "", null, { id: 1 }]) assert.equal(m.readSave({ ...clone(d), sync: { ...clone(d).sync, account: bad } }, c).day.sync.account, null);
+});
+
 // ---- the Settings line -----------------------------------------------------------------------
 
 await test("the line under the switch", () => {
@@ -553,6 +610,15 @@ await test("the line under the switch", () => {
   assert.match(text({ syncedAt: before, last: { at: today, result: "offline" } }), /^Can’t reach your server right now\. Your day is saved in this browser/);
   assert.match(text({ last: { at: today, result: "error" } }), /^The server didn’t take the sync this time\./);
   assert.match(text({ last: { at: today, result: "unsupported" } }), /^This server doesn’t keep the day yet/);
+  // After a 401 the line never says "Synced at …": signing in again is what resumes it.
+  assert.equal(text({ syncedAt: before, last: { at: today, result: "ended" } }), "Your session has ended. Sign in again and your day syncs again.");
+  assert.match(text({ syncedAt: before, last: { at: today, result: "stopped" } }), /^Sync stopped: your server refused the day\. It tries again the next time you open the app\./);
+  // Both are read back from storage (any tab's line shows them).
+  for (const result of ["ended", "stopped"]) {
+    const saved = { ...m.newDay(at("2026-11-19T10:00:00.000Z")), sync: { ...m.emptySync(), last: { at: "2026-11-19T10:00:00.000Z", result } } };
+    assert.equal(m.readSave(clone(saved), at("2026-11-19T10:00:00.000Z")).day.sync.last?.result, result);
+  }
+  for (const r of ["error", "ended", "stopped"]) assert.ok(!text({ last: { at: today, result: r } }).includes("!"), "no exclamation marks");
   for (const s of ["Off. Your day stays in this browser.", text({ last: { at: today, result: "error" } })]) assert.ok(!s.includes("!"), "no exclamation marks");
 });
 

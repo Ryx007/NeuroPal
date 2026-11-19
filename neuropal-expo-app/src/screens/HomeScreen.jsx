@@ -33,6 +33,7 @@ import {
   selectTasks,
 } from "../store/selectors";
 import {
+  TEXT_MAX,
   addAnchor,
   addTask,
   recordCheckin,
@@ -630,6 +631,7 @@ function MvdTile({ size, tasks, remaining, editing, onEditToggle, newTask, setNe
             value={newTask}
             onChangeText={setNewTask}
             onSubmitEditing={onAdd}
+            maxLength={TEXT_MAX.taskTitle}
             placeholder="Add a task for today…"
             placeholderTextColor={palette.onSurfaceVariant}
             accessibilityLabel="New task title"

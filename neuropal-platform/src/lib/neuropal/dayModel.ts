@@ -76,11 +76,18 @@ export interface DumpTombstone {
   deletedAt: string;
 }
 
-export type SyncResult = "ok" | "offline" | "error" | "unsupported";
+/** How the last try went. "ended": a 401 for the session held now (signing in again resumes sync); "stopped": the server refused the day (another 4xx). */
+export type SyncResult = "ok" | "offline" | "error" | "unsupported" | "ended" | "stopped";
 
 export interface SyncMeta {
   /** "Keep my day in sync" (Settings), on unless switched off. */
   enabled: boolean;
+  /**
+   * The account (owner.ts accountKey) whose answer this day last took; null
+   * until its first sync. A day labelled with another account than this
+   * browser's owner is never shown or sent (day.ts reads it as empty).
+   */
+  account: string | null;
   /** The server's generation from the last answer; 0 = never synced (§7). */
   gen: number;
   /** The server's rev from the last answer (orders two tabs' answers). */
@@ -167,10 +174,17 @@ export interface Clock {
 // ---- limits ---------------------------------------------------------------------------
 
 export const EPOCH = "1970-01-01T00:00:00.000Z";
+/**
+ * A starter deleted before tombstones existed (§8 "Old saves"): a millisecond
+ * after the starter's stamps beats every untouched copy of it but never a
+ * real edit, whichever device migrated first.
+ */
+export const STARTER_GONE = "1970-01-01T00:00:00.001Z";
 export const CHECKIN_CAP = 200;
 export const CHECKIN_MERGE_MS = 60 * 1000;
 export const DUMP_CAP = 1000;
-export const TOMBSTONE_CAP = 500;
+/** Per section, like the server: a browser that keeps fewer than it can delete between two syncs brings the rest back. */
+export const TOMBSTONE_CAP = 3000;
 export const TITLE_MAX = 120;
 export const ANCHOR_SUBTITLE_MAX = 200;
 export const TASK_SUBTITLE_MAX = 120;
@@ -291,6 +305,21 @@ export function cleanText(value: unknown, max: number): string {
   return s;
 }
 
+/**
+ * A longer text as a title of at most `max`: whole words, ending in "…", so it
+ * reads as the start of something longer (the brain dump keeps the whole line
+ * when one is moved). A text that fits comes back cleaned, uncut.
+ */
+export function shortTitle(value: unknown, max: number): string {
+  const full = cleanText(value, Infinity);
+  if (full.length <= max) return full;
+  let s = cleanText(full, max - 1);
+  // Inside a word: back to the space before it (unless that loses too much).
+  const space = s.lastIndexOf(" ");
+  if (full[s.length] !== " " && space >= max * 0.6) s = s.slice(0, space);
+  return `${s.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
+
 export function cleanLevel(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null;
 }
@@ -341,7 +370,7 @@ function newestMs(list: Checkin[]): number {
 // ---- a new day, and reading a save -----------------------------------------------------------
 
 export function emptySync(enabled = true): SyncMeta {
-  return { enabled, gen: 0, rev: 0, edit: "", syncedEdit: "", gone: { anchors: [], tasks: [], dump: [] }, syncedAt: null, last: null };
+  return { enabled, account: null, gen: 0, rev: 0, edit: "", syncedEdit: "", gone: { anchors: [], tasks: [], dump: [] }, syncedAt: null, last: null };
 }
 
 /** New installs start with the starters, stamped 1970 so every device's copy merges into one (§8). */
@@ -476,7 +505,7 @@ function readDumpTombs(list: unknown): DumpTombstone[] {
   return capGone([...byId.values()]);
 }
 
-const RESULTS = new Set(["ok", "offline", "error", "unsupported"]);
+const RESULTS = new Set(["ok", "offline", "error", "unsupported", "ended", "stopped"]);
 
 function readSync(raw: unknown): SyncMeta {
   const s = isObj(raw) ? raw : {};
@@ -486,6 +515,7 @@ function readSync(raw: unknown): SyncMeta {
     : null;
   return {
     enabled: s.enabled !== false,
+    account: typeof s.account === "string" && s.account ? s.account : null,
     gen: Number.isSafeInteger(s.gen) && (s.gen as number) > 0 ? (s.gen as number) : 0,
     rev: Number.isSafeInteger(s.rev) && (s.rev as number) >= 0 ? (s.rev as number) : 0,
     edit: typeof s.edit === "string" ? s.edit : "",
@@ -537,7 +567,7 @@ export function readSave(input: unknown, clock: Clock): SaveRead {
   // back (the deletion predates tombstones).
   if (old && Array.isArray(o.tasks)) {
     for (const s of STARTER_TASKS) {
-      if (!liveTasks.has(s.id)) sync.gone.tasks.push({ id: s.id, createdAt: EPOCH, updatedAt: EPOCH, deletedAt: clock.now });
+      if (!liveTasks.has(s.id)) sync.gone.tasks.push({ id: s.id, createdAt: EPOCH, updatedAt: EPOCH, deletedAt: STARTER_GONE });
     }
   }
   const state = typeof o.state === "string" && STATES.has(o.state) ? (o.state as NervousState) : null;
@@ -784,6 +814,22 @@ export function removeDump(day: StoredDay, id: string, clock: Clock): { day: Sto
   return { day: { ...day, dump: day.dump.filter((x) => x.id !== id), sync: { ...day.sync, gone } }, removed: d };
 }
 
+/**
+ * Brain dump → minimum day. A line that fits a task title (120 characters)
+ * moves. A longer one stays in the dump, so its end is never lost (§8 "Text
+ * limits"), and the task gets a shortened copy (shortTitle). null: nothing to
+ * move.
+ */
+export function moveDumpToTask(day: StoredDay, dumpId: string, taskId: string, clock: Clock): { day: StoredDay; title: string; kept: boolean } | null {
+  const d = day.dump.find((x) => x.id === dumpId);
+  if (!d) return null;
+  const title = shortTitle(d.text, TITLE_MAX);
+  const withTask = addTask(day, taskId, title, "", clock);
+  if (withTask === day) return null;
+  const kept = title !== cleanText(d.text, DUMP_TEXT_MAX);
+  return { day: kept ? withTask : removeDump(withTask, dumpId, clock).day, title, kept };
+}
+
 /** Undo for the dump writes the text again under a new id (§5); it keeps its time, so it returns to its place. */
 export function restoreDump(day: StoredDay, item: StoredDump, newId: string, clock: Clock): StoredDay {
   const text = cleanText(item?.text, DUMP_TEXT_MAX);
@@ -957,9 +1003,10 @@ export interface Adopted {
  * exception); when the answer's newest check-in is newer than every one this
  * browser had, Home's state and level follow it. `sentEdit` is the edit mark
  * the request was built from (the caller made sure nothing changed since).
+ * `account`, when given, labels the day as that account's (SyncMeta.account).
  * null: not a day answer.
  */
-export function adoptAnswer(day: StoredDay, body: unknown, clock: Clock, sentEdit: string): Adopted | null {
+export function adoptAnswer(day: StoredDay, body: unknown, clock: Clock, sentEdit: string, account?: string): Adopted | null {
   if (!isDayAnswer(body)) return null;
   const erased = body.erased === true;
   const anchors = adoptSection<StoredAnchor, Tombstone>(day.anchors, day.sync.gone.anchors, body.anchors, (r) => serverItem("anchors", r) as ServerEntry<StoredAnchor> | null, erased);
@@ -997,6 +1044,7 @@ export function adoptAnswer(day: StoredDay, body: unknown, clock: Clock, sentEdi
       dump: dump.live.slice().sort(dumpOrder).slice(0, DUMP_CAP),
       sync: {
         ...day.sync,
+        account: account ?? day.sync.account,
         gen,
         rev,
         syncedEdit: sentEdit,
@@ -1049,6 +1097,10 @@ export function syncStatus(s: SyncStatusInput): { text: string; tone: SyncTone }
   const result = s.last?.result;
   if (s.syncing && !s.syncedAt && !result) return { text: "Syncing…", tone: "busy" };
   if (result === "unsupported") return { text: "This server doesn’t keep the day yet, so your day stays in this browser.", tone: "problem" };
+  // Never "Synced at …" after these two: say what brings sync back.
+  if (result === "ended") return { text: "Your session has ended. Sign in again and your day syncs again.", tone: "problem" };
+  if (result === "stopped")
+    return { text: "Sync stopped: your server refused the day. It tries again the next time you open the app. Your day is saved in this browser.", tone: "problem" };
   if (result === "offline")
     return { text: "Can’t reach your server right now. Your day is saved in this browser and syncs when the server answers again.", tone: "problem" };
   if (result === "error") return { text: "The server didn’t take the sync this time. Your day is saved in this browser and syncs again soon.", tone: "problem" };

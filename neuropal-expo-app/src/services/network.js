@@ -41,6 +41,12 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Requests that run in the background and must never interrupt the person
+// (day sync, docs/DAY-SYNC.md §8 "Failures"): the 401 rule below leaves
+// them alone. Their caller stops on its own, and the next ordinary request
+// ends the session as usual.
+const BACKGROUND = "npBackground";
+
 // A 401 from any data call means the session is gone (expired, revoked, or
 // this is a different server) — route to sign-in instead of failing
 // screen by screen. The sign-in calls themselves report their own 401s.
@@ -48,7 +54,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const url = String(error?.config?.url || "");
-    if (error?.response?.status === 401 && !/(^|\/)auth\//.test(url)) {
+    if (error?.response?.status === 401 && !error?.config?.[BACKGROUND] && !/(^|\/)auth\//.test(url)) {
       if (await isCurrentSession401(error).catch(() => true)) notifyUnauthorized();
     }
     return Promise.reject(error);
@@ -633,14 +639,25 @@ export async function fetchDocTicket(documentId) {
 
 // ---- Day sync (docs/DAY-SYNC.md) --------------------------------------------
 // Used by services/daySync.js, which needs the HTTP status to decide what to
-// do (401 stop, 404 this server has no day sync, 5xx/offline retry later),
-// so these reject with the axios error itself, never a toast-ready message.
+// do (401 stop, 404 or another 4xx stop until the next start, 5xx/offline
+// retry later), so these reject with the axios error itself, never a
+// toast-ready message.
 
 // POST /api/me/day/sync — every section the app knows → the merged day.
+// A background request: its 401 never signs anyone out (BACKGROUND). It
+// carries `isCurrentSession()`, true while the session that got the 401 is
+// still the one stored: a late 401 for a token since replaced (signed in
+// again, a new password) must not stop sync for the new session, and a stop
+// ends once another session is stored.
 export async function syncDayApi(body) {
   assertConfigured();
-  const { data } = await apiClient.post("me/day/sync", body, { timeout: 20000 });
-  return data;
+  try {
+    const { data } = await apiClient.post("me/day/sync", body, { timeout: 20000, [BACKGROUND]: true });
+    return data;
+  } catch (error) {
+    if (error?.response?.status === 401) error.isCurrentSession = () => isCurrentSession401(error);
+    throw error;
+  }
 }
 
 // GET /api/me/day — the same answer, sending nothing.

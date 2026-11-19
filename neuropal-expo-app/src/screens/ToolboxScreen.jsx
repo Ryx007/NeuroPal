@@ -16,6 +16,7 @@ import { AnchorEditor } from "../components/planner/AnchorEditor";
 import { addToDeviceCalendar } from "../services/calendar";
 import { cancelScheduled, scheduleAt } from "../services/notify";
 import {
+  TEXT_MAX,
   addAnchor,
   addTodo,
   clearDoneTodos,
@@ -970,6 +971,7 @@ function TodoCard() {
           value={text}
           onChangeText={setText}
           onSubmitEditing={add}
+          maxLength={TEXT_MAX.todoTitle}
           placeholder="Add to the list…"
           placeholderTextColor={palette.onSurfaceVariant}
           accessibilityLabel="New todo"

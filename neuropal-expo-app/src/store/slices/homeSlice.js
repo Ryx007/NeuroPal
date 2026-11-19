@@ -5,9 +5,11 @@ import {
   CHECKIN_MERGE_MS,
   ORDER,
   SECTIONS,
+  TEXT_MAX,
   adoptHome,
   canonical,
   cleanLevel,
+  cleanText,
   createdStamp,
   defaultSyncMeta,
   definitionKey,
@@ -22,6 +24,7 @@ import {
   starterTasks,
   tombstoneFor,
   withTombstone,
+  withTombstones,
 } from "../../services/dayModel.js";
 
 // The day: check-ins, the minimum viable day, timed anchors and the to-do
@@ -43,6 +46,11 @@ import {
 // made within CHECKIN_MERGE_MS of the last entry refine that entry instead of
 // adding a new one (one check-in = one settled feeling, not every key press).
 export { CHECKIN_CAP, CHECKIN_MERGE_MS };
+// The server's text limits. Titles and subtitles are cut to them (and
+// cleaned like the server does) as they are written, and the inputs that
+// write them take no more (maxLength), so a sync never cuts text the person
+// believes is kept.
+export { TEXT_MAX };
 const CHECKIN_STATES = new Set(["green", "yellow", "red"]);
 
 // Random tail: two devices adding an item in the same millisecond must not
@@ -174,7 +182,7 @@ const homeSlice = createSlice({
     addTask: {
       reducer(state, action) {
         const { now, today } = stampsFrom(action.meta);
-        const title = String(action.payload || "").trim();
+        const title = cleanText(action.payload, TEXT_MAX.taskTitle);
         if (!title) return;
         const at = createdStamp(now, state.tasks);
         state.tasks.push({ id: action.meta?.id || freshId("t"), title, done: false, createdAt: at, updatedAt: at, doneOn: null, tickAt: null });
@@ -193,7 +201,7 @@ const homeSlice = createSlice({
         const { now } = stampsFrom(action.meta);
         const { id, title } = action.payload || {};
         const task = state.tasks.find((t) => t.id === id);
-        const next = String(title || "").trim();
+        const next = cleanText(title, TEXT_MAX.taskTitle);
         if (task && next && next !== task.title) {
           task.title = next;
           task.updatedAt = later(now, task.updatedAt);
@@ -206,12 +214,13 @@ const homeSlice = createSlice({
       reducer(state, action) {
         const { now, today } = stampsFrom(action.meta);
         const { title, subtitle, hour, minute, icon, location } = action.payload || {};
-        if (!String(title || "").trim()) return;
+        const name = cleanText(title, TEXT_MAX.anchorTitle);
+        if (!name) return;
         const at = later(now);
         state.anchors.push({
           id: action.meta?.id || freshId("a"),
-          title: String(title).trim(),
-          subtitle: String(subtitle || "").trim(),
+          title: name,
+          subtitle: cleanText(subtitle, TEXT_MAX.anchorSubtitle),
           time: {
             hour: Math.max(0, Math.min(23, hour ?? 9)),
             minute: Math.max(0, Math.min(59, minute ?? 0)),
@@ -239,8 +248,12 @@ const homeSlice = createSlice({
         const before = definitionKey(anchor, "anchors");
         // Fields this app doesn't edit (another client's category,
         // flexMinutes, anything added later) stay as they are.
-        if (patch.title !== undefined) anchor.title = String(patch.title).trim();
-        if (patch.subtitle !== undefined) anchor.subtitle = String(patch.subtitle).trim();
+        if (patch.title !== undefined) {
+          // An empty name keeps the old one (the editor never saves one).
+          const name = cleanText(patch.title, TEXT_MAX.anchorTitle);
+          if (name) anchor.title = name;
+        }
+        if (patch.subtitle !== undefined) anchor.subtitle = cleanText(patch.subtitle, TEXT_MAX.anchorSubtitle);
         if (patch.hour !== undefined || patch.minute !== undefined) {
           anchor.time = {
             ...anchor.time,
@@ -284,7 +297,7 @@ const homeSlice = createSlice({
     addTodo: {
       reducer(state, action) {
         const { now } = stampsFrom(action.meta);
-        const title = String(action.payload || "").trim();
+        const title = cleanText(action.payload, TEXT_MAX.todoTitle);
         if (!title) return;
         const at = createdStamp(now, state.todos);
         state.todos.push({ id: action.meta?.id || freshId("td"), title, done: false, createdAt: at, updatedAt: at });
@@ -312,7 +325,12 @@ const homeSlice = createSlice({
     clearDoneTodos: {
       reducer(state, action) {
         const { now } = stampsFrom(action.meta);
-        for (const todo of state.todos.filter((t) => t.done)) removeLive(state, "todos", todo.id, now);
+        const todos = plain(state.todos);
+        const done = todos.filter((t) => t.done);
+        if (!done.length) return;
+        const ids = new Set(done.map((t) => t.id));
+        state.todos = todos.filter((t) => !ids.has(t.id));
+        state.sync.gone.todos = withTombstones(plain(state.sync.gone.todos), done.map((t) => tombstoneFor(t, now)));
       },
       prepare: timed,
     },
@@ -391,6 +409,10 @@ const homeSlice = createSlice({
         if (next.follow) {
           state.nervousState = next.follow.state;
           state.nervousLevel = cleanLevel(next.follow.level);
+        } else if (next.clearState) {
+          // Erased everywhere: the current check-in goes with the day.
+          state.nervousState = undefined;
+          state.nervousLevel = undefined;
         }
         state.sync.gen = next.gen;
         state.sync.lastSyncAt = now;

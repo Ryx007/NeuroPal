@@ -14,10 +14,10 @@
 // It belongs to the signed-in account (owner.ts): written only while that
 // account is signed in, and cleared when its session ends (localData.ts).
 import { useEffect } from "react";
-import { createStoredValue, useStored } from "@/lib/store";
+import { createStoredValue, readRaw, useStored } from "@/lib/store";
 import * as model from "./dayModel";
 import type { Anchor, AnchorCategory, AnchorInput, Clock, DayData, DayTask, DumpItem, NervousState, StoredAnchor, StoredDay, StoredDump, StoredTask } from "./dayModel";
-import { personalOpen } from "./owner";
+import { ownerStore, personalOpen } from "./owner";
 
 export type { Anchor, AnchorCategory, AnchorInput, AnchorTime, Checkin, DayData, DayTask, DumpItem, NervousState, StoredDay } from "./dayModel";
 export { CHECKIN_CAP, CHECKIN_MERGE_MS, DEFAULT_FLEX, DUMP_CAP, TITLE_MAX } from "./dayModel";
@@ -63,19 +63,95 @@ export function minutesUntil(anchor: Anchor, now: Date): number {
 
 // ---- the store -----------------------------------------------------------------
 
+const DAY_KEY = "np.app.day.v1";
+/** owner.ts keeps the owner under this key (read straight from storage in the day's lock, below). */
+const OWNER_KEY = "np.app.owner.v1";
+
 /** Read back from a save that still needs writing (an old save given its stamps). */
 const unsaved = new WeakSet<StoredDay>();
 
+/**
+ * A stored day as `owner` may see it. A day labelled with another account
+ * (SyncMeta.account) was written by a tab that hadn't heard yet that this
+ * browser changed hands: it reads as an empty day, so it is never shown and
+ * never sent as the owner's; the owner's next write replaces it.
+ */
+function readDay(raw: string | null, owner: string | null, clock: Clock): model.SaveRead & { foreign: boolean } {
+  let r: model.SaveRead;
+  try {
+    r = raw === null ? { day: model.newDay(clock), changed: false } : model.readSave(JSON.parse(raw), clock);
+  } catch {
+    r = { day: model.newDay(clock), changed: false };
+  }
+  const label = r.day.sync.account;
+  if (label && owner && label !== owner) return { day: model.newDay(clock, r.day.sync.enabled), changed: false, foreign: true };
+  return { ...r, foreign: false };
+}
+
 export const dayStore = createStoredValue<StoredDay>({
-  key: "np.app.day.v1",
+  key: DAY_KEY,
   area: "local",
   fallback: model.newDay(model.clockOf(new Date())),
   parse: (raw) => {
-    const r = model.readSave(JSON.parse(raw), model.clockOf(new Date()));
+    const r = readDay(raw, ownerStore.get(), model.clockOf(new Date()));
     if (r.changed) unsaved.add(r.day);
     return r.day;
   },
 });
+
+// ---- the day's lock: the sync's own writes, one tab at a time -------------------------
+
+let sharedChecked: boolean | null = null;
+
+/** localStorage works here (the tabs share it). Without it each tab keeps its own copy, and that copy is the truth. */
+function sharedStorage(): boolean {
+  if (sharedChecked === null) {
+    try {
+      window.localStorage.setItem("np.app.probe", "1");
+      window.localStorage.removeItem("np.app.probe");
+      sharedChecked = true;
+    } catch {
+      sharedChecked = false;
+    }
+  }
+  return sharedChecked;
+}
+
+/**
+ * Runs `fn` holding the day's Web Lock ("np-day"), which every tab of this
+ * browser takes for the sync's own writes. A browser without Web Locks (they
+ * need https or localhost) runs it at once: the reads below still come from
+ * storage itself, and the account label still keeps two accounts apart.
+ */
+export function withDayLock<T>(fn: () => T): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
+  if (!locks || typeof locks.request !== "function") return Promise.resolve().then(fn);
+  return locks.request("np-day", () => fn());
+}
+
+/**
+ * The sync's writes (an adopted answer, how the last try went): read what is
+ * stored → decide → write, inside the day's lock and from storage itself, not
+ * from this tab's copy, which may not have heard yet of another tab's last
+ * write. Deciding from that copy could undo the other tab's change, or write
+ * one account's day where another account's now lives (two tabs, two
+ * tab-only sessions). Only while `account` owns the day; `fn` returns the new
+ * day, or null to leave it. Local edits stay synchronous (edit, below): the
+ * loop's "changed while in flight" check covers one that lands meanwhile.
+ */
+export function updateStored(account: string, fn: (day: StoredDay, clock: Clock) => StoredDay | null): Promise<boolean> {
+  return withDayLock(() => {
+    const shared = sharedStorage();
+    const owner = shared ? readRaw("local", OWNER_KEY) || null : ownerStore.get();
+    if (!personalOpen(account) || owner !== account) return false;
+    const clock = model.clockOf(new Date());
+    const day = shared ? readDay(readRaw("local", DAY_KEY), owner, clock).day : dayStore.get();
+    const next = fn(day, clock);
+    if (!next) return false;
+    if (next !== day) dayStore.set(next);
+    return true;
+  });
+}
 
 // Kept subscribed for the life of the page, so this tab always holds what
 // other tabs wrote (the store drops its `storage` listener when nothing
@@ -299,6 +375,22 @@ export function removeDump(id: string): DumpItem | null {
   });
   if (got.removed) undoItems.set(found, got.removed);
   return found;
+}
+
+/**
+ * "Minimum day" on a brain-dump line (dayModel.moveDumpToTask): the task's
+ * title, and `kept` when the line stays in the dump because it is longer than
+ * a task title takes (its end is never lost). null: nothing moved.
+ */
+export function moveDumpToDay(item: DumpItem): { title: string; kept: boolean } | null {
+  const got: { moved: { title: string; kept: boolean } | null } = { moved: null };
+  edit((d, c) => {
+    const r = model.moveDumpToTask(d, item.id, freshId("t"), c);
+    if (!r) return d;
+    got.moved = { title: r.title, kept: r.kept };
+    return r.day;
+  });
+  return got.moved;
 }
 
 /** Undo writes the text again under a new id (a deleted dump line never comes back, §5). */

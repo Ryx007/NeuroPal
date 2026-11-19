@@ -14,9 +14,13 @@
 // When: at start and sign-in, on coming to the foreground (on the web: the
 // tab becoming visible), 2.5 s after the last local change, when the server
 // is reachable again, and every 5 minutes while in front.
-// Failures: offline or 5xx → retry after 5 s, 30 s, then every 5 minutes;
-// 401 → the session ended, stop until the next sign-in; 404 → this server
-// has no day sync, stop until the next start (or another server).
+// Failures: offline, 5xx, 408 or 429 → retry after 5 s, 30 s, then every 5
+// minutes. 401 → the session ended: stop until another session is stored or
+// someone signs in again — but only when the 401 answers the session held
+// now (a late 401 for an old token stops nothing), and without signing
+// anyone out (network.js leaves that to the next ordinary request). 404 →
+// this server has no day sync; any other 4xx → it refused the day: stop
+// until the next start (or another server).
 
 import { AppState } from "react-native";
 
@@ -31,7 +35,8 @@ const RETRY_MS = [5000, 30000, PERIOD_MS];
 
 // ---- what Settings shows -------------------------------------------------------
 // phase: idle | syncing | ok | offline | off | waiting | signed-out |
-//        unavailable (no day sync on this server) | demo | unconfigured
+//        ended (a 401: sign in again) | unavailable (no day sync on this
+//        server) | stopped (the server refused the day) | demo | unconfigured
 let status = { phase: "idle" };
 const listeners = new Set();
 
@@ -74,8 +79,23 @@ function syncedRefs(state) {
 }
 const sameRefs = (a, b) => a.every((x, i) => x === b[i]);
 
-let noRouteHost = null; // the server that answered 404
+// The server that answered 404 (phase "unavailable") or another 4xx
+// ("stopped"), as { host, phase }: nothing more is sent to it until the next
+// start.
+let refusedBy = null;
 let started = false;
+
+// Does a 401 answer the session held now? Only the network layer knows which
+// token went out (network.js syncDayApi); without its word, assume it does.
+async function answersCurrentSession(error) {
+  const check = error && error.isCurrentSession;
+  if (typeof check !== "function") return true;
+  try {
+    return (await check()) !== false;
+  } catch (e) {
+    return true;
+  }
+}
 
 export function startDaySync(store) {
   if (started) return () => {};
@@ -91,9 +111,13 @@ export function startDaySync(store) {
   let authKey = authKeyOf(store.getState());
   let enabled = store.getState().home.sync.enabled;
   let changeSeq = 0; // bumped by every local change
+  let authEpoch = 0; // bumped by every sign-in, sign-out or change of account
   let inFlight = false;
   let again = false; // run once more when the current request settles
-  let halted = false; // a 401: wait for the next sign-in
+  // The 401 that ended the session ({ error }), or null. Sync waits until
+  // another session is stored (checkHalt) or the auth state changes.
+  let halt = null;
+  let haltChecking = false;
   let failures = 0;
   let debounceTimer = null;
   let nextTimer = null;
@@ -130,34 +154,66 @@ export function startDaySync(store) {
   function blockedPhase() {
     const st = store.getState();
     if (!st.home.sync.enabled) return "off";
-    if (noRouteHost !== null && noRouteHost === apiHost) return "unavailable";
-    if (halted) return "signed-out";
+    if (refusedBy !== null && refusedBy.host === apiHost) return refusedBy.phase;
     if (!accountOf(st)) return st.auth?.loggedIn === true ? "waiting" : "signed-out";
+    if (halt) return "ended";
     return null;
   }
 
-  function failed(error) {
+  const retryLater = () => {
+    failures += 1;
+    schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
+  };
+
+  // `epoch`: the auth state the request went out under.
+  async function failed(error, epoch) {
     const code = error && error.response ? error.response.status : 0;
     if (code === 401) {
-      // The session ended (the API layer sends the person to sign-in).
-      halted = true;
-      clearTimers();
-      setPhase("signed-out");
+      const current = epoch === authEpoch && (await answersCurrentSession(error));
+      if (stopped) return;
+      if (current && epoch === authEpoch) {
+        // The session ended. Nobody is signed out from here: a background
+        // sync never interrupts, and the next ordinary request does it.
+        halt = { error };
+        clearTimers();
+        setPhase("ended");
+        return;
+      }
+      // A late 401 for a session already replaced (signed out and in again,
+      // a new password): it says nothing about the session held now, which
+      // the next try carries.
+      retryLater();
       return;
     }
-    if (code === 404) {
-      noRouteHost = apiHost;
+    if (code === 404 || (code >= 400 && code < 500 && code !== 408 && code !== 429)) {
+      // 404: this server has no day sync. Any other 4xx: it refused the day
+      // (too big, say), and sending the same again can't help.
+      refusedBy = { host: apiHost, phase: code === 404 ? "unavailable" : "stopped" };
       clearTimers();
-      setPhase("unavailable");
+      setPhase(refusedBy.phase);
       return;
     }
-    failures += 1;
     // No re-probe from here (recheckApi): a failed probe raises the app-wide
     // "Backend unreachable" banner, which announces itself, and a background
     // sync must never interrupt anyone. The ladder and the triggers below
     // are enough to notice the server coming back.
     setPhase("offline");
-    schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
+    retryLater();
+  }
+
+  // Halted: has another session been stored since that 401 (a new password
+  // brings one without any change to the auth state)? Then sync goes on.
+  // Asked again on every trigger while halted.
+  function checkHalt() {
+    const h = halt;
+    if (!h || haltChecking) return;
+    haltChecking = true;
+    answersCurrentSession(h.error).then((current) => {
+      haltChecking = false;
+      if (current || stopped || halt !== h) return;
+      halt = null;
+      run();
+    });
   }
 
   async function run() {
@@ -166,6 +222,7 @@ export function startDaySync(store) {
     if (blocked) {
       clearTimers();
       setPhase(blocked);
+      if (blocked === "ended") checkHalt();
       return;
     }
     if (inFlight) {
@@ -174,6 +231,7 @@ export function startDaySync(store) {
     }
     clearTimers();
     inFlight = true;
+    const epoch = authEpoch;
     let ok = true;
     try {
       // Whose day is it (§8)? Never send one account's day as another's.
@@ -218,7 +276,7 @@ export function startDaySync(store) {
       if (foreground) schedule(PERIOD_MS);
     } catch (error) {
       ok = false;
-      if (!stopped) failed(error);
+      if (!stopped) await failed(error, epoch);
     } finally {
       inFlight = false;
       // After a failure the retry ladder decides when; never a tight loop.
@@ -250,9 +308,11 @@ export function startDaySync(store) {
     const switched = st.home.sync.enabled !== enabled;
     enabled = st.home.sync.enabled;
     if (key !== authKey) {
-      // Signed in, signed out, or another account: start over.
+      // Signed in, signed out, or another account: start over. A 401 still
+      // on its way answers the session before this one (failed → epoch).
       authKey = key;
-      halted = false;
+      authEpoch += 1;
+      halt = null;
       run();
     } else if (switched) {
       // On: a first sync (the slice forgot gen). Off: the line says so.

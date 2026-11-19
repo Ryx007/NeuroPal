@@ -13,9 +13,11 @@
 // last change made in this tab, when the connection comes back, and every
 // 5 minutes while the tab is visible. Only signed in, with "Keep my day in
 // sync" on (Settings), and never on the calming steps (no network there).
-// Failures: offline or 5xx → retry after 5 s, 30 s, then every 5 minutes;
-// 401 → the session ended: stop until the next sign-in; 404 → this server has
-// no day sync: stop until the next start (or another server).
+// Failures: offline, 5xx, 408 or 429 → retry after 5 s, 30 s, then every 5
+// minutes; 401 for the token held now → the session ended: stop until the
+// session changes (a late 401 for a token since replaced stops nothing);
+// 404 → this server has no day sync; any other 4xx → it refused the day:
+// stop until the next start (or another server).
 //
 // Sync never interrupts. The only place a problem shows is the line under the
 // Settings switch: requests go through apiRequest (like lookSync.ts), so a
@@ -26,12 +28,15 @@
 // Two tabs share the stored day. A change is sent by the tab it was made in
 // (the other tab steps in only if it is still unsent 10 s later, say the tab
 // was closed); an answer one tab adopts is never a change for another, so
-// tabs never answer each other's writes with sync after sync.
+// tabs never answer each other's writes with sync after sync. The sync's own
+// writes go through the day's lock and read storage itself (day.ts
+// updateStored), so a tab that hasn't heard of another tab's write yet can't
+// undo it.
 import { useEffect, useSyncExternalStore } from "react";
-import { apiBaseStore, apiRequest, sessionStore, type ApiResult } from "@/lib/api";
+import { apiBaseStore, apiRequest, sessionStore, type ApiResult, type Session } from "@/lib/api";
 import { connectionStore, reportReachable, type ServerState } from "./connection";
-import { dayStore, ensureToday, onDayEdit, updateDay } from "./day";
-import { adoptAnswer, buildRequest, hasUnsynced, isDayAnswer, isOlderAnswer, noteResult, setSyncEnabled, type SyncResult } from "./dayModel";
+import { dayStore, ensureToday, onDayEdit, updateDay, updateStored } from "./day";
+import { adoptAnswer, buildRequest, hasUnsynced, isDayAnswer, isOlderAnswer, noteResult, setSyncEnabled, type StoredDay, type SyncResult } from "./dayModel";
 import { accountKey, currentSession, ownerStore, personalOpen } from "./owner";
 
 const PATH = "/api/me/day/sync";
@@ -80,8 +85,8 @@ let again = false;
 let failures = 0;
 /** The token a 401 came back for: nothing more until the session changes. */
 let halted: string | null = null;
-/** The server that answered 404: nothing more until the next start. */
-let noRoute: string | null = null;
+/** The server that answered 404 or refused the day (another 4xx): nothing more until the next start. */
+let stoppedOn: string | null = null;
 let debounceTimer = 0;
 let nextTimer = 0;
 let otherTimer = 0;
@@ -132,9 +137,13 @@ function periodic() {
   else void run();
 }
 
+/** How the last try went, noted in the stored day (every tab's Settings line reads it). */
 function note(result: SyncResult, acc: string) {
-  updateDay((d, c) => noteResult(d, result, c), acc);
+  void updateStored(acc, (d, c) => noteResult(d, result, c));
 }
+
+/** A 4xx that sending the same day again can't change (408 and 429 are retried like a 5xx). */
+const refused = (status: number) => status >= 400 && status < 500 && status !== 401 && status !== 404 && status !== 408 && status !== 429;
 
 async function run(): Promise<void> {
   if (starts === 0) return;
@@ -145,7 +154,7 @@ async function run(): Promise<void> {
   const acc = account;
   const s = currentSession();
   if (!acc || !s || accountKey(s) !== acc || !personalOpen(acc)) return;
-  if (!dayStore.get().sync.enabled || halted === s.token || noRoute === s.base) return;
+  if (!dayStore.get().sync.enabled || halted === s.token || stoppedOn === s.base) return;
   if (busy) {
     again = true;
     return;
@@ -157,61 +166,77 @@ async function run(): Promise<void> {
   }
   busy = true;
   setSyncing(true);
-  ensureToday(); // an old save gets its stamps written before they are sent
-  const sent = dayStore.get();
-  const sentEdit = sent.sync.edit;
-  let res: ApiResult<unknown>;
+  let answered = false;
+  let retrying = false;
   try {
-    res = await apiRequest<unknown>(s.base, PATH, { method: "POST", body: buildRequest(sent), token: s.token, timeoutMs: TIMEOUT_MS });
+    ensureToday(); // an old save gets its stamps written before they are sent
+    const sent = dayStore.get();
+    const res = await apiRequest<unknown>(s.base, PATH, { method: "POST", body: buildRequest(sent), token: s.token, timeoutMs: TIMEOUT_MS });
+    // Signed out, another account, or switched off meanwhile: not for the day we have now.
+    if (live(acc)) {
+      retrying = await settle(res, acc, s, sent);
+      answered = res.status !== 0;
+    }
   } finally {
     busy = false;
     setSyncing(false);
   }
-
-  if (!live(acc)) {
-    // Signed out, another account, or switched off meanwhile: not for the day we have now.
-    const more = again;
-    again = false;
-    if (more) void run();
-    return;
-  }
-  let retrying = false;
-  if (res.ok && isDayAnswer(res.data)) {
-    failures = 0;
-    const now = dayStore.get();
-    if (now.sync.edit !== sentEdit) {
-      // Something changed here (or in another tab) while it was on the wire.
-      again = true;
-    } else if (now.sync.syncedAt !== sent.sync.syncedAt && isOlderAnswer(res.data, now)) {
-      // Another tab took a newer answer for the same day meanwhile: this one adds nothing.
-    } else {
-      const data = res.data;
-      updateDay((d, c) => adoptAnswer(d, data, c, sentEdit)?.day ?? d, acc);
-    }
-    if (visible()) schedule(PERIOD_MS, periodic);
-  } else if (res.status === 401) {
-    halted = s.token;
-  } else if (res.status === 404) {
-    noRoute = s.base;
-    note("unsupported", acc);
-  } else {
-    failures += 1;
-    retrying = true;
-    note(res.status === 0 ? "offline" : "error", acc);
-    schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
-  }
   // Any answer means the server is there (after the adopt, so this can't start a second sync).
-  if (res.status !== 0) reportReachable();
+  if (answered) reportReachable();
   // After a failure the ladder decides when; never a tight loop.
   const more = again && !retrying;
   again = false;
   if (more) void run();
 }
 
+/** What one answer means for the loop (§8 "Receiving", "Failures"). True: the retry ladder decides what comes next. */
+async function settle(res: ApiResult<unknown>, acc: string, s: Session, sent: StoredDay): Promise<boolean> {
+  if (res.ok && isDayAnswer(res.data)) {
+    failures = 0;
+    const data = res.data;
+    const outcome: { edited: boolean } = { edited: false };
+    await updateStored(acc, (now, clock) => {
+      if (!live(acc) || !now.sync.enabled) return null;
+      if (now.sync.edit !== sent.sync.edit) {
+        // Something changed here (or in another tab) while it was on the wire.
+        outcome.edited = true;
+        return null;
+      }
+      // Another tab took a newer answer for the same day meanwhile: this one adds nothing.
+      if (now.sync.syncedAt !== sent.sync.syncedAt && isOlderAnswer(data, now)) return null;
+      return adoptAnswer(now, data, clock, sent.sync.edit, acc)?.day ?? null;
+    });
+    if (outcome.edited) again = true;
+    if (visible()) schedule(PERIOD_MS, periodic);
+    return false;
+  }
+  if (res.status === 401) {
+    if (currentSession()?.token === s.token) {
+      // The session ended: nothing more until it changes (onSession). The
+      // line says that signing in again resumes sync.
+      halted = s.token;
+      note("ended", acc);
+    } else {
+      // A late 401 for a token since replaced: the session held now goes next.
+      again = true;
+    }
+    return false;
+  }
+  if (res.status === 404 || refused(res.status)) {
+    stoppedOn = s.base;
+    note(res.status === 404 ? "unsupported" : "stopped", acc);
+    return false;
+  }
+  failures += 1;
+  note(res.status === 0 ? "offline" : "error", acc);
+  schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
+  return true;
+}
+
 /** A change still unsent when this tab stops syncing for the account (signing out): best effort, with that session, answer unused. */
 function leave(acc: string) {
   const s = currentSession();
-  if (starts === 0 || !s || accountKey(s) !== acc || halted === s.token || noRoute === s.base) return;
+  if (starts === 0 || !s || accountKey(s) !== acc || halted === s.token || stoppedOn === s.base) return;
   const day = dayStore.get();
   if (!day.sync.enabled || !hasUnsynced(day) || browserOffline()) return;
   void apiRequest<unknown>(s.base, PATH, { method: "POST", body: buildRequest(day), token: s.token, timeoutMs: TIMEOUT_MS });
