@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "io.neuropal.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#131313"

@@ -7,6 +7,7 @@ const { Document, DocumentChunk, ReadingSession } = require('../models');
 const requireAuth = require('../middleware/auth');
 const { requireDocAccess } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { uploadName } = require('../utils/uploadName');
 const { issueDocTicket } = require('../services/docTicket');
 const { ingestDocument, deleteDocumentChunks } = require('../services/ingestPipeline');
 const { ensureEpub, resolveEntry, removeUnpacked } = require('../services/epubStore');
@@ -76,13 +77,14 @@ router.post(
             req.file.filename,
         );
 
+        const originalName = uploadName(req.file.originalname);
         const doc = await Document.create({
             userId: req.userId,
             title:
                 (req.body?.title || '').trim() ||
-                req.file.originalname.replace(/\.[^.]+$/, ''),
+                originalName.replace(/\.[^.]+$/, ''),
             subtitle: (req.body?.subtitle || '').trim() || undefined,
-            type: typeFromUpload(req.file.mimetype, req.file.originalname),
+            type: typeFromUpload(req.file.mimetype, originalName),
             file: {
                 relativePath,
                 sizeBytes: req.file.size,

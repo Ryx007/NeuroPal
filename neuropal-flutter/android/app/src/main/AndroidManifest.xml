@@ -3,7 +3,11 @@
          the template only adds it to debug/profile). -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- No Android Auto Backup: check-ins, the brain dump and Pal's chat are
+         kept in shared preferences, and a copy in the cloud backup would
+         break "the data then stays on that device" (docs/DAY-SYNC.md §9). -->
     <application
+        android:allowBackup="false"
         android:label="NeuroPal F"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
