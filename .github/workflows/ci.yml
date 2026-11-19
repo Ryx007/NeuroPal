@@ -110,7 +110,12 @@ jobs:
 
   web-app:
     name: Web app (browser checks, real backend)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04 in November 2026, and
+    # playwright-core 1.56 has no Chromium build for it ("Playwright does
+    # not support chromium on ubuntu26.04-x64"). 1.56 matches the Chromium
+    # the checks are developed against. To move to 26.04, raise
+    # playwright-core in neuropal-platform first.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5

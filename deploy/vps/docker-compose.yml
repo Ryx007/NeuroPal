@@ -81,11 +81,22 @@ services:
 
   mongo:
     <<: *restart
-    image: mongo:8.0
+    # Pinned to the patch release (like the other images) so a restart never
+    # changes the database version. Raise it on purpose, then test.
+    image: mongo:8.0.34
     # Cap the cache: the default (half of RAM) would crowd the other
     # services on a shared VPS.
     command: ["--wiredTigerCacheSizeGB", "${NP_MONGO_CACHE_GB:-0.25}", "--bind_ip_all"]
     environment:
+      # MongoDB 8 refuses to start on Linux kernels 6.19+ when its allocator
+      # (TCMalloc) owns "rseq": SERVER-121912. 8.0.30+ allows 7.0.14+ again,
+      # but Ubuntu reports its 7.0.14 kernel as "7.0.0-43", so the check
+      # still says no. That took this database down on 2026-11-15, when the
+      # server moved to Ubuntu 26.04. The image's default is rseq=0. With
+      # rseq=1, glibc owns rseq and the allocator uses per-thread caches,
+      # which work on every kernel. The speed cost doesn't matter at this
+      # size.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-neuropal}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set in .env}
       MONGO_INITDB_DATABASE: neuropal
@@ -171,7 +182,8 @@ services:
   # server now and then (scripts/pull-backup.sh on the Mac).
   backup:
     <<: *restart
-    image: mongo:8.0
+    # the same image as the database (only mongodump and bash are used)
+    image: mongo:8.0.34
     depends_on:
       mongo:
         condition: service_healthy
