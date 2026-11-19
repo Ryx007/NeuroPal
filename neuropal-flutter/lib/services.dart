@@ -15,13 +15,16 @@ import 'data/demo_source.dart';
 import 'data/document_source.dart';
 import 'data/session_store.dart';
 import 'data/settings_controller.dart';
+import 'day/day_store.dart';
+import 'day/day_sync.dart';
 import 'platform/widget_bridge.dart';
 import 'reader/speech_engine.dart';
 import 'theme/appearance_controller.dart';
 
 class AppServices {
   /// [sessions] defaults to an in-memory store (tests, screenshots); the
-  /// app passes the secure one loaded in main().
+  /// app passes the secure one loaded in main(). [clock] and [dayTimer]
+  /// let tests set the day's time and drive sync's timers.
   AppServices({
     required this.prefs,
     required this.engine,
@@ -29,6 +32,8 @@ class AppServices {
     AssetBundle? bundle,
     List<BackendCandidate> backends = kDefaultBackends,
     SessionStore? sessions,
+    DateTime Function()? clock,
+    DayTimerFactory? dayTimer,
   }) : sessions = sessions ?? SessionStore.memory(),
        settings = SettingsController(prefs) {
     backend = Backend(
@@ -51,6 +56,16 @@ class AppServices {
     );
     // iOS Home/Lock Screen widgets wear the same look (no-op elsewhere).
     WidgetBridge.instance.attach(appearance);
+    // Today (check-ins, anchors, the minimum day), kept on the phone and
+    // synced with the account (started and stopped by lib/app.dart).
+    day = DayStore(prefs: prefs, clock: clock);
+    daySync = DaySync(
+      store: day,
+      backend: backend,
+      auth: auth,
+      prefs: prefs,
+      timer: dayTimer,
+    );
   }
 
   final SharedPreferences prefs;
@@ -62,6 +77,8 @@ class AppServices {
   late final ApiDocumentSource api;
   late final DemoDocumentSource demo;
   late final AppearanceController appearance;
+  late final DayStore day;
+  late final DaySync daySync;
 
   /// The document source the user chose (demo is explicit opt-in only).
   DocumentSource get source => settings.demoMode ? demo : api;

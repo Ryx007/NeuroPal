@@ -250,3 +250,192 @@ http.Response jsonResponse(Object? body, [int status = 200]) => http.Response(
   status,
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
+
+// ---- day sync -----------------------------------------------------------------
+
+/// An in-memory `POST /api/me/day/sync` (docs/DAY-SYNC.md §5–§7), merging
+/// the way the server does: per item, the definition with the later
+/// `updatedAt` wins whole, the later tick wins, the later `deletedAt` wins
+/// and a deleted item is a tombstone without content; check-ins are the
+/// union by `at` with the 60-second rule, and one stamped later than the
+/// server's clock + 60 s is stored at the server's clock (a phone whose
+/// clock is ahead); a lower `gen` means "erased elsewhere": nothing is
+/// merged and the answer says `erased: true`. Fields the server doesn't
+/// know are dropped, as the real one does.
+class FakeDayServer {
+  FakeDayServer({DateTime Function()? clock}) : clock = clock ?? DateTime.now;
+
+  /// The server's own clock.
+  final DateTime Function() clock;
+  int gen = 1;
+  int rev = 0;
+  final Map<String, Map<String, Object?>> anchors = {};
+  final Map<String, Map<String, Object?>> tasks = {};
+  List<Map<String, Object?>> checkins = [];
+
+  /// Every body received.
+  final List<Map<String, Object?>> bodies = [];
+
+  /// When set, every request is answered with this status instead.
+  int? status;
+
+  static const _anchorFields = {
+    'title', 'subtitle', 'time', 'flexMinutes', 'category', 'icon', 'location', //
+  };
+  static const _taskFields = {'title', 'subtitle'};
+
+  http.Response handle(http.Request request) {
+    final body = (jsonDecode(request.body) as Map).cast<String, Object?>();
+    bodies.add(body);
+    final scripted = status;
+    if (scripted != null) return jsonResponse({'error': 'scripted'}, scripted);
+    final sentGen = body['gen'];
+    final erased = sentGen is num && sentGen < gen;
+    if (!erased) {
+      _mergeAll(anchors, body['anchors'], _anchorFields);
+      _mergeAll(tasks, body['tasks'], _taskFields);
+      _mergeCheckins(body['checkins']);
+      rev += 1;
+    }
+    return jsonResponse(answer(erased: erased));
+  }
+
+  /// DELETE /api/me/day: empties the day and adds 1 to `gen`.
+  void erase() {
+    anchors.clear();
+    tasks.clear();
+    checkins = [];
+    gen += 1;
+  }
+
+  Map<String, Object?> answer({bool erased = false}) {
+    int ms(Object? iso) => DateTime.parse(iso! as String).millisecondsSinceEpoch;
+    int minutes(Map<String, Object?> a) {
+      final t = a['time'];
+      return t is Map ? (t['hour'] as int) * 60 + (t['minute'] as int) : -1;
+    }
+
+    final anchorList = anchors.values.toList()
+      ..sort((a, b) {
+        final byTime = minutes(a) - minutes(b);
+        return byTime != 0 ? byTime : (a['id'] as String).compareTo(b['id'] as String);
+      });
+    final taskList = tasks.values.toList()
+      ..sort((a, b) {
+        final byTime = ms(a['createdAt']) - ms(b['createdAt']);
+        return byTime != 0 ? byTime : (a['id'] as String).compareTo(b['id'] as String);
+      });
+    return {
+      'v': 1,
+      'gen': gen,
+      'rev': rev,
+      'serverTime': DateTime.now().toUtc().toIso8601String(),
+      'erased': erased,
+      'anchors': anchorList,
+      'tasks': taskList,
+      'todos': const [],
+      'dump': const [],
+      'checkins': checkins.length > 200
+          ? checkins.sublist(checkins.length - 200)
+          : checkins,
+    };
+  }
+
+  static int? _ms(Object? iso) =>
+      iso is String ? DateTime.tryParse(iso)?.millisecondsSinceEpoch : null;
+
+  void _mergeAll(
+    Map<String, Map<String, Object?>> into,
+    Object? list,
+    Set<String> fields,
+  ) {
+    if (list is! List) return;
+    for (final raw in list) {
+      if (raw is! Map || raw['id'] is! String) continue;
+      final item = raw.cast<String, Object?>();
+      final old = into[item['id']];
+      into[item['id'] as String] = _settle(
+        old == null ? item : _merge(old, item, fields),
+        fields,
+      );
+    }
+  }
+
+  Map<String, Object?> _merge(
+    Map<String, Object?> a,
+    Map<String, Object?> b,
+    Set<String> fields,
+  ) {
+    final au = _ms(a['updatedAt']) ?? 0;
+    final bu = _ms(b['updatedAt']) ?? 0;
+    final defWinner = bu > au || (bu == au && jsonEncode(b).compareTo(jsonEncode(a)) > 0) ? b : a;
+    final at = _ms(a['tickAt']);
+    final bt = _ms(b['tickAt']);
+    final tickWinner = bt != null && (at == null || bt > at) ? b : a;
+    final ad = _ms(a['deletedAt']);
+    final bd = _ms(b['deletedAt']);
+    final created = (_ms(a['createdAt']) ?? 0) <= (_ms(b['createdAt']) ?? 0)
+        ? a['createdAt']
+        : b['createdAt'];
+    return {
+      'id': a['id'],
+      for (final f in fields)
+        if (defWinner.containsKey(f)) f: defWinner[f],
+      'createdAt': created,
+      'updatedAt': defWinner['updatedAt'],
+      'deletedAt': bd != null && (ad == null || bd > ad) ? b['deletedAt'] : a['deletedAt'],
+      'doneOn': tickWinner['doneOn'],
+      'tickAt': tickWinner['tickAt'],
+    };
+  }
+
+  /// A deleted item keeps no content; an undone deletion is no deletion.
+  Map<String, Object?> _settle(Map<String, Object?> item, Set<String> fields) {
+    final deleted = _ms(item['deletedAt']);
+    final updated = _ms(item['updatedAt']) ?? 0;
+    if (deleted != null && deleted >= updated) {
+      return {
+        'id': item['id'],
+        'createdAt': item['createdAt'],
+        'updatedAt': item['updatedAt'],
+        'deletedAt': item['deletedAt'],
+      };
+    }
+    return {
+      'id': item['id'],
+      for (final f in fields)
+        if (item[f] != null) f: item[f],
+      'subtitle': item['subtitle'] ?? '',
+      'createdAt': item['createdAt'],
+      'updatedAt': item['updatedAt'],
+      'deletedAt': null,
+      'doneOn': item['doneOn'],
+      'tickAt': item['tickAt'],
+    };
+  }
+
+  void _mergeCheckins(Object? list) {
+    final byAt = <int, Map<String, Object?>>{
+      for (final c in checkins) _ms(c['at'])!: c,
+    };
+    final serverMs = clock().millisecondsSinceEpoch;
+    if (list is List) {
+      for (final raw in list) {
+        if (raw is! Map) continue;
+        var at = _ms(raw['at']);
+        if (at == null) continue;
+        if (at > serverMs + 60000) at = serverMs; // a phone clock ahead
+        final iso = DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toIso8601String();
+        final c = {'at': iso, 'state': raw['state'], 'level': raw['level']};
+        final old = byAt[at];
+        if (old == null || jsonEncode(c).compareTo(jsonEncode(old)) > 0) byAt[at] = c;
+      }
+    }
+    final sorted = byAt.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    checkins = [
+      for (var i = 0; i < sorted.length; i++)
+        if (i == sorted.length - 1 || sorted[i + 1].key - sorted[i].key >= 60000)
+          sorted[i].value,
+    ];
+  }
+}

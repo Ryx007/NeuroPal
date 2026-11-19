@@ -1,6 +1,7 @@
 // End-to-end widget tests: the real app with a fake speech engine and an
 // in-memory backend. Reduce-motion is on, which also proves the "Still"
-// path (nothing animates forever).
+// path (nothing animates forever). The app opens on Home; the Library is
+// one step away in the drawer.
 
 import 'dart:convert';
 
@@ -51,11 +52,22 @@ Finder mainList() => find
     .descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable))
     .first;
 
+/// Home is the first screen: the drawer leads to the Library.
+Future<void> openLibrary(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.menu_rounded));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Library'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('offline real mode shows the failure, never fake data', (
     tester,
   ) async {
     await boot(tester);
+    // Home says it plainly too, then the Library shows why.
+    expect(find.text('Can’t load your library right now.'), findsOneWidget);
+    await openLibrary(tester);
     expect(find.text('Can’t reach the NeuroPal backend'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.textContaining('Correlation plenoptic'), findsNothing);
@@ -87,6 +99,7 @@ void main() {
         },
       ),
     );
+    await openLibrary(tester);
     expect(find.text('Ghost imaging review'), findsOneWidget);
     expect(find.text('38% read'), findsOneWidget);
     expect(find.text('Processing · embedding · 45%'), findsOneWidget);
@@ -98,6 +111,7 @@ void main() {
     tester,
   ) async {
     final services = await boot(tester, prefs: {'np.demoMode': true});
+    await openLibrary(tester);
     expect(find.text('Demo library (offline)'), findsOneWidget);
     expect(
       find.text('Correlation plenoptic imaging: the basics'),
@@ -153,6 +167,7 @@ void main() {
 
   testWidgets('Ask in demo mode explains why it cannot answer', (tester) async {
     await boot(tester, prefs: {'np.demoMode': true});
+    await openLibrary(tester);
     final spad = find.text('Single-photon avalanche diodes in brief');
     await tester.scrollUntilVisible(spad, 300, scrollable: mainList());
     await tester.pump();

@@ -1,5 +1,5 @@
-// The left navigation drawer: Library, Reader, Settings, plus a live
-// connection line at the bottom.
+// The left navigation drawer: Home, Library, Reader, Calming steps,
+// Settings, plus a live connection line at the bottom.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -50,15 +50,29 @@ class NpDrawer extends StatelessWidget {
                 children: [
                   Semantics(
                     header: true,
-                    child: Text(
-                      s.isSignal ? 'NEUROPAL' : 'NeuroPal',
-                      style: s.fonts.display(26, s.text),
+                    // The wordmark is a logo: at large text it shrinks to
+                    // the drawer's width rather than break mid-word.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        s.isSignal ? 'NEUROPAL' : 'NeuroPal',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: s.fonts.display(26, s.text),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
                   const NpLabel('Flutter · reader first'),
                 ],
               ),
+            ),
+            _DrawerItem(
+              icon: Icons.home_outlined,
+              label: 'Home',
+              selected: current == AppRoutes.home,
+              onTap: () => go(AppRoutes.home),
             ),
             _DrawerItem(
               icon: Icons.library_books_outlined,
@@ -74,6 +88,12 @@ class NpDrawer extends StatelessWidget {
                   : '${reader.playing ? 'Playing' : 'Open'}: ${doc.title}',
               selected: current == AppRoutes.reader,
               onTap: () => go(AppRoutes.reader),
+            ),
+            _DrawerItem(
+              icon: Icons.spa_outlined,
+              label: 'Calming steps',
+              selected: current == AppRoutes.calm,
+              onTap: () => go(AppRoutes.calm),
             ),
             _DrawerItem(
               icon: Icons.tune_rounded,
