@@ -823,4 +823,30 @@ void main() {
       );
     });
   });
+
+  test('a server without day sync: an account switch keeps the day that exists only on this phone', () async {
+    final server = FakeAccountsServer(
+      accounts: {'a@example.com': 'password-a', 'b@example.com': 'password-b'},
+    ); // no day route: the sync answers 404
+    final phone = await Device.open(server.client());
+    await phone.start();
+    expect(await phone.auth.signIn(email: 'a@example.com', password: 'password-a'), isNull);
+    await settle();
+    expect(phone.sync.phase, DaySyncPhase.unsupported);
+    phone.store.recordCheckin(NervousState.red, 0.9);
+    phone.store.addDump('A’s only copy of this thought');
+
+    // Someone else signs in on this phone, then A again. Nothing was ever
+    // sent anywhere, so nothing needs clearing; the day stays.
+    await phone.auth.signOut();
+    await settle();
+    expect(await phone.auth.signIn(email: 'b@example.com', password: 'password-b'), isNull);
+    await settle();
+    await phone.auth.signOut();
+    await settle();
+    expect(await phone.auth.signIn(email: 'a@example.com', password: 'password-a'), isNull);
+    await settle();
+    expect(phone.store.checkins, hasLength(1));
+    expect(phone.store.dump.map((d) => d.text), ['A’s only copy of this thought']);
+  });
 }

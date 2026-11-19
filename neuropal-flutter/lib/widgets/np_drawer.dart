@@ -48,83 +48,95 @@ class NpDrawer extends StatelessWidget {
             : BorderSide.none,
       ),
       child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Semantics(
-                    header: true,
-                    // The wordmark is a logo: at large text it shrinks to
-                    // the drawer's width rather than break mid-word.
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        s.isSignal ? 'NEUROPAL' : 'NeuroPal',
-                        maxLines: 1,
-                        softWrap: false,
-                        style: s.fonts.display(26, s.text),
+        // Six entries, the header and the connection line don't fit a phone
+        // held sideways or large text: the drawer scrolls, so "Calming
+        // steps" can always be reached. When everything fits, the
+        // connection line still sits at the bottom.
+        child: CustomScrollView(
+          slivers: [
+            SliverList(
+              delegate: SliverChildListDelegate([
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        // The wordmark is a logo: at large text it shrinks to
+                        // the drawer's width rather than break mid-word.
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            s.isSignal ? 'NEUROPAL' : 'NeuroPal',
+                            maxLines: 1,
+                            softWrap: false,
+                            style: s.fonts.display(26, s.text),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      // What the app is for, in one line (with Pal's own name).
+                      NpLabel('Read, plan your day, ask ${pal.name}'),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  // What the app is for, in one line (with Pal's own name).
-                  NpLabel('Read, plan your day, ask ${pal.name}'),
-                ],
+                ),
+                _DrawerItem(
+                  icon: Icons.home_outlined,
+                  label: 'Home',
+                  selected: current == AppRoutes.home,
+                  onTap: () => go(AppRoutes.home),
+                ),
+                _DrawerItem(
+                  icon: Icons.library_books_outlined,
+                  label: 'Library',
+                  selected: current == AppRoutes.library,
+                  onTap: () => go(AppRoutes.library),
+                ),
+                _DrawerItem(
+                  icon: Icons.menu_book_outlined,
+                  label: 'Reader',
+                  detail: doc == null
+                      ? 'Nothing open yet'
+                      : '${reader.playing ? 'Playing' : 'Open'}: ${doc.title}',
+                  selected: current == AppRoutes.reader,
+                  onTap: () => go(AppRoutes.reader),
+                ),
+                _DrawerItem(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  leading: PalAvatar(pal: pal, size: 30),
+                  label: pal.name,
+                  detail: palDrawerDetail(assistant),
+                  selected: false,
+                  onTap: () {
+                    // Close the drawer, then open Pal over the screen it was on.
+                    final navigator = Navigator.of(context);
+                    navigator.pop();
+                    showPalSheet(navigator.context, from: current);
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.spa_outlined,
+                  label: 'Calming steps',
+                  selected: current == AppRoutes.calm,
+                  onTap: () => go(AppRoutes.calm),
+                ),
+                _DrawerItem(
+                  icon: Icons.tune_rounded,
+                  label: 'Settings',
+                  selected: current == AppRoutes.settings,
+                  onTap: () => go(AppRoutes.settings),
+                ),
+              ]),
+            ),
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: _ConnectionLine(),
               ),
             ),
-            _DrawerItem(
-              icon: Icons.home_outlined,
-              label: 'Home',
-              selected: current == AppRoutes.home,
-              onTap: () => go(AppRoutes.home),
-            ),
-            _DrawerItem(
-              icon: Icons.library_books_outlined,
-              label: 'Library',
-              selected: current == AppRoutes.library,
-              onTap: () => go(AppRoutes.library),
-            ),
-            _DrawerItem(
-              icon: Icons.menu_book_outlined,
-              label: 'Reader',
-              detail: doc == null
-                  ? 'Nothing open yet'
-                  : '${reader.playing ? 'Playing' : 'Open'}: ${doc.title}',
-              selected: current == AppRoutes.reader,
-              onTap: () => go(AppRoutes.reader),
-            ),
-            _DrawerItem(
-              icon: Icons.chat_bubble_outline_rounded,
-              leading: PalAvatar(pal: pal, size: 30),
-              label: pal.name,
-              detail: palDrawerDetail(assistant),
-              selected: false,
-              onTap: () {
-                // Close the drawer, then open Pal over the screen it was on.
-                final navigator = Navigator.of(context);
-                navigator.pop();
-                showPalSheet(navigator.context, from: current);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.spa_outlined,
-              label: 'Calming steps',
-              selected: current == AppRoutes.calm,
-              onTap: () => go(AppRoutes.calm),
-            ),
-            _DrawerItem(
-              icon: Icons.tune_rounded,
-              label: 'Settings',
-              selected: current == AppRoutes.settings,
-              onTap: () => go(AppRoutes.settings),
-            ),
-            const Spacer(),
-            const _ConnectionLine(),
           ],
         ),
       ),
@@ -258,9 +270,7 @@ class _ConnectionLine extends StatelessWidget {
           children: [
             Led(on: on),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(text, style: s.fonts.mono(12.5, s.textMuted)),
-            ),
+            Expanded(child: Text(text, style: s.fonts.mono(12.5, s.textMuted))),
           ],
         ),
       ),

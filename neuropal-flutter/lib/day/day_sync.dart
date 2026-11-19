@@ -36,8 +36,10 @@ import 'day_rules.dart';
 import 'day_store.dart';
 
 /// Makes the timers sync runs on (tests pass a fake one).
-typedef DayTimerFactory =
-    Timer Function(Duration delay, void Function() callback);
+typedef DayTimerFactory = Timer Function(
+  Duration delay,
+  void Function() callback,
+);
 
 enum DaySyncPhase {
   /// The Settings switch is off.
@@ -91,7 +93,8 @@ String accountKey(String userId) => _opaqueKey(userId);
 
 /// The key the first day-sync builds stored: the address and the account
 /// together. Only read, to recognise a day they saved as this account's.
-String legacyAccountKey(String server, String who) => _opaqueKey('$server|$who');
+String legacyAccountKey(String server, String who) =>
+    _opaqueKey('$server|$who');
 
 String _opaqueKey(String text) {
   int fnv(int seed) {
@@ -507,7 +510,11 @@ class DaySync extends ChangeNotifier {
       } else {
         // Whose day it is, at once: this account never sees the last one's
         // day, and nothing done from now on is cleared by a later sync.
-        if (_enabled) _ownDay(acct);
+        // Only where this account may sync: on a server without day sync,
+        // or after a refused day or an ended session, nothing is sent
+        // anywhere, and the day that exists only on this phone stays (the
+        // owner step runs before the first sync that may happen).
+        if (_enabled && _mayTry) _ownDay(acct);
         _kick();
       }
     } else if (resumed && acct != null) {
