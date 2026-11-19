@@ -1,8 +1,11 @@
 // The Library: every document on the backend with its processing status
 // and how far you've read. Pull down (or use the Refresh button) to reload;
-// tap a document to open it in the Reader.
+// tap a document to open it in the Reader. "Add a document" uploads one from
+// this phone (upload_panel.dart); the new document's card then shows its
+// processing like any other.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../app_routes.dart';
 import '../data/backend.dart';
 import '../data/models.dart';
+import '../pal/pal_bubble.dart';
 import '../reader/reader_controller.dart';
 import '../theme/np_style.dart';
 import '../widgets/np_banner.dart';
@@ -20,7 +24,9 @@ import '../widgets/np_pressable.dart';
 import '../widgets/np_scaffold.dart';
 import '../widgets/np_text.dart';
 import '../widgets/now_playing_bar.dart';
+import 'document_picker.dart';
 import 'library_controller.dart';
+import 'upload_panel.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -75,11 +81,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
         color: s.accentFill,
         backgroundColor: s.surfaceHigh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+          // Room under the last card for Pal's bubble.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            18,
+            16,
+            math.max(28, palBubbleClearance(context, AppRoutes.library)),
+          ),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             _LibraryTitle(library: library),
             const SizedBox(height: 14),
+            UploadSection(
+              controller: library.uploads,
+              demo: library.isDemo,
+              onPick: () => unawaited(library.uploads.pickAndUpload(DocumentPicker.of(context))),
+            ),
+            const SizedBox(height: 16),
             ..._content(context, library),
           ],
         ),
@@ -172,9 +190,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Upload papers from the Expo app, or drop files into '
-                '~/NeuroPal-Inbox on the Mac mini. (Uploading from this app '
-                'arrives in M2.)',
+                'Add a paper or a book with “Add a document” above. It goes to '
+                'your NeuroPal server, which gets it ready for reading and '
+                'listening.',
                 style: s.fonts.body(14.5, s.textMuted),
               ),
             ],

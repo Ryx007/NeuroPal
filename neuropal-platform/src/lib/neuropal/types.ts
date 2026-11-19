@@ -80,6 +80,39 @@ export interface ChatMessage {
   createdAt?: string;
 }
 
+// ---- study tools: POST /api/documents/:id/{summarize|quiz|cheatsheet|explain|flashcards} ----
+
+/** How deep a summary or an explanation goes. */
+export type StudyDepth = "quick" | "intuitive" | "comprehensive";
+export type QuizDifficulty = "mixed" | "easy" | "hard";
+
+/** Summary, quiz, cheat sheet and explain share Ask's envelope; `answer` is Markdown. */
+export interface StudyAnswer {
+  answer: string;
+  citations: Citation[];
+  threadId?: string;
+  model?: string;
+  provider?: string;
+  depth?: string;
+  count?: number;
+  difficulty?: string;
+  chunksUsed?: number;
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+}
+
+export interface FlashcardsReply {
+  cards: Flashcard[];
+  count?: number;
+  threadId?: string;
+  model?: string;
+  provider?: string;
+  chunksUsed?: number;
+}
+
 export interface EpubManifest {
   id: string;
   title: string;

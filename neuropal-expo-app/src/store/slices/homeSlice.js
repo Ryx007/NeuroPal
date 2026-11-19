@@ -1,81 +1,123 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, current, isDraft, nanoid } from "@reduxjs/toolkit";
 
-import { createMockTasks, mockAnchors } from "../../data/mockData";
+import {
+  CHECKIN_CAP,
+  CHECKIN_MERGE_MS,
+  ORDER,
+  SECTIONS,
+  TEXT_MAX,
+  adoptHome,
+  canonical,
+  cleanLevel,
+  cleanText,
+  createdStamp,
+  defaultSyncMeta,
+  definitionKey,
+  deriveDay,
+  isDayBody,
+  later,
+  localDate,
+  migrateHome,
+  stamps,
+  stampsFrom,
+  starterAnchors,
+  starterTasks,
+  tombstoneFor,
+  withTombstone,
+  withTombstones,
+} from "../../services/dayModel.js";
 
-// Local date stamp (YYYY-MM-DD) — the MVD resets each morning.
-function todayStamp() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+// The day: check-ins, the minimum viable day, timed anchors and the to-do
+// list. It syncs through the server (docs/DAY-SYNC.md; services/daySync.js),
+// and works exactly the same signed out, offline or with sync switched off.
+//
+// What screens and the Android widget read keeps its shape: `tasks`,
+// `anchors` and `todos` are LIVE items only, with task.done and
+// anchor.status. Those two are derived from `doneOn` (the local date of the
+// tick) by deriveDay — never set on their own. Every item also carries
+// createdAt / updatedAt (and doneOn / tickAt for tasks and anchors); deleted
+// items wait in `sync.gone` as tombstones until the server has them.
+//
+// Action creators read the clock (and make ids) in `prepare`, into `meta`,
+// so payloads keep their old shape and the reducers stay pure (the tests in
+// scripts/day-model.test.mjs replay any moment through them).
 
 // Check-in history from the Home slider: newest last, capped. Adjustments
 // made within CHECKIN_MERGE_MS of the last entry refine that entry instead of
 // adding a new one (one check-in = one settled feeling, not every key press).
-export const CHECKIN_CAP = 200;
-export const CHECKIN_MERGE_MS = 60 * 1000;
+export { CHECKIN_CAP, CHECKIN_MERGE_MS };
+// The server's text limits. Titles and subtitles are cut to them (and
+// cleaned like the server does) as they are written, and the inputs that
+// write them take no more (maxLength), so a sync never cuts text the person
+// believes is kept.
+export { TEXT_MAX };
 const CHECKIN_STATES = new Set(["green", "yellow", "red"]);
 
-function cleanLevel(value) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : undefined;
-}
-
-// Older saves have no checkins; anything malformed is dropped, never thrown.
-function cleanCheckins(list) {
-  if (!Array.isArray(list)) return [];
-  const out = [];
-  for (const c of list) {
-    if (!c || !CHECKIN_STATES.has(c.state) || typeof c.at !== "string" || Number.isNaN(Date.parse(c.at))) continue;
-    out.push({ state: c.state, level: cleanLevel(c.level) ?? null, at: c.at });
-  }
-  return out.slice(-CHECKIN_CAP);
-}
-
-const initialState = {
-  nervousState: undefined,
-  // Exact level on the Home check-in slider, 0–1 (undefined until the first
-  // check-in). recordCheckin keeps it in step with nervousState; if the state
-  // is ever set on its own, the slider shows that state's middle instead.
-  nervousLevel: undefined,
-  // [{ state, level, at }] — see CHECKIN_CAP / CHECKIN_MERGE_MS above.
-  checkins: [],
-  // Minimum viable day — 3-5 core items, re-set every morning.
-  tasks: createMockTasks(),
-  dayStamp: todayStamp(),
-  // Timed anchors (medication, breaks, appointments) — the planner. The
-  // Home "Next anchor" card is derived from these.
-  anchors: mockAnchors,
-  // Free-form running checklist (Toolbox to-do tool).
-  todos: [],
-};
-
-let idCounter = 0;
+// Random tail: two devices adding an item in the same millisecond must not
+// make the same id (the server would treat them as one item).
 function freshId(prefix) {
-  idCounter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${idCounter}`;
+  return `${prefix}-${Date.now().toString(36)}-${nanoid(8)}`;
+}
+
+const timed = (payload) => ({ payload, meta: stamps() });
+const timedWithId = (prefix) => (payload) => ({ payload, meta: { ...stamps(), id: freshId(prefix) } });
+
+// A plain snapshot of part of the state. Immer drafts only the original
+// tree: a list assigned earlier in the same reducer is already plain.
+const plain = (value) => (isDraft(value) ? current(value) : value);
+
+function freshHome(today, sync = defaultSyncMeta()) {
+  return deriveDay(
+    {
+      nervousState: undefined,
+      // Exact level on the Home check-in slider, 0–1 (undefined until the
+      // first check-in). recordCheckin keeps it in step with nervousState; if
+      // the state is ever set on its own, the slider shows that state's
+      // middle instead.
+      nervousLevel: undefined,
+      // [{ state, level, at }] — see CHECKIN_CAP / CHECKIN_MERGE_MS above.
+      checkins: [],
+      // Minimum viable day — 3-5 core items; ticks count for the day they
+      // were made (doneOn).
+      tasks: starterTasks(),
+      // The local date done / status were derived for (the widget reads it).
+      dayStamp: today,
+      // Timed anchors (medication, breaks, appointments) — the planner. The
+      // Home "Next anchor" card is derived from these.
+      anchors: starterAnchors(),
+      // Free-form running checklist (Toolbox to-do tool).
+      todos: [],
+      // Day sync: the switch, gen, whose day this is, tombstones.
+      sync,
+    },
+    today
+  );
+}
+
+const initialState = freshHome(localDate());
+
+// Deleting = hide the item and keep a tombstone (no content) for the server.
+function removeLive(state, section, id, now) {
+  const item = state[section].find((it) => it.id === id);
+  if (!item) return;
+  const tomb = tombstoneFor(item, now);
+  state[section] = state[section].filter((it) => it.id !== id);
+  state.sync.gone[section] = withTombstone(plain(state.sync.gone[section]), tomb);
 }
 
 const homeSlice = createSlice({
   name: "home",
   initialState,
   reducers: {
-    hydrateHome(state, action) {
-      Object.assign(state, action.payload);
-      if (!Array.isArray(state.todos)) state.todos = [];
-      if (!Array.isArray(state.anchors)) state.anchors = [];
-      // Slider check-ins (saves from before the slider have neither field).
-      state.nervousLevel = cleanLevel(state.nervousLevel);
-      state.checkins = cleanCheckins(state.checkins);
-      // New day → yesterday's checkmarks don't count anymore.
-      const today = todayStamp();
-      if (state.dayStamp !== today) {
-        state.dayStamp = today;
-        state.tasks.forEach((t) => {
-          t.done = false;
-        });
-        state.anchors.forEach((a) => {
-          a.status = "upcoming";
-        });
-      }
+    // Storage → state. Saves from 0.3.0 and older get their stamps here
+    // (dayModel.migrateHome: the contract's "Old saves"); yesterday's ticks
+    // stop counting because done / status are derived for today.
+    hydrateHome: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        return migrateHome(action.payload, current(state), { now, today });
+      },
+      prepare: timed,
     },
     setNervousState(state, action) {
       state.nervousState = action.payload;
@@ -123,88 +165,260 @@ const homeSlice = createSlice({
       },
     },
     // ---- minimum viable day ----
-    toggleTask(state, action) {
-      const task = state.tasks.find((entry) => entry.id === action.payload);
-      if (task) {
-        task.done = !task.done;
-      }
+    toggleTask: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const task = state.tasks.find((entry) => entry.id === action.payload);
+        if (task) {
+          // What the person sees flips (a tick from yesterday already shows
+          // as open, so tapping it ticks it for today).
+          task.doneOn = task.done ? null : today;
+          task.tickAt = later(now, task.tickAt);
+        }
+        deriveDay(state, today);
+      },
+      prepare: timed,
     },
-    addTask(state, action) {
-      const title = String(action.payload || "").trim();
-      if (!title) return;
-      state.tasks.push({ id: freshId("t"), title, done: false });
+    addTask: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const title = cleanText(action.payload, TEXT_MAX.taskTitle);
+        if (!title) return;
+        const at = createdStamp(now, state.tasks);
+        state.tasks.push({ id: action.meta?.id || freshId("t"), title, done: false, createdAt: at, updatedAt: at, doneOn: null, tickAt: null });
+        deriveDay(state, today);
+      },
+      prepare: timedWithId("t"),
     },
-    removeTask(state, action) {
-      state.tasks = state.tasks.filter((t) => t.id !== action.payload);
+    removeTask: {
+      reducer(state, action) {
+        removeLive(state, "tasks", action.payload, stampsFrom(action.meta).now);
+      },
+      prepare: timed,
     },
-    renameTask(state, action) {
-      const { id, title } = action.payload;
-      const task = state.tasks.find((t) => t.id === id);
-      if (task && String(title || "").trim()) task.title = title.trim();
+    renameTask: {
+      reducer(state, action) {
+        const { now } = stampsFrom(action.meta);
+        const { id, title } = action.payload || {};
+        const task = state.tasks.find((t) => t.id === id);
+        const next = cleanText(title, TEXT_MAX.taskTitle);
+        if (task && next && next !== task.title) {
+          task.title = next;
+          task.updatedAt = later(now, task.updatedAt);
+        }
+      },
+      prepare: timed,
     },
     // ---- timed anchors (planner) ----
-    addAnchor(state, action) {
-      const { title, subtitle, hour, minute, icon, location } = action.payload;
-      if (!String(title || "").trim()) return;
-      state.anchors.push({
-        id: freshId("a"),
-        title: title.trim(),
-        subtitle: String(subtitle || "").trim(),
-        time: {
-          hour: Math.max(0, Math.min(23, hour ?? 9)),
-          minute: Math.max(0, Math.min(59, minute ?? 0)),
-        },
-        status: "upcoming",
-        icon: icon || "flag",
-        // P8: optional place-based trigger {lat, lng, radius}
-        location: location || null,
-      });
-      state.anchors.sort(
-        (a, b) => a.time.hour * 60 + a.time.minute - (b.time.hour * 60 + b.time.minute)
-      );
+    addAnchor: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const { title, subtitle, hour, minute, icon, location } = action.payload || {};
+        const name = cleanText(title, TEXT_MAX.anchorTitle);
+        if (!name) return;
+        const at = later(now);
+        state.anchors.push({
+          id: action.meta?.id || freshId("a"),
+          title: name,
+          subtitle: cleanText(subtitle, TEXT_MAX.anchorSubtitle),
+          time: {
+            hour: Math.max(0, Math.min(23, hour ?? 9)),
+            minute: Math.max(0, Math.min(59, minute ?? 0)),
+          },
+          status: "upcoming",
+          icon: icon || "flag",
+          // P8: optional place-based trigger {lat, lng, radius}
+          location: location || null,
+          createdAt: at,
+          updatedAt: at,
+          doneOn: null,
+          tickAt: null,
+        });
+        state.anchors.sort(ORDER.anchors);
+        deriveDay(state, today);
+      },
+      prepare: timedWithId("a"),
     },
-    updateAnchor(state, action) {
-      const { id, ...patch } = action.payload;
-      const anchor = state.anchors.find((a) => a.id === id);
-      if (!anchor) return;
-      if (patch.title !== undefined) anchor.title = String(patch.title).trim();
-      if (patch.subtitle !== undefined) anchor.subtitle = String(patch.subtitle).trim();
-      if (patch.hour !== undefined || patch.minute !== undefined) {
-        anchor.time = {
-          hour: Math.max(0, Math.min(23, patch.hour ?? anchor.time.hour)),
-          minute: Math.max(0, Math.min(59, patch.minute ?? anchor.time.minute)),
-        };
-      }
-      if (patch.icon !== undefined) anchor.icon = patch.icon;
-      // P8: place-based anchor — {lat, lng, radius} or null to detach
-      if (patch.location !== undefined) anchor.location = patch.location;
-      state.anchors.sort(
-        (a, b) => a.time.hour * 60 + a.time.minute - (b.time.hour * 60 + b.time.minute)
-      );
+    updateAnchor: {
+      reducer(state, action) {
+        const { now } = stampsFrom(action.meta);
+        const { id, ...patch } = action.payload || {};
+        const anchor = state.anchors.find((a) => a.id === id);
+        if (!anchor) return;
+        const before = definitionKey(anchor, "anchors");
+        // Fields this app doesn't edit (another client's category,
+        // flexMinutes, anything added later) stay as they are.
+        if (patch.title !== undefined) {
+          // An empty name keeps the old one (the editor never saves one).
+          const name = cleanText(patch.title, TEXT_MAX.anchorTitle);
+          if (name) anchor.title = name;
+        }
+        if (patch.subtitle !== undefined) anchor.subtitle = cleanText(patch.subtitle, TEXT_MAX.anchorSubtitle);
+        if (patch.hour !== undefined || patch.minute !== undefined) {
+          anchor.time = {
+            ...anchor.time,
+            hour: Math.max(0, Math.min(23, patch.hour ?? anchor.time.hour)),
+            minute: Math.max(0, Math.min(59, patch.minute ?? anchor.time.minute)),
+          };
+        }
+        if (patch.icon !== undefined) anchor.icon = patch.icon;
+        // P8: place-based anchor — {lat, lng, radius} or null to detach
+        if (patch.location !== undefined) anchor.location = patch.location;
+        // Saving the editor unchanged is not an edit (it must not beat a
+        // real edit made on another device).
+        if (definitionKey(anchor, "anchors") !== before) anchor.updatedAt = later(now, anchor.updatedAt);
+        state.anchors.sort(ORDER.anchors);
+      },
+      prepare: timed,
     },
-    removeAnchor(state, action) {
-      state.anchors = state.anchors.filter((a) => a.id !== action.payload);
+    removeAnchor: {
+      reducer(state, action) {
+        removeLive(state, "anchors", action.payload, stampsFrom(action.meta).now);
+      },
+      prepare: timed,
     },
-    setAnchorStatus(state, action) {
-      const { id, status } = action.payload;
-      const anchor = state.anchors.find((a) => a.id === id);
-      if (anchor) anchor.status = status;
+    setAnchorStatus: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const { id, status } = action.payload || {};
+        const anchor = state.anchors.find((a) => a.id === id);
+        if (anchor) {
+          const done = status === "done";
+          if ((anchor.doneOn === today) !== done) {
+            anchor.doneOn = done ? today : null;
+            anchor.tickAt = later(now, anchor.tickAt);
+          }
+        }
+        deriveDay(state, today);
+      },
+      prepare: timed,
     },
     // ---- running to-do list ----
-    addTodo(state, action) {
-      const title = String(action.payload || "").trim();
-      if (!title) return;
-      state.todos.push({ id: freshId("td"), title, done: false });
+    addTodo: {
+      reducer(state, action) {
+        const { now } = stampsFrom(action.meta);
+        const title = cleanText(action.payload, TEXT_MAX.todoTitle);
+        if (!title) return;
+        const at = createdStamp(now, state.todos);
+        state.todos.push({ id: action.meta?.id || freshId("td"), title, done: false, createdAt: at, updatedAt: at });
+      },
+      prepare: timedWithId("td"),
     },
-    toggleTodo(state, action) {
-      const todo = state.todos.find((t) => t.id === action.payload);
-      if (todo) todo.done = !todo.done;
+    // A to-do's `done` is part of what it is (it doesn't reset each day).
+    toggleTodo: {
+      reducer(state, action) {
+        const { now } = stampsFrom(action.meta);
+        const todo = state.todos.find((t) => t.id === action.payload);
+        if (todo) {
+          todo.done = !todo.done;
+          todo.updatedAt = later(now, todo.updatedAt);
+        }
+      },
+      prepare: timed,
     },
-    removeTodo(state, action) {
-      state.todos = state.todos.filter((t) => t.id !== action.payload);
+    removeTodo: {
+      reducer(state, action) {
+        removeLive(state, "todos", action.payload, stampsFrom(action.meta).now);
+      },
+      prepare: timed,
     },
-    clearDoneTodos(state) {
-      state.todos = state.todos.filter((t) => !t.done);
+    clearDoneTodos: {
+      reducer(state, action) {
+        const { now } = stampsFrom(action.meta);
+        const todos = plain(state.todos);
+        const done = todos.filter((t) => t.done);
+        if (!done.length) return;
+        const ids = new Set(done.map((t) => t.id));
+        state.todos = todos.filter((t) => !ids.has(t.id));
+        state.sync.gone.todos = withTombstones(plain(state.sync.gone.todos), done.map((t) => tombstoneFor(t, now)));
+      },
+      prepare: timed,
+    },
+    // Undo for a deleted task, anchor or to-do: the item comes back as an
+    // edit (updatedAt after its deletion), which is how the server sees it.
+    // payload.item is the whole item from the screen's own undo state: once
+    // the deletion has synced, the server's copy (and ours) has no content.
+    restoreDayItem: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const { section, item } = action.payload || {};
+        if (!SECTIONS.includes(section) || !item || typeof item.id !== "string") return;
+        if (state[section].some((it) => it.id === item.id)) return;
+        const gone = plain(state.sync.gone[section]);
+        const tomb = gone.find((t) => t.id === item.id);
+        const restored = { ...item, updatedAt: later(now, item.updatedAt, tomb && tomb.deletedAt) };
+        delete restored.deletedAt;
+        state.sync.gone[section] = gone.filter((t) => t.id !== item.id);
+        state[section].push(restored);
+        state[section].sort(ORDER[section]);
+        deriveDay(state, today);
+      },
+      prepare: timed,
+    },
+    // ---- the date and day sync ----
+    // The date changed while the app was open: re-derive done / status.
+    refreshDay: {
+      reducer(state, action) {
+        deriveDay(state, stampsFrom(action.meta).today);
+      },
+      prepare: timed,
+    },
+    // "Keep my day in sync". Switching it on again is a first sync (§8): the
+    // stored gen is forgotten, so a day erased elsewhere meanwhile is added
+    // back instead of lost.
+    setDaySyncEnabled(state, action) {
+      const on = Boolean(action.payload);
+      if (on && !state.sync.enabled) state.sync.gen = 0;
+      state.sync.enabled = on;
+    },
+    // A day that never synced joins the first account it syncs as.
+    setDayOwner(state, action) {
+      state.sync.owner = typeof action.payload === "string" && action.payload ? action.payload : null;
+    },
+    // The day last synced as another account: clear it (and its gen) before
+    // anything is sent as this one (payload: the new account's id). Pal's
+    // brain dump clears on the same action (palSlice).
+    resetDay: {
+      reducer(state, action) {
+        const { today } = stampsFrom(action.meta);
+        const owner = typeof action.payload === "string" && action.payload ? action.payload : null;
+        const snap = current(state);
+        return { ...snap, ...freshHome(today, { ...defaultSyncMeta(), enabled: snap.sync.enabled, owner }) };
+      },
+      prepare: timed,
+    },
+    // The server's merged day (payload: the sync answer). Sections are
+    // replaced unless identical (so screens and the anchor schedule don't
+    // churn); local items the answer doesn't mention stay. Home's state and
+    // slider follow the newest check-in when it is newer than ours. The
+    // brain dump is adopted from the same action (palSlice).
+    adoptDay: {
+      reducer(state, action) {
+        const { now, today } = stampsFrom(action.meta);
+        const body = action.payload;
+        if (!isDayBody(body)) return;
+        const snap = current(state);
+        const next = adoptHome(snap, body, { today });
+        for (const section of SECTIONS) {
+          const r = next.sections[section];
+          if (!r) continue;
+          if (canonical(r.live) !== canonical(snap[section])) state[section] = r.live;
+          if (canonical(r.gone) !== canonical(snap.sync.gone[section])) state.sync.gone[section] = r.gone;
+        }
+        if (next.checkins && canonical(next.checkins) !== canonical(snap.checkins)) state.checkins = next.checkins;
+        if (next.follow) {
+          state.nervousState = next.follow.state;
+          state.nervousLevel = cleanLevel(next.follow.level);
+        } else if (next.clearState) {
+          // Erased everywhere: the current check-in goes with the day.
+          state.nervousState = undefined;
+          state.nervousLevel = undefined;
+        }
+        state.sync.gen = next.gen;
+        state.sync.lastSyncAt = now;
+        deriveDay(state, today);
+      },
+      prepare: timed,
     },
   },
 });
@@ -226,6 +440,28 @@ export const {
   toggleTodo,
   removeTodo,
   clearDoneTodos,
+  restoreDayItem,
+  refreshDay,
+  setDaySyncEnabled,
+  setDayOwner,
+  resetDay,
+  adoptDay,
 } = homeSlice.actions;
+
+// What AppProviders writes to storage ("np.home.v2"; hydrateHome reads it
+// back, old saves included).
+export function persistedHome(home) {
+  return {
+    nervousState: home.nervousState,
+    // Home check-in slider: exact level + capped history.
+    nervousLevel: home.nervousLevel,
+    checkins: home.checkins,
+    tasks: home.tasks,
+    anchors: home.anchors,
+    todos: home.todos,
+    dayStamp: home.dayStamp,
+    sync: home.sync,
+  };
+}
 
 export default homeSlice.reducer;

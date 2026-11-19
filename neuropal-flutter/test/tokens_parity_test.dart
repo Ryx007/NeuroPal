@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neuropal/theme/appearance.dart';
 import 'package:neuropal/theme/classic_palette.dart';
 import 'package:neuropal/theme/color_math.dart';
+import 'package:neuropal/theme/home_layout.dart';
 import 'package:neuropal/theme/pal.dart';
 import 'package:neuropal/theme/signal_palette.dart';
 import 'package:neuropal/theme/tokens.g.dart';
@@ -118,12 +119,27 @@ void main() {
     });
   });
 
+  group('home (effectiveTiles)', () {
+    final cases = _cases(fixtures, 'effectiveTiles');
+    test('covers weekday, weekend and hidden tiles', () {
+      expect(cases, isNotEmpty);
+    });
+    for (final c in cases) {
+      test('${c['date']} → ${c['ids']}', () {
+        // A date without a zone is local time, in JS and in Dart alike.
+        final ids = effectiveTiles(c['home'], DateTime.parse(c['date'] as String))
+            .map((t) => t.id)
+            .toList();
+        expect(ids, equals(c['ids']));
+      });
+    }
+  });
+
   // ---- M2 ------------------------------------------------------------------
-  // The Ask-Pal interpreters and Home day rules arrive with the M2 screens
-  // ("Make it yours", "Arrange Home"). Their fixtures stay in the JSON so the
-  // contract is visible; they are skipped until the Dart port exists.
-  const m2 = 'TODO(M2): port interpret.js / home.js#effectiveTiles';
+  // The Ask-Pal interpreters arrive with the M2 screens ("Make it yours",
+  // "Arrange Home"). Their fixtures stay in the JSON so the contract is
+  // visible; they are skipped until the Dart port exists.
+  const m2 = 'TODO(M2): port interpret.js';
   test('interpretAppearance fixtures', () {}, skip: m2);
   test('interpretHome fixtures', () {}, skip: m2);
-  test('effectiveTiles fixtures', () {}, skip: m2);
 }

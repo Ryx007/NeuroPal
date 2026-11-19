@@ -22,15 +22,104 @@ const EMAIL = "ryx@example.com";
 const PASSWORD = "neuropal-dev-1";
 
 // ---- the fake AI (installed before the app loads the real module) ----------
+// Ask and Pal get fixed, labelled answers. The study routes (study.js) get
+// answers in the shapes a real model returns for their prompts: a Markdown
+// summary or cheat sheet with headings, bold, lists (and maths), a quiz in
+// the asked-for format (numbered, **[level]** tags, "**Answer:**" lines),
+// an explanation of the passage, and {cards:[{front,back}]} — built from the
+// chunks the route passes, so they read like the document.
 const providerPath = require.resolve(path.join(BACKEND, "src/services/aiProvider.js"));
+const flat = (t) => String(t || "").replace(/\s+/g, " ").trim();
+const sentencesOf = (t) => flat(t).match(/[^.!?]+[.!?]+(?=\s|$)/g)?.map((s) => s.trim()).filter((s) => s.split(" ").length >= 4) ?? [];
+const studyPoints = (chunks, n) => {
+  const all = chunks.flatMap((c) => sentencesOf(c.text).map((s) => ({ s, page: c.anchor?.page || 1 })));
+  if (!all.length) all.push({ s: "The document has very little text to work from.", page: 1 });
+  return Array.from({ length: n }, (_, i) => all[Math.floor((i * all.length) / n) % all.length]);
+};
+const lead = (s, words = 4) => s.split(" ").slice(0, words).join(" ").replace(/[,;:.]$/, "");
+/** "**Measuring correlations between** two detectors…" */
+const boldLead = (s, words = 3) => {
+  const w = s.split(" ");
+  return `**${w.slice(0, words).join(" ")}** ${w.slice(words).join(" ")}`;
+};
+const cite = (chunks) => chunks.slice(0, 2).map((c) => ({ chunkId: c._id || c.chunkId, page: c.anchor?.page || 1, excerpt: String(c.text).slice(0, 120) }));
+const DEV_LABEL = "_Dev server (no AI model here): built from the document’s own sentences._";
+
+function fakeStudyAnswer(question, chunks, docTitle) {
+  const depth = /tight executive summary/.test(question) ? "quick" : /section-by-section/.test(question) ? "comprehensive" : "intuitive";
+  if (/^Summarize this document/.test(question)) {
+    const pts = studyPoints(chunks, depth === "quick" ? 4 : depth === "comprehensive" ? 8 : 6);
+    const parts = [
+      `### What it is about`,
+      `*${docTitle}*: ${pts[0].s}`,
+      `### Key ideas`,
+      ...pts.slice(1, depth === "quick" ? 4 : 5).map((p) => `- ${boldLead(p.s)}`),
+    ];
+    if (depth !== "quick") parts.push(`### Why it matters`, pts[pts.length - 1].s, "In symbols, the idea the text keeps returning to is $g^{(2)}(0) = 1$ for a coherent source.");
+    if (depth === "comprehensive") parts.push(`### Section by section`, ...pts.slice(5).map((p, i) => `${i + 1}. ${p.s}`));
+    return [...parts, "", DEV_LABEL].join("\n\n");
+  }
+  if (/^Create \d+ practice questions/.test(question)) {
+    const n = Math.max(1, Math.min(25, Number(/^Create (\d+)/.exec(question)[1])));
+    const levels = ["easy", "medium", "hard"];
+    const pts = studyPoints(chunks, n);
+    const items = pts.map((p, i) => {
+      const level = levels[i % 3];
+      if (i === 2) {
+        return `${i + 1}. **[${level}]** Walk through the reasoning behind “${lead(p.s, 6)}…” in two steps.\n   **Answer:** Two steps:\n   1. ${p.s}\n   2. Compare with an ordinary source, where $g^{(2)}(0) \\neq 1$.`;
+      }
+      return `${i + 1}. **[${level}]** What does the document say about “${lead(p.s, 5)}…”?\n   **Answer:** ${p.s}`;
+    });
+    return [`Here are ${n} questions on *${docTitle}*. Try each one before you look.`, ...items, DEV_LABEL].join("\n\n");
+  }
+  if (/^Produce a one-page exam cheatsheet/.test(question)) {
+    const pts = studyPoints(chunks, 7);
+    return [
+      "### Key definitions",
+      ...pts.slice(0, 3).map((p) => `- **${lead(p.s, 3)}** — ${p.s}`),
+      "### Core results",
+      "| Result | In words |",
+      "|---|---|",
+      ...pts.slice(3, 5).map((p) => `| ${lead(p.s, 3)} | ${p.s} |`),
+      "$$g^{(2)}(0) = \\frac{\\langle a^\\dagger a^\\dagger a a \\rangle}{\\langle a^\\dagger a \\rangle^2}$$",
+      "### Pitfalls",
+      `- Don’t confuse the two detectors’ jobs: ${pts[5].s}`,
+      "### The argument in one line",
+      pts[6].s,
+      "",
+      DEV_LABEL,
+    ].join("\n");
+  }
+  if (/^Explain this passage/.test(question)) {
+    const passage = flat((/"([\s\S]*)"\s*$/.exec(question) || [])[1] || "");
+    const pts = studyPoints(chunks, 2);
+    const how = /in 2-3 sentences/.test(question) ? "quick" : /thoroughly/.test(question) ? "comprehensive" : "intuitive";
+    return [
+      `### In plain words`,
+      `The passage “${passage.slice(0, 90)}${passage.length > 90 ? "…" : ""}” says that ${passage.charAt(0).toLowerCase()}${passage.slice(1, 200)}`,
+      how === "quick" ? "" : `### How it fits\n\n- **Before it:** ${pts[0].s}\n- **After it:** ${pts[1].s}`,
+      `*Depth: ${how}.*`,
+      DEV_LABEL,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return null;
+}
+
 const fake = {
   activeProvider: () => "dev",
   DEFAULT_SYSTEM: "",
   async generateAnswer({ question, contextChunks = [], rawContext = "", docTitle = "" }) {
+    const study = fakeStudyAnswer(String(question), contextChunks, docTitle);
+    if (study !== null) {
+      await new Promise((r) => setTimeout(r, 900));
+      return { answer: study, citations: cite(contextChunks), verbatim: [], model: "dev-fake", provider: "dev", usage: { prompt: 0, completion: 0, total: 0 } };
+    }
     await new Promise((r) => setTimeout(r, 700));
     const source = contextChunks.length ? contextChunks.map((c) => c.text).join(" ") : rawContext;
     const first = String(source).replace(/\s+/g, " ").trim().slice(0, 160);
-    const citations = contextChunks.slice(0, 2).map((c) => ({ chunkId: c._id || c.chunkId, page: c.anchor?.page || 1, excerpt: String(c.text).slice(0, 120) }));
+    const citations = cite(contextChunks);
     if (!citations.length && first) citations.push({ page: 1, excerpt: first.slice(0, 120) });
     return {
       answer: `**Dev server answer** (no AI model here) to “${String(question).slice(0, 80)}” about *${docTitle}*.\n\nThe document begins: ${first}…\n\n- Point one, grounded in the text [1]\n- Point two`,
@@ -41,10 +130,19 @@ const fake = {
       usage: { prompt: 0, completion: 0, total: 0 },
     };
   },
-  async generateStructured({ task }) {
+  async generateStructured({ task, contextChunks = [] }) {
     await new Promise((r) => setTimeout(r, 500));
     if (/Break this task/.test(task)) {
       return { data: { steps: ["Open the file and read the title", "Write one line about what done means", "Do ten minutes on the first part", "Take a short break"] }, model: "dev-fake", provider: "dev" };
+    }
+    const deck = /^Create (\d+) flashcards/.exec(String(task));
+    if (deck) {
+      await new Promise((r) => setTimeout(r, 400));
+      const n = Math.max(3, Math.min(40, Number(deck[1])));
+      const cards = studyPoints(contextChunks, n).map((p, i) =>
+        i === 1 ? { front: "What is $g^{(2)}(0)$ for coherent light?", back: "It is $1$: the photons arrive independently, with no bunching." } : { front: `What does the document say about “${lead(p.s, 5)}…”?`, back: p.s },
+      );
+      return { data: { cards }, model: "dev-fake", provider: "dev" };
     }
     return { data: { reply: "That sounds like a lot. Want to pick one small next step together?", cards: [{ front: "What is g2(0) for coherent light?", back: "1" }] }, model: "dev-fake", provider: "dev" };
   },
@@ -103,6 +201,25 @@ Coherent states are eigenstates of the annihilation operator. They are the close
   const app = buildApp();
   const server = app.listen(port, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
+
+  // Stop with Ctrl-C or `kill <pid>` (SIGTERM): the database's temp folder
+  // (~200 MB under /tmp/mongo-mem-*) and the storage folder are removed.
+  // `kill -9` skips this and leaves them behind.
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    try {
+      server.close();
+      await mongoose.disconnect();
+      await mongod.stop({ doCleanup: true, force: true });
+      fs.rmSync(storage, { recursive: true, force: true });
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
 
   // The account, through the real route.
   const body = JSON.stringify({ email: EMAIL, password: PASSWORD, name: "Ryx", inviteCode: "np-dev" });

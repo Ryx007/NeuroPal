@@ -8,9 +8,9 @@ import { useDispatch, useSelector, useStore } from "react-redux";
 import { announce } from "../../services/announce";
 import { requestBreakdown } from "../../services/palApi";
 import { CRISIS_REPLY, TASK_MAX_CHARS, helloFor, localBreakdown, looksLikeCrisis, moodFor, suggestionsFor, unfinishedReading } from "../../services/palAssistant";
-import { addTask, addTodo, recordCheckin, setNervousState } from "../../store/slices/homeSlice";
+import { TEXT_MAX, addTask, recordCheckin, setNervousState } from "../../store/slices/homeSlice";
 import { setHome } from "../../store/slices/lookSlice";
-import { addDump, closeSheet, removeDump, setBubbleHidden, setSection } from "../../store/slices/palSlice";
+import { addDump, closeSheet, moveDumpLine, removeDump, setBubbleHidden, setSection } from "../../store/slices/palSlice";
 import { usePalette, useTheme } from "../../theme/ThemeProvider";
 import { effectiveTiles, homeForSkin, normalizePal, palSay, patchTile } from "../../theme/tokens";
 import { middleOfState } from "../home/stateScale";
@@ -556,9 +556,10 @@ function DumpPanel({ pal }) {
     input.current?.focus?.();
   };
   const move = (d, where) => {
-    dispatch(where === "day" ? addTask(d.text) : addTodo(d.text));
-    dispatch(removeDump(d.id));
-    tell({ text: where === "day" ? "Added to your minimum day." : "Added to your to-do list." });
+    // A line longer than the target takes stays here, whole (moveDumpLine).
+    const kept = dispatch(moveDumpLine(d, where));
+    const added = where === "day" ? "Added to your minimum day." : "Added to your to-do list.";
+    tell({ text: kept ? `${added} The full note stays in your brain dump.` : added });
   };
   const remove = (d) => {
     dispatch(removeDump(d.id));
@@ -576,6 +577,7 @@ function DumpPanel({ pal }) {
           onChangeText={setDraft}
           onSubmitEditing={add}
           blurOnSubmit={false}
+          maxLength={TEXT_MAX.dump}
           returnKeyType="done"
           placeholder="A thought, a worry, a to-do…"
           accessibilityLabel="New brain dump item"

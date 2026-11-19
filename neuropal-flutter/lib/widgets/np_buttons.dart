@@ -30,8 +30,8 @@ class NpButton extends StatelessWidget {
   /// Fill the available width.
   final bool expand;
 
-  /// Overrides the default height (primary 48, ghost 44), e.g. 48 for
-  /// ghost buttons on screens that use 48 dp targets throughout.
+  /// Overrides the default height of 48 (the smallest touch target the app
+  /// uses, both kinds); only ever taller.
   final double? minHeight;
 
   @override
@@ -40,13 +40,13 @@ class NpButton extends StatelessWidget {
     final primary = kind == NpButtonKind.primary;
     final radius = s.isSignal ? s.radiusMedium : s.radiusControl;
     final fg = primary ? s.accentInk : s.text;
-    final height = minHeight ?? (primary ? 48.0 : 44.0);
+    final height = minHeight ?? kNpTarget;
 
     return NpPressable(
       onTap: onPressed,
       semanticLabel: semanticLabel,
       focusRadius: radius.clamp(0, 24),
-      minSize: Size(44, height),
+      minSize: Size(kNpTarget, height),
       builder: (context, pressed, focused) {
         final content = Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -125,7 +125,7 @@ class NpIconButton extends StatelessWidget {
     required this.icon,
     required this.semanticLabel,
     required this.onPressed,
-    this.size = 44,
+    this.size = kNpTarget,
     this.iconSize = 22,
     this.outlined = true,
     this.color,
@@ -218,7 +218,7 @@ class NpChip extends StatelessWidget {
       semanticLabel: semanticLabel,
       focusRadius: radius.clamp(0, 22),
       builder: (context, pressed, focused) => Container(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: kNpTarget),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
           color: bg,

@@ -1,6 +1,6 @@
 "use client";
 // The frame both readers share: the sticky bar (back, title, chapters,
-// view, display, Ask), the body with docked side panels on wide screens and
+// view, display, Study, Ask), the body with docked side panels on wide screens and
 // sheets on narrow ones, and the docked player slot.
 import Link from "next/link";
 import { useCallback, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
@@ -19,30 +19,43 @@ const chaptersPref = {
   set: (open: boolean) => setPrefs({ readerChaptersOpen: open }),
 };
 
-/** Open/closed state of the two side panels, and whether each is docked. */
+/** Open/closed state of the side panels, and whether each is docked. Ask and Study share the right-hand side: one at a time. */
 export function usePanels(rootRef: RefObject<HTMLElement | null>, initialAsk: boolean, hasChapters: boolean) {
   const width = useWidth(rootRef);
   const storedChapters = usePrefs().readerChaptersOpen;
-  const [askOpen, setAskOpen] = useState(initialAsk);
+  const [side, setSide] = useState<"ask" | "study" | null>(initialAsk ? "ask" : null);
+  const askOpen = side === "ask";
+  const studyOpen = side === "study";
   // On narrow screens the chapter list starts closed whatever is remembered.
   const [chaptersSheet, setChaptersSheet] = useState(false);
   const measured = width > 0;
-  const askDocked = measured && askOpen && width >= 880;
+  const sideDocked = measured && side !== null && width >= 880;
+  const askDocked = sideDocked && askOpen;
+  const studyDocked = sideDocked && studyOpen;
   const chaptersWanted = hasChapters && measured && width >= 760 ? storedChapters : chaptersSheet;
-  const chaptersDocked = hasChapters && measured && width >= 760 && storedChapters && (!askDocked || width >= 1180);
+  const chaptersDocked = hasChapters && measured && width >= 760 && storedChapters && (!sideDocked || width >= 1180);
 
-  const toggleAsk = useCallback(() => {
-    setAskOpen((open) => {
-      if (!open && width >= 880 && width < 1180 && chaptersPref.get()) chaptersPref.set(false);
-      return !open;
-    });
-  }, [width]);
+  // The chapter list makes room on mid-width screens. Outside the state
+  // updater: updaters run while rendering, and the preference store would
+  // update other components then.
+  const showSide = useCallback(
+    (which: "ask" | "study", open: boolean | "toggle") => {
+      const next = open === "toggle" ? (side === which ? null : which) : open ? which : side === which ? null : side;
+      if (next && next !== side && width >= 880 && width < 1180 && chaptersPref.get()) chaptersPref.set(false);
+      setSide(next);
+    },
+    [side, width],
+  );
+  const setAskOpen = useCallback((open: boolean) => showSide("ask", open), [showSide]);
+  const toggleAsk = useCallback(() => showSide("ask", "toggle"), [showSide]);
+  const setStudyOpen = useCallback((open: boolean) => showSide("study", open), [showSide]);
+  const openStudy = useCallback(() => showSide("study", true), [showSide]);
 
   const toggleChapters = useCallback(() => {
     if (width >= 760) {
       const next = !chaptersPref.get();
       chaptersPref.set(next);
-      if (next && width < 1180) setAskOpen(false);
+      if (next && width < 1180) setSide(null);
     } else {
       setChaptersSheet((v) => !v);
     }
@@ -61,6 +74,11 @@ export function usePanels(rootRef: RefObject<HTMLElement | null>, initialAsk: bo
     askSheet: measured && askOpen && !askDocked,
     setAskOpen,
     toggleAsk,
+    studyOpen,
+    studyDocked,
+    studySheet: measured && studyOpen && !studyDocked,
+    setStudyOpen,
+    openStudy,
     chaptersOpen: chaptersWanted && hasChapters,
     chaptersDocked,
     chaptersSheet: measured && hasChapters && width < 760 && chaptersSheet,
@@ -79,6 +97,8 @@ export interface ReaderFrameProps {
   chapters: ReactNode;
   ask: ReactNode;
   askTitleId: string;
+  /** Study (study/useStudyTools): its bar button, and the panel docked or in a sheet like Ask. */
+  study?: { button: ReactNode; panel: ReactNode; titleId: string } | null;
   /** Text ⇄ original pages (pdf/arXiv only). */
   view?: { pages: boolean; onChange: (pages: boolean) => void } | null;
   page: ReactNode;
@@ -100,6 +120,7 @@ export function ReaderFrame({
   chapters,
   ask,
   askTitleId,
+  study,
   view,
   page,
   pageStyle,
@@ -152,6 +173,7 @@ export function ReaderFrame({
             </div>
           ) : null}
           <DisplayMenu pagesToggle={narrow ? view : null} />
+          {study?.button}
           <button
             type="button"
             className={`np-btn ${panels.askOpen ? "" : "np-btn--ghost"} np-btn--small`}
@@ -165,12 +187,13 @@ export function ReaderFrame({
         </div>
       </header>
 
-      <div className={styles.body} data-chapters={panels.chaptersDocked || undefined} data-ask={panels.askDocked || undefined}>
+      <div className={styles.body} data-chapters={panels.chaptersDocked || undefined} data-ask={panels.askDocked || (!!study && panels.studyDocked) || undefined}>
         {panels.chaptersDocked ? <div className={`np-panel ${styles.side}`}>{chapters}</div> : null}
         <div className={styles.page} data-surface={customSurface ? "custom" : undefined} style={pageStyle}>
           {page}
         </div>
         {panels.askDocked ? <div className={`np-panel ${styles.side}`}>{ask}</div> : null}
+        {study && panels.studyDocked ? <div className={`np-panel ${styles.side}`}>{study.panel}</div> : null}
       </div>
 
       {player}
@@ -178,6 +201,11 @@ export function ReaderFrame({
       <Sheet open={panels.askSheet} onClose={() => panels.setAskOpen(false)} labelledBy={askTitleId}>
         {panels.askSheet ? ask : null}
       </Sheet>
+      {study ? (
+        <Sheet open={panels.studySheet} onClose={() => panels.setStudyOpen(false)} labelledBy={study.titleId}>
+          {panels.studySheet ? study.panel : null}
+        </Sheet>
+      ) : null}
       <Sheet open={panels.chaptersSheet} onClose={panels.closeChapters} labelledBy={chaptersTitleId}>
         {panels.chaptersSheet ? chapters : null}
       </Sheet>

@@ -333,3 +333,31 @@
   font-size: 1.75rem;
   line-height: 1.05;
 }
+
+/* ---- your day (day sync) ---- */
+.syncStatus {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: 70ch;
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* A problem reads a little stronger (in words and weight, never colour alone). */
+.syncStatus[data-tone="problem"] {
+  color: var(--np-on-surface);
+  font-weight: 600;
+}
+
+.syncIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  /* Centred on the first line of text. */
+  margin-top: 0.1875em;
+}
+
+.syncStatus[data-tone="ok"] .syncIcon {
+  color: var(--np-accent-text);
+}

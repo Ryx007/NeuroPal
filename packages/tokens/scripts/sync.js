@@ -262,11 +262,16 @@ const List<String> kPalEyes = ${dart(T.PAL_OPTIONS.eyes)};
 const List<String> kPalMouths = ${dart(T.PAL_OPTIONS.mouth)};
 const List<String> kPalExtras = ${dart(T.PAL_OPTIONS.extra)};
 const Map<String, String> kPalTalk = ${dart(T.PAL_OPTIONS.talk)};
+// Pal's assistant lines per talk style (pal.js#palSay: a key a style lacks
+// falls back to Gentle; {placeholders} are filled by the caller).
+const Map<String, Map<String, String>> kPalLines = ${dart(T.PAL_LINES)};
 const Map<String, List<double>> kPalVoice = ${dart(T.PAL_OPTIONS.voice)};
 const Map<String, Object> kPalDefault = ${dart(T.PAL_DEFAULT)};
 
 const Map<String, Map<String, Object>> kHomeTiles = ${dart(T.HOME_TILES)};
 const List<Map<String, Object>> kHomeDefaultTiles = ${dart(T.HOME_DEFAULT.tiles)};
+// Classic keeps its original Home until the person arranges it (home.js#homeForSkin).
+const List<Map<String, Object>> kClassicHomeDefaultTiles = ${dart(T.CLASSIC_HOME_DEFAULT.tiles)};
 const List<String> kHomeSizes = ${dart(T.HOME_SIZES)};
 const List<String> kHomeRuleScopes = ${dart(T.HOME_RULE_SCOPES)};
 const List<String> kHomeRuleActs = ${dart(T.HOME_RULE_ACTS)};

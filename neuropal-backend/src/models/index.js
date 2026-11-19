@@ -19,4 +19,6 @@ module.exports = {
     Annotation: require('./Annotation'),
     SavedSimulation: require('./SavedSimulation'),
     Note: require('./Note'),
+    DayState: require('./DayState'),
+    DayCheckin: require('./DayCheckin'),
 };

@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Circle, Defs, Line, Path, RadialGradient, Stop } from "react-native-svg";
 
+import { TEXT_MAX } from "../../store/slices/homeSlice";
 import { usePalette } from "../../theme/ThemeProvider";
 import { useHomeMotion } from "../motion/motion";
 import { PressTile } from "../motion/PressTile";
@@ -581,6 +582,7 @@ export function SignalMvdTile({ size, tasks, remaining, editing, onEditToggle, n
             value={newTask}
             onChangeText={setNewTask}
             onSubmitEditing={onAdd}
+            maxLength={TEXT_MAX.taskTitle}
             placeholder="Add a task for today…"
             placeholderTextColor={palette.onSurfaceVariant}
             accessibilityLabel="New task title"

@@ -17,6 +17,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../app_routes.dart';
 import '../data/backend.dart';
 import '../data/settings_controller.dart';
 import '../settings/backend_section.dart';
@@ -363,6 +364,20 @@ class _SignInScreenState extends State<SignInScreen> {
                                     textAlign: TextAlign.center,
                                     style: s.fonts.body(14, s.textMuted),
                                   ),
+                                const SizedBox(height: 12),
+                                // The calming steps need no account and no
+                                // network: always one tap away, even here.
+                                Center(
+                                  child: NpButton(
+                                    label: 'Need help right now? Calming steps',
+                                    icon: Icons.spa_outlined,
+                                    kind: NpButtonKind.ghost,
+                                    minHeight: 48,
+                                    onPressed: () => Navigator.of(
+                                      context,
+                                    ).pushNamed(AppRoutes.calm),
+                                  ),
+                                ),
                                 const SizedBox(height: 28),
                                 const _ServerPanel(),
                               ],

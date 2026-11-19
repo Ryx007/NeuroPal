@@ -3,7 +3,11 @@
          the template only adds it to debug/profile). -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- No Android Auto Backup: check-ins, the brain dump and Pal's chat are
+         kept in shared preferences, and a copy in the cloud backup would
+         break "the data then stays on that device" (docs/DAY-SYNC.md §9). -->
     <application
+        android:allowBackup="false"
         android:label="NeuroPal F"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
@@ -51,6 +55,12 @@
              (or bind to) the phone's text-to-speech engines. -->
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <!-- The help lines' Call buttons (url_launcher, tel: links): lets
+             the app see the phone app on Android 11+. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
         </intent>
     </queries>
 </manifest>

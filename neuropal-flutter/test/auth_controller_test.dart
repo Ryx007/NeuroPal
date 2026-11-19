@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:neuropal/auth/auth_controller.dart';
 import 'package:neuropal/data/backend.dart';
 import 'package:neuropal/data/session_store.dart';
@@ -32,17 +33,44 @@ Future<(Backend, AuthController)> setUpAuth(
 
 void main() {
   group('checking the server', () {
-    test('LOCAL_MODE: no sign-in, ever — even without a token', () async {
+    test('LOCAL_MODE: no sign-in, ever — even without a token; /me names the local user', () async {
       final requests = <http.Request>[];
       final (_, auth) = await setUpAuth(fakeBackend(requests: requests));
       expect(auth.status, AuthStatus.open);
       expect(auth.needsSignIn, isFalse);
       expect(auth.hasAccess, isTrue);
-      // The config said so: no need to ask /me.
-      expect(
-        requests.map((r) => r.url.path),
-        isNot(contains('/api/auth/me')),
+      // Who the local user is (day sync keys the day on its id), asked
+      // without any token.
+      expect(auth.user!.id, 'local');
+      final me = requests.where((r) => r.url.path == '/api/auth/me');
+      expect(me.single.headers['Authorization'], isNull);
+    });
+
+    test('LOCAL_MODE with /me not answering: still no sign-in; asked again when the server is back', () async {
+      var restarting = true;
+      final reachable = {tailscaleHost};
+      final (backend, auth) = await setUpAuth(
+        fakeBackend(
+          reachableHosts: reachable,
+          routes: {
+            'GET /api/auth/me': (_) => restarting
+                ? jsonResponse({'error': 'restarting'}, 503)
+                : jsonResponse({'id': 'local', 'name': 'Ryx'}),
+          },
+        ),
       );
+      expect(auth.status, AuthStatus.open);
+      expect(auth.user, isNull);
+      expect(auth.userUnknown, isTrue);
+
+      restarting = false;
+      reachable.clear();
+      await backend.probe(); // gone for a moment...
+      reachable.add(tailscaleHost);
+      await backend.probe(); // ...and back
+      await pumpEventQueue();
+      expect(auth.user!.id, 'local');
+      expect(auth.userUnknown, isFalse);
     });
 
     test('accounts and no saved session → sign-in', () async {
@@ -101,14 +129,54 @@ void main() {
       expect(sessions.tokenFor(cloudBase), 'tok');
     });
 
-    test('server trouble on /me keeps the session', () async {
+    test('a /me broken at the network level is not asked again round and round', () async {
+      var meCalls = 0;
+      final client = MockClient((request) async {
+        switch (request.url.path) {
+          case '/healthz':
+            return http.Response('{"status":"ok"}', 200);
+          case '/api/auth/config':
+            return jsonResponse({'localMode': true, 'signup': 'closed'});
+          case '/api/auth/me':
+            meCalls += 1;
+            // Only /me's line is broken (a proxy in the way), for a while:
+            // a failed request re-probes, the probe finds the server...
+            if (meCalls <= 50) {
+              throw http.ClientException('Connection reset by peer', request.url);
+            }
+            return jsonResponse({'id': 'local'});
+        }
+        return jsonResponse({'error': 'not found'}, 404);
+      });
+      final (_, auth) = await setUpAuth(client);
+      await pumpEventQueue();
+      expect(meCalls, 1, reason: 'asked again when the server comes back, not in a loop');
+      expect(auth.status, AuthStatus.open);
+      expect(auth.userUnknown, isTrue);
+    });
+
+    test('server trouble on /me keeps the session, and asks again when the server is back', () async {
       final server = FakeAccountsServer()..meStatus = 503;
       final token = server.issue('ryx@example.com');
       final sessions = SessionStore.memory({cloudBase: token});
-      final (_, auth) = await setUpAuth(server.client(), sessions: sessions);
+      final reachable = {cloudHost};
+      final (backend, auth) = await setUpAuth(
+        server.client(reachableHosts: reachable),
+        sessions: sessions,
+      );
       expect(auth.status, AuthStatus.signedIn);
       expect(auth.needsSignIn, isFalse);
       expect(sessions.tokenFor(cloudBase), token);
+      expect(auth.userUnknown, isTrue, reason: 'who is signed in isn’t known yet');
+
+      server.meStatus = null;
+      reachable.clear();
+      await backend.probe();
+      reachable.add(cloudHost);
+      await backend.probe();
+      await pumpEventQueue();
+      expect(auth.user!.email, 'ryx@example.com');
+      expect(auth.status, AuthStatus.signedIn);
     });
 
     test('an older server without /api/auth/config: /me decides', () async {

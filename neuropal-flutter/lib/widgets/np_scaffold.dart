@@ -1,12 +1,15 @@
 // Screen chrome shared by every screen: background, the status-bar band,
 // the glass header bar and the left navigation drawer (NeuroPal never uses
-// bottom tabs — a locked design directive).
+// bottom tabs — a locked design directive). Pal's floating bubble sits over
+// the body's bottom-right corner, above the now-playing bar, on the screens
+// that have it (lib/pal/pal_bubble.dart decides where).
 
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../pal/pal_bubble.dart';
 import '../theme/np_style.dart';
 import 'np_background.dart';
 import 'np_buttons.dart';
@@ -49,7 +52,12 @@ class NpScaffold extends StatelessWidget {
             Column(
               children: [
                 header,
-                Expanded(child: body),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [body, PalBubbleSlot(route: route)],
+                  ),
+                ),
                 ?bottom, // `?` = only when there is one
               ],
             ),

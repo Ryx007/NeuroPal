@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:neuropal/app.dart';
 import 'package:neuropal/auth/sign_in_screen.dart';
 import 'package:neuropal/data/session_store.dart';
+import 'package:neuropal/home/home_screen.dart';
 import 'package:neuropal/library/library_screen.dart';
 import 'package:neuropal/services.dart';
 import 'package:neuropal/widgets/np_banner.dart';
@@ -97,6 +98,14 @@ String describeControl(Element element) {
   return text ?? widget.runtimeType.toString();
 }
 
+/// The app opens on Home; the drawer leads to the Library.
+Future<void> openLibrary(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.menu_rounded));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Library'));
+  await tester.pumpAndSettle();
+}
+
 Future<void> signIn(WidgetTester tester, {String password = 'correct horse'}) async {
   await tester.enterText(field('Email'), 'ryx@example.com');
   await tester.enterText(field('Password'), password);
@@ -116,7 +125,7 @@ void main() {
     expect(find.text('Cloud · api.ryx007.work'), findsOneWidget);
   });
 
-  testWidgets('signing in opens the library; requests carry the token', (
+  testWidgets('signing in opens Home; requests carry the token', (
     tester,
   ) async {
     final server = FakeAccountsServer(routes: oneDocument);
@@ -124,9 +133,12 @@ void main() {
     await signIn(tester);
 
     expect(find.byType(SignInScreen), findsNothing);
-    expect(find.text('Ghost imaging review'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    // Home's "Resume reading" asked the library, with the new session.
     expect(server.authHeaders('/api/documents').last, 'Bearer tok-1');
     expect(services.sessions.tokenFor(cloudBase), 'tok-1');
+    await openLibrary(tester);
+    expect(find.text('Ghost imaging review'), findsOneWidget);
   });
 
   testWidgets('a wrong password: the reason is in a banner that is read out', (
@@ -210,6 +222,8 @@ void main() {
     await tester.enterText(field('Invite code'), 'open-sesame');
     await tester.tap(button('Create account'));
     await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+    await openLibrary(tester);
     expect(find.text('Ghost imaging review'), findsOneWidget);
     expect(server.accounts['new@example.com'], 'long enough');
     expect(services.sessions.tokenFor(cloudBase), isNotNull);
@@ -238,6 +252,7 @@ void main() {
       client: server.client(),
       sessions: SessionStore.memory({cloudBase: server.issue('ryx@example.com')}),
     );
+    await openLibrary(tester);
     expect(find.text('Ghost imaging review'), findsOneWidget);
 
     server.expireAll();
@@ -257,16 +272,19 @@ void main() {
       'ryx@example.com',
     );
 
-    // Signing in again loads the library afresh.
+    // Signing in again starts at Home and loads the library afresh.
     await tester.enterText(field('Password'), 'correct horse');
     await tester.tap(button('Sign in'));
     await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+    await openLibrary(tester);
     expect(find.text('Ghost imaging review'), findsOneWidget);
   });
 
   testWidgets('a LOCAL_MODE server never shows sign-in', (tester) async {
     await boot(tester, client: fakeBackend(routes: oneDocument));
     expect(find.byType(SignInScreen), findsNothing);
+    await openLibrary(tester);
     expect(find.text('Ghost imaging review'), findsOneWidget);
   });
 
@@ -279,6 +297,7 @@ void main() {
       sessions: SessionStore.memory({cloudBase: 'tok'}),
     );
     expect(find.byType(SignInScreen), findsNothing);
+    await openLibrary(tester);
     expect(find.text('Can’t reach the NeuroPal backend'), findsOneWidget);
   });
 
@@ -319,6 +338,7 @@ void main() {
     await tester.tap(find.text('Try the demo library'));
     await tester.pumpAndSettle();
     expect(find.byType(SignInScreen), findsNothing);
+    await openLibrary(tester);
     expect(
       find.text('Correlation plenoptic imaging: the basics'),
       findsOneWidget,

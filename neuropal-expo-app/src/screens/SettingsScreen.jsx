@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { Platform, Pressable, Text, TextInput, View } from "react-native";
 
 import { selectUiState } from "../store/selectors";
@@ -26,7 +26,10 @@ import { clearSession, saveSessionToken } from "../store/ApiLink";
 import { useApiRequest } from "../store/ApiRequest";
 import { announce } from "../services/announce";
 import { apiClient, clearDocTickets, describeNetworkError } from "../services/network";
+import { describeDaySync } from "../services/dayModel";
+import { getDaySyncStatus, subscribeDaySync } from "../services/daySync";
 import { resetAuth } from "../store/slices/authSlice";
+import { setDaySyncEnabled } from "../store/slices/homeSlice";
 import { setBubbleHidden } from "../store/slices/palSlice";
 import { usePalette, useTheme } from "../theme/ThemeProvider";
 import { fitContrast, hexToRgb, mix, rgbToHex } from "../theme/tokens";
@@ -278,11 +281,39 @@ export function SettingsScreen() {
 
       {/* P3 — which backend the app is talking to, and whether it's alive */}
       <Group title="Backend connection">
+        <DaySyncRow />
         <ConnectionStatus />
       </Group>
 
       <AccountGroup />
     </KeyboardSafeScrollView>
+  );
+}
+
+// "Keep my day in sync" (docs/DAY-SYNC.md §8), on by default. The line under
+// it is the only place a sync problem is ever shown; sync never interrupts.
+function DaySyncRow() {
+  const dispatch = useDispatch();
+  const enabled = useSelector((s) => s.home.sync.enabled);
+  const lastSyncAt = useSelector((s) => s.home.sync.lastSyncAt);
+  const { phase } = useSyncExternalStore(subscribeDaySync, getDaySyncStatus, getDaySyncStatus);
+
+  return (
+    <SegmentRow
+      label="Keep my day in sync"
+      value={enabled ? "on" : "off"}
+      entries={[
+        ["off", "Off"],
+        ["on", "On"],
+      ]}
+      onChange={(value) => {
+        const on = value === "on";
+        if (on === enabled) return;
+        dispatch(setDaySyncEnabled(on));
+        announce(on ? "Your day will sync with your server." : "Off. Your day stays on this phone.");
+      }}
+      note={describeDaySync({ enabled, phase, lastSyncAt })}
+    />
   );
 }
 
@@ -588,7 +619,8 @@ function pickedInk(palette) {
 
 // One choice out of a few: a radio group to screen readers, and the picked
 // option also carries a check, so it never rests on colour alone (like Chip).
-function SegmentRow({ label, value, entries, onChange }) {
+// `note`: an optional line under the choices (what the setting is doing now).
+function SegmentRow({ label, value, entries, onChange, note }) {
   const palette = usePalette();
   const ink = pickedInk(palette);
 
@@ -659,6 +691,19 @@ function SegmentRow({ label, value, entries, onChange }) {
           );
         })}
       </View>
+      {note ? (
+        <Text
+          style={{
+            marginTop: 8,
+            color: palette.onSurfaceVariant,
+            fontFamily: palette.fonts.body,
+            fontSize: 13,
+            lineHeight: 19,
+          }}
+        >
+          {note}
+        </Text>
+      ) : null}
     </View>
   );
 }

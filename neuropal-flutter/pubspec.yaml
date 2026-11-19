@@ -3,7 +3,7 @@ description: "NeuroPal for Flutter: reader-first, two skins (Classic + Signal)."
 # Private app: never published to pub.dev.
 publish_to: 'none'
 
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ^3.13.5
@@ -25,6 +25,11 @@ dependencies:
   flutter_tts: ^4.2.5
   # Renders the Markdown answers from the Ask sheet.
   flutter_markdown_plus: ^1.0.12
+  # Library upload: the system's own file picker (Storage Access Framework
+  # on Android, so no storage permission is needed).
+  file_picker: ^13.4.0
+  # The help lines' Call buttons (tel: links open the phone app).
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

@@ -1,35 +1,26 @@
 "use client";
-// Today, on this device: the check-ins from Home's slider, the timed anchors,
-// the minimum viable day and the brain dump. Same rules as the Expo app's
-// homeSlice:
+// Today: the check-ins from Home's slider, the timed anchors, the minimum
+// viable day and the brain dump. Same rules as the Expo app's homeSlice:
 //   - check-ins: newest last, capped at 200; a change within a minute of the
 //     last check-in refines it instead of adding one (one check-in = one
 //     settled feeling, not every key press); an older check-in joins the
 //     history in time order and leaves the current state alone
-//   - a new day un-ticks the minimum day and sets every anchor back to upcoming
-// Stored in localStorage; nothing here needs the server. It belongs to the
-// signed-in account (owner.ts): written only while that account is signed
-// in, and cleared when its session ends (localData.ts).
+//   - "done today" is doneOn === today's local date, so a new day un-ticks
+//     the minimum day and sets every anchor back to upcoming by itself
+// Kept in localStorage (the key predates sync; the value says v: 2) and, with
+// "Keep my day in sync" on, merged through the server by daySync.ts
+// (docs/DAY-SYNC.md). The pure rules live in dayModel.ts; this file is the
+// store: it stamps every change and remembers what Undo needs.
+// It belongs to the signed-in account (owner.ts): written only while that
+// account is signed in, and cleared when its session ends (localData.ts).
 import { useEffect } from "react";
-import { createStoredValue, useStored } from "@/lib/store";
-import { personalOpen } from "./owner";
+import { createStoredValue, readRaw, useStored } from "@/lib/store";
+import * as model from "./dayModel";
+import type { Anchor, AnchorCategory, AnchorInput, Clock, DayData, DayTask, DumpItem, NervousState, StoredAnchor, StoredDay, StoredDump, StoredTask } from "./dayModel";
+import { ownerStore, personalOpen } from "./owner";
 
-export type NervousState = "green" | "yellow" | "red";
-
-export const CHECKIN_CAP = 200;
-export const CHECKIN_MERGE_MS = 60 * 1000;
-export const DUMP_CAP = 1000;
-export const TITLE_MAX = 120;
-
-export interface Checkin {
-  state: NervousState;
-  /** Exact slider level 0–1 (null when it came from a button without one). */
-  level: number | null;
-  /** ISO time */
-  at: string;
-}
-
-export type AnchorCategory = "medication" | "break" | "study" | "move" | "other";
+export type { Anchor, AnchorCategory, AnchorInput, AnchorTime, Checkin, DayData, DayTask, DumpItem, NervousState, StoredDay } from "./dayModel";
+export { CHECKIN_CAP, CHECKIN_MERGE_MS, DEFAULT_FLEX, DUMP_CAP, TITLE_MAX } from "./dayModel";
 
 export const ANCHOR_CATEGORIES: { id: AnchorCategory; label: string }[] = [
   { id: "medication", label: "Meds" },
@@ -41,67 +32,13 @@ export const ANCHOR_CATEGORIES: { id: AnchorCategory; label: string }[] = [
 
 /** The ± window (minutes) an anchor can move in: ADHD-friendly, never to the minute. */
 export const FLEX_CHOICES = [0, 10, 15, 30, 45, 60];
-export const DEFAULT_FLEX = 30;
-
-export interface AnchorTime {
-  hour: number;
-  minute: number;
-}
-
-export interface Anchor {
-  id: string;
-  title: string;
-  subtitle: string;
-  time: AnchorTime;
-  flexMinutes: number;
-  category: AnchorCategory;
-  status: "upcoming" | "done";
-}
-
-export interface DayTask {
-  id: string;
-  title: string;
-  subtitle: string;
-  done: boolean;
-}
-
-export interface DumpItem {
-  id: string;
-  text: string;
-  at: string;
-}
-
-export interface DayData {
-  v: 1;
-  /** Local date YYYY-MM-DD the ticks belong to. */
-  dayStamp: string;
-  /** The current check-in (null = not checked in yet). */
-  state: NervousState | null;
-  level: number | null;
-  checkins: Checkin[];
-  tasks: DayTask[];
-  anchors: Anchor[];
-  dump: DumpItem[];
-}
 
 // ---- helpers -------------------------------------------------------------------
 
-const STATES = new Set<NervousState>(["green", "yellow", "red"]);
-const CATEGORIES = new Set<AnchorCategory>(ANCHOR_CATEGORIES.map((c) => c.id));
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export function stampOf(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-const text = (v: unknown, max = TITLE_MAX) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-
-function cleanLevel(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null;
-}
-
-const int = (v: unknown, lo: number, hi: number, d: number) =>
-  typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d;
+/** The local date YYYY-MM-DD. */
+export const stampOf = (d: Date): string => model.localDate(d);
 
 let idCounter = 0;
 export function freshId(prefix: string): string {
@@ -109,13 +46,13 @@ export function freshId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${idCounter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export const minutesOfDay = (t: AnchorTime) => t.hour * 60 + t.minute;
+export const minutesOfDay = (t: { hour: number; minute: number }) => t.hour * 60 + t.minute;
 
 /** "14:05" */
-export const hhmm = (t: AnchorTime) => `${pad2(t.hour)}:${pad2(t.minute)}`;
+export const hhmm = (t: { hour: number; minute: number }) => `${pad2(t.hour)}:${pad2(t.minute)}`;
 
 /** "2:05 PM" (Classic's clock, as in the Expo app). */
-export function time12(t: AnchorTime): string {
+export function time12(t: { hour: number; minute: number }): string {
   const h = t.hour % 12 === 0 ? 12 : t.hour % 12;
   return `${h}:${pad2(t.minute)} ${t.hour >= 12 ? "PM" : "AM"}`;
 }
@@ -124,118 +61,169 @@ export function minutesUntil(anchor: Anchor, now: Date): number {
   return minutesOfDay(anchor.time) - (now.getHours() * 60 + now.getMinutes());
 }
 
-const byTime = (a: Anchor, b: Anchor) => minutesOfDay(a.time) - minutesOfDay(b.time);
+// ---- the store -----------------------------------------------------------------
 
-// ---- normalising (old or hand-edited saves never throw) ------------------------------
+const DAY_KEY = "np.app.day.v1";
+/** owner.ts keeps the owner under this key (read straight from storage in the day's lock, below). */
+const OWNER_KEY = "np.app.owner.v1";
 
-function cleanCheckins(list: unknown): Checkin[] {
-  if (!Array.isArray(list)) return [];
-  const out: Checkin[] = [];
-  for (const c of list) {
-    if (!c || typeof c !== "object") continue;
-    const o = c as Partial<Checkin>;
-    if (!STATES.has(o.state as NervousState) || typeof o.at !== "string" || Number.isNaN(Date.parse(o.at))) continue;
-    out.push({ state: o.state as NervousState, level: cleanLevel(o.level), at: o.at });
+/** Read back from a save that still needs writing (an old save given its stamps). */
+const unsaved = new WeakSet<StoredDay>();
+
+/**
+ * A stored day as `owner` may see it. A day labelled with another account
+ * (SyncMeta.account) was written by a tab that hadn't heard yet that this
+ * browser changed hands: it reads as an empty day, so it is never shown and
+ * never sent as the owner's; the owner's next write replaces it.
+ */
+function readDay(raw: string | null, owner: string | null, clock: Clock): model.SaveRead & { foreign: boolean } {
+  let r: model.SaveRead;
+  try {
+    r = raw === null ? { day: model.newDay(clock), changed: false } : model.readSave(JSON.parse(raw), clock);
+  } catch {
+    r = { day: model.newDay(clock), changed: false };
   }
-  return out.slice(-CHECKIN_CAP);
+  const label = r.day.sync.account;
+  if (label && owner && label !== owner) return { day: model.newDay(clock, r.day.sync.enabled), changed: false, foreign: true };
+  return { ...r, foreign: false };
 }
 
-function cleanTasks(list: unknown): DayTask[] {
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((t) => t && typeof t === "object" && text((t as DayTask).title))
-    .map((t) => {
-      const o = t as Partial<DayTask>;
-      return { id: String(o.id || freshId("t")), title: text(o.title), subtitle: text(o.subtitle), done: Boolean(o.done) };
-    });
-}
-
-function cleanAnchors(list: unknown): Anchor[] {
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((a) => a && typeof a === "object" && text((a as Anchor).title))
-    .map((a) => {
-      const o = a as Partial<Anchor> & { time?: Partial<AnchorTime> };
-      return {
-        id: String(o.id || freshId("a")),
-        title: text(o.title),
-        subtitle: text(o.subtitle, 200),
-        time: { hour: int(o.time?.hour, 0, 23, 9), minute: int(o.time?.minute, 0, 59, 0) },
-        flexMinutes: int(o.flexMinutes, 0, 120, DEFAULT_FLEX),
-        category: CATEGORIES.has(o.category as AnchorCategory) ? (o.category as AnchorCategory) : "other",
-        status: o.status === "done" ? ("done" as const) : ("upcoming" as const),
-      };
-    })
-    .sort(byTime);
-}
-
-function cleanDump(list: unknown): DumpItem[] {
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((d) => d && typeof d === "object" && text((d as DumpItem).text, 2000))
-    .map((d) => {
-      const o = d as Partial<DumpItem>;
-      return { id: String(o.id || freshId("d")), text: text(o.text, 2000), at: typeof o.at === "string" ? o.at : new Date(0).toISOString() };
-    })
-    .slice(0, DUMP_CAP);
-}
-
-/** A new day: yesterday's ticks don't count any more. */
-function rollover(d: DayData, now: Date): DayData {
-  const today = stampOf(now);
-  if (d.dayStamp === today) return d;
-  return {
-    ...d,
-    dayStamp: today,
-    tasks: d.tasks.map((t) => (t.done ? { ...t, done: false } : t)),
-    anchors: d.anchors.map((a) => (a.status === "upcoming" ? a : { ...a, status: "upcoming" as const })),
-  };
-}
-
-// The Expo app's starter minimum day: small, physical, kind.
-const starterTasks = (): DayTask[] => [
-  { id: "mvd-1", title: "Stay hydrated", subtitle: "2 glasses left", done: false },
-  { id: "mvd-2", title: "Take meds", subtitle: "Morning dosage", done: false },
-  { id: "mvd-3", title: "Walk", subtitle: "10 minutes outside", done: false },
-];
-
-export function normalizeDay(input: unknown, now = new Date()): DayData {
-  const o = (input && typeof input === "object" ? input : {}) as Partial<DayData>;
-  const checkins = cleanCheckins(o.checkins);
-  const state = STATES.has(o.state as NervousState) ? (o.state as NervousState) : null;
-  const d: DayData = {
-    v: 1,
-    dayStamp: typeof o.dayStamp === "string" ? o.dayStamp : stampOf(now),
-    state,
-    level: state ? cleanLevel(o.level) : null,
-    checkins,
-    tasks: Array.isArray(o.tasks) ? cleanTasks(o.tasks) : starterTasks(),
-    anchors: cleanAnchors(o.anchors),
-    dump: cleanDump(o.dump),
-  };
-  return rollover(d, now);
-}
-
-const EMPTY_DAY: DayData = normalizeDay({});
-
-export const dayStore = createStoredValue<DayData>({
-  key: "np.app.day.v1",
+export const dayStore = createStoredValue<StoredDay>({
+  key: DAY_KEY,
   area: "local",
-  fallback: EMPTY_DAY,
-  parse: (raw) => normalizeDay(JSON.parse(raw)),
+  fallback: model.newDay(model.clockOf(new Date())),
+  parse: (raw) => {
+    const r = readDay(raw, ownerStore.get(), model.clockOf(new Date()));
+    if (r.changed) unsaved.add(r.day);
+    return r.day;
+  },
 });
 
-function update(fn: (d: DayData) => DayData) {
-  // A write after the session ended (a slider saving as Home closes) is dropped.
-  if (!personalOpen()) return;
-  const now = new Date();
-  dayStore.set(fn(rollover(dayStore.get(), now)));
+// ---- the day's lock: the sync's own writes, one tab at a time -------------------------
+
+let sharedChecked: boolean | null = null;
+
+/** localStorage works here (the tabs share it). Without it each tab keeps its own copy, and that copy is the truth. */
+function sharedStorage(): boolean {
+  if (sharedChecked === null) {
+    try {
+      window.localStorage.setItem("np.app.probe", "1");
+      window.localStorage.removeItem("np.app.probe");
+      sharedChecked = true;
+    } catch {
+      sharedChecked = false;
+    }
+  }
+  return sharedChecked;
 }
 
-/** Applies the day rollover if the date changed while the page was open. */
+/**
+ * Runs `fn` holding the day's Web Lock ("np-day"), which every tab of this
+ * browser takes for the sync's own writes. A browser without Web Locks (they
+ * need https or localhost) runs it at once: the reads below still come from
+ * storage itself, and the account label still keeps two accounts apart.
+ */
+export function withDayLock<T>(fn: () => T): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
+  if (!locks || typeof locks.request !== "function") return Promise.resolve().then(fn);
+  return locks.request("np-day", () => fn());
+}
+
+/**
+ * The sync's writes (an adopted answer, how the last try went): read what is
+ * stored → decide → write, inside the day's lock and from storage itself, not
+ * from this tab's copy, which may not have heard yet of another tab's last
+ * write. Deciding from that copy could undo the other tab's change, or write
+ * one account's day where another account's now lives (two tabs, two
+ * tab-only sessions). Only while `account` owns the day; `fn` returns the new
+ * day, or null to leave it. Local edits stay synchronous (edit, below): the
+ * loop's "changed while in flight" check covers one that lands meanwhile.
+ */
+export function updateStored(account: string, fn: (day: StoredDay, clock: Clock) => StoredDay | null): Promise<boolean> {
+  return withDayLock(() => {
+    const shared = sharedStorage();
+    const owner = shared ? readRaw("local", OWNER_KEY) || null : ownerStore.get();
+    if (!personalOpen(account) || owner !== account) return false;
+    const clock = model.clockOf(new Date());
+    const day = shared ? readDay(readRaw("local", DAY_KEY), owner, clock).day : dayStore.get();
+    const next = fn(day, clock);
+    if (!next) return false;
+    if (next !== day) dayStore.set(next);
+    return true;
+  });
+}
+
+// Kept subscribed for the life of the page, so this tab always holds what
+// other tabs wrote (the store drops its `storage` listener when nothing
+// listens). The sync builds requests from this copy and writes answers over
+// it: a stale copy would undo another tab's change.
+if (typeof window !== "undefined") dayStore.subscribe(() => {});
+
+const views = new WeakMap<StoredDay, DayData>();
+
+/** What the screens read: live items, done/status derived (dayModel.dayView), the same object for the same stored day. */
+export function dayView(day: StoredDay = dayStore.get()): DayData {
+  let v = views.get(day);
+  if (!v) {
+    v = model.dayView(day);
+    views.set(day, v);
+  }
+  return v;
+}
+
+// A change made in THIS tab (daySync.ts sends it 2–3 s later; other tabs
+// see it through storage and leave the sending to this one).
+const editListeners = new Set<() => void>();
+
+export function onDayEdit(listener: () => void): () => void {
+  editListeners.add(listener);
+  return () => {
+    editListeners.delete(listener);
+  };
+}
+
+function edit(fn: (day: StoredDay, clock: Clock) => StoredDay): boolean {
+  // A write after the session ended (a slider saving as Home closes) is dropped.
+  if (!personalOpen()) return false;
+  const clock = model.clockOf(new Date());
+  const current = dayStore.get();
+  const next = fn(current, clock);
+  if (next === current) return false;
+  dayStore.set(model.markEdited(next, clock.today, freshId("e")));
+  editListeners.forEach((l) => l());
+  return true;
+}
+
+/**
+ * The sync's own writes (an adopted answer, the switch, how the last try
+ * went): not edits, so they never trigger a sync in this tab or another.
+ * Only while `account` (when given) owns the day.
+ */
+export function updateDay(fn: (day: StoredDay, clock: Clock) => StoredDay, account?: string): boolean {
+  if (!personalOpen(account)) return false;
+  const current = dayStore.get();
+  const next = fn(current, model.clockOf(new Date()));
+  if (next !== current) dayStore.set(next);
+  return true;
+}
+
+/**
+ * The day goes when a session ends (localData.ts), with the sync's own state
+ * (gen, deletions not sent yet). "Keep my day in sync" is this browser's
+ * choice and stays: switched off, it isn't quietly switched on again by the
+ * next sign-in.
+ */
+export function forgetDay() {
+  if (dayStore.get().sync.enabled === false) dayStore.set(model.newDay(model.clockOf(new Date()), false));
+  else dayStore.clear();
+}
+
+/** Re-derives the ticks when the date changed while the page was open, and saves an old save once it has its stamps. */
 export function ensureToday(now = new Date()) {
+  if (!personalOpen()) return;
   const d = dayStore.get();
-  if (d.dayStamp !== stampOf(now) && personalOpen()) dayStore.set(rollover(d, now));
+  const today = stampOf(now);
+  if (d.dayStamp !== today || unsaved.has(d)) dayStore.set({ ...d, dayStamp: today });
 }
 
 /** Today's data; re-checks the date when the tab comes back into view. */
@@ -253,141 +241,109 @@ export function useDay(): DayData {
       window.clearInterval(t);
     };
   }, []);
-  return day;
+  return dayView(day);
 }
+
+// Undo needs the whole stored item — fields this app doesn't use included,
+// and its content after the deletion has synced (a tombstone has none, §8
+// "Undo") — keyed by the object the screen keeps in its Undo state.
+const undoItems = new WeakMap<object, StoredTask | StoredAnchor | StoredDump>();
 
 // ---- check-ins ---------------------------------------------------------------------
 
 /** One check-in (slider or a state button). `atMs` defaults to now; never in the future. */
 export function recordCheckin(mood: NervousState, level: number | null, atMs?: number) {
-  if (!STATES.has(mood)) return;
-  update((d) => {
-    const nowMs = Date.now();
-    const t = typeof atMs === "number" && Number.isFinite(atMs) && atMs <= nowMs ? atMs : nowMs;
-    const entry: Checkin = { state: mood, level: cleanLevel(level), at: new Date(t).toISOString() };
-    const list = d.checkins.slice();
-    const last = list[list.length - 1];
-    let state = d.state;
-    let lv = d.level;
-    if (last && t < Date.parse(last.at)) {
-      let i = list.length;
-      while (i > 0 && Date.parse(list[i - 1].at) > t) i -= 1;
-      list.splice(i, 0, entry);
-    } else {
-      state = mood;
-      lv = entry.level;
-      if (last && t - Date.parse(last.at) < CHECKIN_MERGE_MS) list[list.length - 1] = entry;
-      else list.push(entry);
-    }
-    return { ...d, state, level: lv, checkins: list.slice(-CHECKIN_CAP) };
-  });
+  if (!model.STATES.has(mood)) return;
+  edit((d, c) => model.recordCheckin(d, mood, level, atMs, c));
 }
 
 /** The latest check-in entry, if any. */
-export const lastCheckin = (d: DayData): Checkin | null => d.checkins[d.checkins.length - 1] ?? null;
+export const lastCheckin = (d: DayData) => d.checkins[d.checkins.length - 1] ?? null;
 
 // ---- minimum viable day --------------------------------------------------------------
 
 export function toggleTask(id: string) {
-  update((d) => ({ ...d, tasks: d.tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)) }));
+  edit((d, c) => model.toggleTask(d, id, c));
 }
 
 export function addTask(title: string, subtitle = ""): boolean {
-  const t = text(title);
-  if (!t) return false;
-  update((d) => ({ ...d, tasks: [...d.tasks, { id: freshId("t"), title: t, subtitle: text(subtitle), done: false }] }));
+  if (!model.cleanText(title, model.TITLE_MAX)) return false;
+  edit((d, c) => model.addTask(d, freshId("t"), title, subtitle, c));
   return true;
 }
 
 /** Removes a task; returns it with its position, for Undo. */
 export function removeTask(id: string): { task: DayTask; index: number } | null {
-  const d = dayStore.get();
-  const index = d.tasks.findIndex((t) => t.id === id);
+  const view = dayView();
+  const index = view.tasks.findIndex((t) => t.id === id);
   if (index < 0) return null;
-  const task = d.tasks[index];
-  update((x) => ({ ...x, tasks: x.tasks.filter((t) => t.id !== id) }));
+  const task = view.tasks[index];
+  const got: { removed: StoredTask | null } = { removed: null };
+  edit((d, c) => {
+    const r = model.removeTask(d, id, c);
+    got.removed = r.removed;
+    return r.day;
+  });
+  if (got.removed) undoItems.set(task, got.removed);
   return { task, index };
 }
 
-export function restoreTask(task: DayTask, index: number) {
-  update((d) => {
-    if (d.tasks.some((t) => t.id === task.id)) return d;
-    const tasks = d.tasks.slice();
-    tasks.splice(Math.min(Math.max(0, index), tasks.length), 0, task);
-    return { ...d, tasks };
-  });
+/** Undo: the task comes back as it was (an edit, §8). Tasks are ordered by when they were made, so `index` isn't needed any more. */
+export function restoreTask(task: DayTask, index?: number) {
+  void index;
+  const item = (undoItems.get(task) as StoredTask | undefined) ?? storedTask(task);
+  edit((d, c) => model.restoreTask(d, item, c));
 }
 
 export const remainingTasks = (d: DayData) => d.tasks.filter((t) => !t.done).length;
 
-// ---- anchors ---------------------------------------------------------------------------
-
-export interface AnchorInput {
-  title: string;
-  subtitle?: string;
-  hour: number;
-  minute: number;
-  flexMinutes?: number;
-  category?: AnchorCategory;
+/** For an Undo whose stored item went missing: the screen's copy without what was derived for it. */
+function storedTask(task: DayTask): StoredTask {
+  const { done, ...rest } = task;
+  void done;
+  return rest;
 }
 
+// ---- anchors ---------------------------------------------------------------------------
+
 export function addAnchor(input: AnchorInput): string | null {
-  const title = text(input.title);
-  if (!title) return null;
+  if (!model.cleanText(input.title, model.TITLE_MAX)) return null;
   const id = freshId("a");
-  update((d) => ({
-    ...d,
-    anchors: cleanAnchors([
-      ...d.anchors,
-      {
-        id,
-        title,
-        subtitle: input.subtitle ?? "",
-        time: { hour: input.hour, minute: input.minute },
-        flexMinutes: input.flexMinutes ?? DEFAULT_FLEX,
-        category: input.category ?? "other",
-        status: "upcoming",
-      },
-    ]),
-  }));
+  edit((d, c) => model.addAnchor(d, id, input, c));
   return id;
 }
 
 export function updateAnchor(id: string, input: AnchorInput) {
-  const title = text(input.title);
-  if (!title) return;
-  update((d) => ({
-    ...d,
-    anchors: cleanAnchors(
-      d.anchors.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              title,
-              subtitle: input.subtitle ?? a.subtitle,
-              time: { hour: input.hour, minute: input.minute },
-              flexMinutes: input.flexMinutes ?? a.flexMinutes,
-              category: input.category ?? a.category,
-            }
-          : a,
-      ),
-    ),
-  }));
+  edit((d, c) => model.updateAnchor(d, id, input, c));
 }
 
 /** Removes an anchor; returns it, for Undo. */
 export function removeAnchor(id: string): Anchor | null {
-  const found = dayStore.get().anchors.find((a) => a.id === id) ?? null;
-  if (found) update((d) => ({ ...d, anchors: d.anchors.filter((a) => a.id !== id) }));
+  const found = dayView().anchors.find((a) => a.id === id) ?? null;
+  if (!found) return null;
+  const got: { removed: StoredAnchor | null } = { removed: null };
+  edit((d, c) => {
+    const r = model.removeAnchor(d, id, c);
+    got.removed = r.removed;
+    return r.day;
+  });
+  if (got.removed) undoItems.set(found, got.removed);
   return found;
 }
 
 export function restoreAnchor(anchor: Anchor) {
-  update((d) => (d.anchors.some((a) => a.id === anchor.id) ? d : { ...d, anchors: cleanAnchors([...d.anchors, anchor]) }));
+  const item = (undoItems.get(anchor) as StoredAnchor | undefined) ?? storedAnchor(anchor);
+  edit((d, c) => model.restoreAnchor(d, item, c));
 }
 
 export function setAnchorStatus(id: string, status: Anchor["status"]) {
-  update((d) => ({ ...d, anchors: d.anchors.map((a) => (a.id === id ? { ...a, status } : a)) }));
+  edit((d, c) => model.setAnchorDone(d, id, status === "done", c));
+}
+
+function storedAnchor(anchor: Anchor): StoredAnchor {
+  const { status, ...rest } = anchor;
+  void status;
+  return rest;
 }
 
 /**
@@ -403,22 +359,42 @@ export function nextAnchor(anchors: Anchor[], now: Date): Anchor | null {
 // ---- brain dump --------------------------------------------------------------------------
 
 export function addDump(value: string): boolean {
-  const t = text(value, 2000);
-  if (!t) return false;
-  update((d) => ({ ...d, dump: [{ id: freshId("d"), text: t, at: new Date().toISOString() }, ...d.dump].slice(0, DUMP_CAP) }));
+  if (!model.cleanText(value, model.DUMP_TEXT_MAX)) return false;
+  edit((d, c) => model.addDump(d, freshId("d"), value, c));
   return true;
 }
 
 export function removeDump(id: string): DumpItem | null {
-  const found = dayStore.get().dump.find((x) => x.id === id) ?? null;
-  if (found) update((d) => ({ ...d, dump: d.dump.filter((x) => x.id !== id) }));
+  const found = dayView().dump.find((x) => x.id === id) ?? null;
+  if (!found) return null;
+  const got: { removed: StoredDump | null } = { removed: null };
+  edit((d, c) => {
+    const r = model.removeDump(d, id, c);
+    got.removed = r.removed;
+    return r.day;
+  });
+  if (got.removed) undoItems.set(found, got.removed);
   return found;
 }
 
+/**
+ * "Minimum day" on a brain-dump line (dayModel.moveDumpToTask): the task's
+ * title, and `kept` when the line stays in the dump because it is longer than
+ * a task title takes (its end is never lost). null: nothing moved.
+ */
+export function moveDumpToDay(item: DumpItem): { title: string; kept: boolean } | null {
+  const got: { moved: { title: string; kept: boolean } | null } = { moved: null };
+  edit((d, c) => {
+    const r = model.moveDumpToTask(d, item.id, freshId("t"), c);
+    if (!r) return d;
+    got.moved = { title: r.title, kept: r.kept };
+    return r.day;
+  });
+  return got.moved;
+}
+
+/** Undo writes the text again under a new id (a deleted dump line never comes back, §5). */
 export function restoreDump(item: DumpItem) {
-  update((d) =>
-    d.dump.some((x) => x.id === item.id)
-      ? d
-      : { ...d, dump: [...d.dump, item].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, DUMP_CAP) },
-  );
+  const stored = (undoItems.get(item) as StoredDump | undefined) ?? { ...item };
+  edit((d, c) => model.restoreDump(d, stored, freshId("d"), c));
 }
