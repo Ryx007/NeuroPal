@@ -1,4 +1,6 @@
-import { createSlice, nanoid } from "@reduxjs/toolkit";
+import { createSlice, current, isDraft, nanoid } from "@reduxjs/toolkit";
+
+import { adoptDump, canonical, cleanDumpTombs, isDayBody, stamps, stampsFrom, withTombstone } from "../../services/dayModel.js";
 
 // Pal as a buddy: the floating bubble + the assistant sheet (PalSheet).
 //
@@ -7,8 +9,13 @@ import { createSlice, nanoid } from "@reduxjs/toolkit";
 // payload); `state.pal.sheetOpen` boolean. The widget's "Ask Pal" button
 // dispatches {type: 'pal/openSheet'}.
 //
-// Persisted (AppProviders, "np.pal.v1"): bubbleHidden, dump, chat, sit,
-// sits. Never persisted: sheetOpen, section (the sheet always starts closed).
+// Persisted (AppProviders, "np.pal.v1"): bubbleHidden, dump, dumpGone, chat,
+// sit, sits. Never persisted: sheetOpen, section (the sheet always starts
+// closed).
+//
+// The brain dump syncs with the day (docs/DAY-SYNC.md, services/daySync.js):
+// `dump` stays the live list the sheet shows; a deleted line leaves a
+// tombstone in `dumpGone` ({id, deletedAt}) until the server has it.
 //
 // `sit` is the running "Sit with me" session. Its clock is the focus timer
 // (focusSlice): the session's endsAt IS focus.endsAt, so Home's Focus tile
@@ -24,6 +31,7 @@ const initialState = {
   section: null, // null = the list of actions
   bubbleHidden: false,
   dump: [], // [{ id, text, at }], newest first
+  dumpGone: [], // [{ id, deletedAt }] — deleted lines, for day sync
   chat: [], // [{ id, role: 'user' | 'pal', text, at, crisis?, local? }]
   // { id, minutes, label, taskId, anchorId, startedAt, endsAt,
   //   checkIn: null | 'asked' | 'yes' | 'no', endedAt, endReason: 'time' | 'done' }
@@ -34,6 +42,13 @@ const initialState = {
 const validSection = (s) => (PAL_SECTIONS.includes(s) ? s : null);
 const text = (v, max = 2000) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const isoNow = () => new Date().toISOString();
+
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+function withoutUnsafe(obj) {
+  const out = {};
+  for (const key of Object.keys(obj)) if (!UNSAFE_KEYS.has(key)) out[key] = obj[key];
+  return out;
+}
 
 function cleanList(list, keep, fn) {
   return (Array.isArray(list) ? list : []).filter((x) => x && typeof x === "object").map(fn).filter(Boolean).slice(0, keep);
@@ -46,7 +61,11 @@ const palSlice = createSlice({
     hydratePal(state, action) {
       const p = action.payload && typeof action.payload === "object" ? action.payload : {};
       state.bubbleHidden = Boolean(p.bubbleHidden);
-      state.dump = cleanList(p.dump, 1000, (d) => (text(d.text) ? { id: String(d.id || nanoid()), text: text(d.text), at: String(d.at || isoNow()) } : null));
+      // Fields this app doesn't use (from the server) are kept.
+      state.dump = cleanList(p.dump, 1000, (d) =>
+        text(d.text) ? { ...withoutUnsafe(d), id: String(d.id || nanoid()), text: text(d.text), at: String(d.at || isoNow()) } : null
+      );
+      state.dumpGone = cleanDumpTombs(p.dumpGone);
       state.chat = cleanList(p.chat, Infinity, (m) =>
         text(m.text, 4000) && (m.role === "user" || m.role === "pal")
           ? { id: String(m.id || nanoid()), role: m.role, text: text(m.text, 4000), at: String(m.at || isoNow()), crisis: Boolean(m.crisis), local: Boolean(m.local) }
@@ -111,8 +130,17 @@ const palSlice = createSlice({
         return { payload: { id: nanoid(), text: text(value), at: isoNow() } };
       },
     },
-    removeDump(state, action) {
-      state.dump = state.dump.filter((d) => d.id !== action.payload);
+    // The text is gone at once; the tombstone carries the deletion to the
+    // server and other devices. Undo writes the text again under a new id.
+    removeDump: {
+      reducer(state, action) {
+        if (!state.dump.some((d) => d.id === action.payload)) return;
+        const { now } = stampsFrom(action.meta);
+        state.dump = state.dump.filter((d) => d.id !== action.payload);
+        const gone = isDraft(state.dumpGone) ? current(state.dumpGone) : state.dumpGone;
+        state.dumpGone = withTombstone(gone, { id: String(action.payload), deletedAt: now });
+      },
+      prepare: (id) => ({ payload: id, meta: stamps() }),
     },
 
     // ---- talk ----
@@ -197,6 +225,22 @@ const palSlice = createSlice({
       state.sheetOpen = false;
       state.section = null;
     });
+    // Day sync (homeSlice.adoptDay): the dump half of the server's answer.
+    // Same rule as the other sections: lines the answer doesn't mention stay.
+    builder.addCase("home/adoptDay", (state, action) => {
+      const body = action.payload;
+      if (!isDayBody(body)) return;
+      const snap = current(state);
+      const r = adoptDump(snap.dump, snap.dumpGone, body.dump, body.erased === true);
+      if (!r) return;
+      if (canonical(r.live) !== canonical(snap.dump)) state.dump = r.live;
+      if (canonical(r.gone) !== canonical(snap.dumpGone)) state.dumpGone = r.gone;
+    });
+    // The day belonged to another account (homeSlice.resetDay).
+    builder.addCase("home/resetDay", (state) => {
+      state.dump = [];
+      state.dumpGone = [];
+    });
   },
 });
 
@@ -220,7 +264,7 @@ export const {
 
 // What AppProviders writes to storage.
 export function persistedPal(pal) {
-  return { bubbleHidden: pal.bubbleHidden, dump: pal.dump, chat: pal.chat, sit: pal.sit, sits: pal.sits };
+  return { bubbleHidden: pal.bubbleHidden, dump: pal.dump, dumpGone: pal.dumpGone, chat: pal.chat, sit: pal.sit, sits: pal.sits };
 }
 
 export default palSlice.reducer;

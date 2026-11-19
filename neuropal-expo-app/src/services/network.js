@@ -631,6 +631,33 @@ export async function fetchDocTicket(documentId) {
   return null;
 }
 
+// ---- Day sync (docs/DAY-SYNC.md) --------------------------------------------
+// Used by services/daySync.js, which needs the HTTP status to decide what to
+// do (401 stop, 404 this server has no day sync, 5xx/offline retry later),
+// so these reject with the axios error itself, never a toast-ready message.
+
+// POST /api/me/day/sync — every section the app knows → the merged day.
+export async function syncDayApi(body) {
+  assertConfigured();
+  const { data } = await apiClient.post("me/day/sync", body, { timeout: 20000 });
+  return data;
+}
+
+// GET /api/me/day — the same answer, sending nothing.
+export async function fetchDayApi() {
+  assertConfigured();
+  const { data } = await apiClient.get("me/day", { timeout: 20000 });
+  return data;
+}
+
+// DELETE /api/me/day — erase the day on every device ({deleted, gen}). No
+// screen offers this yet (contract §3).
+export async function eraseDayApi() {
+  assertConfigured();
+  const { data } = await apiClient.delete("me/day", { timeout: 20000 });
+  return data;
+}
+
 // ---- Issue 1: EPUB dual-representation reader -------------------------------
 
 // GET /api/documents/:id/epub-manifest → { spine, toc (nested), pageList }.

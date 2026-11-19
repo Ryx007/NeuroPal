@@ -11,7 +11,7 @@ import {
 } from "../store/serializers";
 import { hydrateFlashcards } from "../store/slices/flashcardsSlice";
 import { hydrateFocus } from "../store/slices/focusSlice";
-import { hydrateHome } from "../store/slices/homeSlice";
+import { hydrateHome, persistedHome } from "../store/slices/homeSlice";
 import { hydrateLibrary } from "../store/slices/librarySlice";
 import { hydrateLook } from "../store/slices/lookSlice";
 import { hydrateOnboarding } from "../store/slices/onboardingSlice";
@@ -101,17 +101,9 @@ function getPersistedSlices(state) {
     // v2 — skin, Signal settings, Pal, Home layout (docs/PLATFORM-PLAN.md).
     [STORAGE_KEYS.look]: JSON.stringify(state.look),
     [STORAGE_KEYS.onboarding]: JSON.stringify(state.onboarding),
-    [STORAGE_KEYS.home]: JSON.stringify({
-      nervousState: state.home.nervousState,
-      // Home check-in slider: exact level + capped history (hydrateHome
-      // tolerates saves without them).
-      nervousLevel: state.home.nervousLevel,
-      checkins: state.home.checkins,
-      tasks: state.home.tasks,
-      anchors: state.home.anchors,
-      todos: state.home.todos,
-      dayStamp: state.home.dayStamp,
-    }),
+    // The day, with its sync stamps and tombstones (hydrateHome migrates
+    // saves from before day sync).
+    [STORAGE_KEYS.home]: JSON.stringify(persistedHome(state.home)),
     [STORAGE_KEYS.library]: JSON.stringify({
       docs: serializeDocuments(state.library.docs),
     }),
@@ -217,6 +209,17 @@ export function AppProviders({ children }) {
           startAppearanceSync(appStore);
         } catch (e) {
           // sync unavailable — local appearance still applies
+        }
+        // The day: re-derive "done today" when the date changes while the
+        // app is open, and keep check-ins, anchors, the minimum day, to-dos
+        // and the brain dump in sync with the server (docs/DAY-SYNC.md).
+        // Signed out, offline or switched off, the day simply stays here.
+        try {
+          const { startDayClock, startDaySync } = require("../services/daySync");
+          startDayClock(appStore);
+          startDaySync(appStore);
+        } catch (e) {
+          // sync unavailable — the day still works on this device
         }
         // P8 — Android drops the OS notification schedule on reboot; rebuild
         // it from the hydrated state on every launch (idempotent, no boot
