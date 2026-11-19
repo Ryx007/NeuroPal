@@ -104,6 +104,25 @@ Coherent states are eigenstates of the annihilation operator. They are the close
   const server = app.listen(port, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
 
+  // Stop with Ctrl-C or `kill <pid>` (SIGTERM): the database's temp folder
+  // (~200 MB under /tmp/mongo-mem-*) and the storage folder are removed.
+  // `kill -9` skips this and leaves them behind.
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    try {
+      server.close();
+      await mongoose.disconnect();
+      await mongod.stop({ doCleanup: true, force: true });
+      fs.rmSync(storage, { recursive: true, force: true });
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+
   // The account, through the real route.
   const body = JSON.stringify({ email: EMAIL, password: PASSWORD, name: "Ryx", inviteCode: "np-dev" });
   const reg = await new Promise((resolve, reject) => {
