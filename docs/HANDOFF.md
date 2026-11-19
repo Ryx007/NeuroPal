@@ -97,9 +97,9 @@ reviews (server, Expo + web, Flutter) and fix passes for every finding.
 - body-parser's JSON error quotes the first ten characters of the body; the
   app's error handler answers malformed JSON with a fixed 400 instead.
 - `next dev` / `next typegen` rewrite `neuropal-platform/tsconfig.json`:
-  restore it before committing. Next.js 16.4.2 prints a security notice;
-  the advisories (fixed in 16.4.5) are all server features, the site is a
-  static export.
+  restore it before committing. Next.js is on 16.4.6 since round 4 (16.4.2
+  had the November 2026 advisories, all server features; the site is a
+  static export).
 - Reviewers work in a separate `git worktree` snapshot so fix agents can
   edit the main tree at the same time.
 - CI's Expo job sets `EXPO_PUBLIC_USE_MOCK=true` for the whole job (for the
