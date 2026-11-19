@@ -7,7 +7,15 @@
 > **Keep it updated:** every working session that changes phase state should
 > amend this file in the same commit.
 
-_Last updated: 2026-10-31 — **the backend is installed on the VPS**
+_Last updated: 2026-11-19 — **round 4 on branch `v4-android-web` (PR #4,
+stacked on `v3-apple-web`)**: day sync on every Android and web client
+(check-ins, anchors, the minimum day, to-dos and Pal's brain dump follow the
+person through their own server; contract `docs/DAY-SYNC.md`), the Flutter
+app catches up (Home, calming steps with tap-to-call help lines, Pal the
+assistant, document upload), study tools in the web reader, independent
+reviews of everything with fixes. Expo 0.4.0, Flutter 0.3.0. The VPS runs
+this branch; it goes public with the owner's finishing command.
+2026-10-31 — **the backend is installed on the VPS**
 (`/opt/neuropal`, compose project `neuropal-v2`, running privately).
 `https://api.ryx007.work` goes live once the owner approves the Cloudflare
 login and adds the AI key: one command, in HANDOFF §0 "VPS deployment".

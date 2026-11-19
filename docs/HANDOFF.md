@@ -11,12 +11,96 @@
 > _Written 2026-08-04 after the port-split + collaborator-prep session;
 > §0 added 2026-10-23 for the v2 platform branch, round 2 on 2026-10-24,
 > round 3 (native iOS + iPadOS app, web app) on 2026-10-29; the owner's
-> priority (Android + web first, native iOS last) on 2026-10-31._
+> priority (Android + web first, native iOS last) on 2026-10-31; round 4
+> (day sync, Flutter catches up, study tools) on 2026-11-19._
 > _Author: Claude (Opus/Sonnet/Fable across the session), owner "Ryx"._
 
 ---
 
-## 0. v2 PLATFORM BUILD-OUT (branches `v2-platform` → `v3-apple-web`, 2026-10-23…29) — read first
+## 0. v2 PLATFORM BUILD-OUT (branches `v2-platform` → `v3-apple-web` → `v4-android-web`, 2026-10-23…11-19) — read first
+
+### Round 4 (2026-11-19): day sync everywhere, the Flutter app catches up, study tools — branch `v4-android-web`, PR #4
+
+Scope set by the owner's priority (below): **Android (Expo + Flutter) and the
+web app**; the native iOS app gets nothing new this round. Branch stacked on
+`v3-apple-web` (draft PR #4 → base `v3-apple-web`). Built by the lead plus
+parallel agents (backend day sync, Expo day sync, web day sync, web study
+tools, Flutter Home + calm, Flutter Pal + upload), then three independent
+reviews (server, Expo + web, Flutter) and fix passes for every finding.
+
+- **Day sync — the contract is `docs/DAY-SYNC.md` (read it before touching
+  any of this).** Check-ins, anchors, the minimum viable day, to-dos and Pal's
+  brain dump follow the person across devices through their own server.
+  - Server: `POST /api/me/day/sync`, `GET /api/me/day`, `DELETE /api/me/day`
+    (`routes/day.js`). The server is the only merger; clients send everything
+    and adopt the answer. Pure rules in `services/dayMerge.js` (whole-
+    definition last-write-wins by `updatedAt` with a canonical-JSON tie-break,
+    separate ticks, content-free tombstones, the dump's first copy wins,
+    check-ins = union by `at` + the 60-second rule, `gen` for "erase
+    everywhere"). Models `DayState` (one per user, compare-and-set on `rev`)
+    and `DayCheckin` (one row per check-in, tagged with its `gen`).
+  - Caps (§6): 200 anchors, 100 tasks, 1000 to-dos, 1000 dump lines live;
+    **3000 tombstones per section** (a cap below the live caps brought
+    deleted items back — review finding); 5000 items per section per request;
+    stamps more than 60 s ahead are set to the server clock (once, on arrival
+    — stored stamps are never clamped again); this route reads its own body
+    (10 MB) **after** the session check.
+  - One person's syncs run one at a time per process (`utils/keyedQueue.js`,
+    32 waiting max → 503 + `Retry-After`; a stuck turn ends after 30 s). The
+    compare-and-set loop stays for several processes; its race tests run with
+    `NP_DAY_QUEUE=off`.
+  - Clients: Expo (`src/services/dayModel.js`, `daySync.js`), web
+    (`src/lib/neuropal/dayModel.ts`, `day.ts`, `daySync.ts`, a Web Lock
+    `np-day` around adopting an answer), Flutter (`lib/day/*`). Settings has
+    "Keep my day in sync" (on by default) with a status line, the only place
+    a sync problem is shown. Rules every client follows (§8): whose day it is
+    (the owner is the account id, never the server address), unmentioned
+    items stay on the device, `erased` replaces everything, text limits at
+    entry, 401 stops only for the current token and never signs anyone out
+    from a background sync, any other 4xx stops until the next start.
+- **Flutter app** (`neuropal-flutter`, 0.3.0): the new Home (check-in slider,
+  anchors, minimum day, Pal and Focus tiles, both skins), the calming steps
+  with tap-to-call help lines (112; Telefono Amico Italia 02 2327 2327),
+  Pal the assistant (What now, Break it down, Brain dump, Sit with me, Talk;
+  every message checked on the phone with the backend's exact crisis
+  pattern — a test reads `pal.js`), document upload (`file_picker`, progress,
+  cancel, plain errors). `url_launcher` + `file_picker` build fine with
+  AGP 9.1.0.
+- **Web app:** study tools in the reader (summary, quiz, cheat sheet,
+  flashcards, explain; `S` opens them; `src/lib/neuropal/study.ts`,
+  `components/app/reader/study/*`), and day sync (Settings section).
+- **Expo app** (0.4.0): day sync, text limits at entry, the dump move keeps
+  long lines.
+- **Both Android apps:** Auto Backup is off (`allowBackup=false`): the day,
+  the dump and Pal's chat must not land in a Google Drive backup (§9).
+- **Uploads:** the server reads multipart file names as UTF-8
+  (`utils/uploadName.js`; multer 1.4 read them as latin1: "perché" became
+  "perchÃ©").
+- **Server (VPS):** deployed from `v4-android-web` (see "VPS deployment"
+  below for access). MongoDB 8.0.34 needs `GLIBC_TUNABLES=glibc.pthread.rseq=1`
+  on kernel 7.0 (SERVER-121912), set in both compose files. Still not public:
+  the owner's finishing command (AI key + Cloudflare approval) is pending.
+- **Tests / CI:** backend 106 (`day.merge`, `day.sync`, `keyedQueue`,
+  `uploadName`), Expo `npm test` 61, web `day-model.mjs` 20 +
+  `web-day-sync.mjs` 81 + `web-study.mjs`, Flutter (see the Flutter job).
+  CI's web-app job runs on `ubuntu-24.04` (Playwright has no Chromium build
+  for 26.04) with three dev APIs (4420 reader, 4410 shell + day sync, 4430
+  study).
+
+**Traps from round 4 (don't re-derive):**
+- `flutter` is not on PATH in the cloud workspace: `/opt/flutter/bin`.
+- `flutter build apk` leaves a Gradle daemon (~3 GB) and a Kotlin daemon
+  running: `cd neuropal-flutter/android && ./gradlew --stop` after a build.
+- With the per-person queue on, the day-sync race tests no longer race; they
+  set `NP_DAY_QUEUE=off` to exercise the compare-and-set loop.
+- body-parser's JSON error quotes the first ten characters of the body; the
+  app's error handler answers malformed JSON with a fixed 400 instead.
+- `next dev` / `next typegen` rewrite `neuropal-platform/tsconfig.json`:
+  restore it before committing. Next.js 16.4.2 prints a security notice;
+  the advisories (fixed in 16.4.5) are all server features, the site is a
+  static export.
+- Reviewers work in a separate `git worktree` snapshot so fix agents can
+  edit the main tree at the same time.
 
 ### Round 3 (2026-10-29): native iPhone + iPad app and the web app — branch `v3-apple-web`, PR #3
 
@@ -151,7 +235,10 @@ ported to it later, and its CI job stays as it is.
   through Desktop Commander. The Mac must be awake, with the desktop app
   open. Rule from the owner: the server is his, but change nothing outside
   NeuroPal's own folder and containers.
-- **Installed** in `/opt/neuropal`, branch `v3-apple-web`. Compose project
+- **Installed** in `/opt/neuropal`, branch `v3-apple-web` (since 2026-11-19
+  `v4-android-web`: `git fetch && git checkout -B v4-android-web
+  origin/v4-android-web`, then `docker compose up -d --build api` in
+  `deploy/vps`). Compose project
   `neuropal-v2`, all running:
   - The API is healthy.
   - MongoDB, Qdrant, the nightly backup.

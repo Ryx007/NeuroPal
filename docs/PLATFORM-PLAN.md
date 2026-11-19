@@ -31,7 +31,7 @@ NeuroPal/
 ├── docs/                  BRAIN · HANDOFF · PROJECT-STATUS · this plan
 └── .github/workflows/     ★ CI for all of the above
 ```
-★ = new in v2. ◆ = new in round 3 (2026-10-29, branch `v3-apple-web`, PR #3).
+★ = new in v2. ◆ = new in round 3 (2026-10-29, branch `v3-apple-web`, PR #3). Round 4 (2026-11-19, branch `v4-android-web`, PR #4) adds no folders: day sync, the Flutter Home/Pal/upload and the web study tools live in the existing ones.
 
 ## 3. Shared contracts
 
@@ -85,12 +85,12 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · — not planned for that 
 
 | Feature | Expo (Android/iOS/web) | Flutter (Android/iOS) | Platform site | Native iOS + iPadOS ◆ | Web app `/app/` ◆ |
 |---|---|---|---|---|---|
-| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 M1: library with ingest status, reader + TTS highlight, Ask with sources (no upload or study tools yet) | — | 🟡 library, upload, reader + word-by-word read-aloud, PDF original (PDFKit), EPUB, Ask with sources — no study tools yet | 🟡 the same, desktop-first — no study tools yet |
+| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 library with ingest status, upload (0.3.0), reader + TTS highlight, Ask with sources — no study tools yet | — | 🟡 library, upload, reader + word-by-word read-aloud, PDF original (PDFKit), EPUB, Ask with sources — no study tools yet | ✅ the same, desktop-first, with study tools in the reader (round 4: summary, quiz, cheat sheet, flashcards, explain) |
 | Two skins (Classic + Signal) with auto-contrast | ✅ M1 | ✅ M1 | ✅ M1 (Signal default) | ✅ (Swift port of the tokens, fixture-proven) | ✅ |
 | Make it yours: studio, vibes, fine-tune, Ask Pal, saved looks, undo | ✅ M1 | 🟡 M1: skin, vibes, Classic theme/accent in Settings | ✅ M1 (/appearance) | ✅ Settings → Make it yours (incl. Ask Pal, undo) | 🟡 core controls in Settings; the full studio is the site's /appearance |
 | Appearance sync (GET/PUT `/api/me/appearance`, 409 → adopt) | ✅ M1 (two-way) | 🟡 M1 (push only) | ✅ M1 (save; asks on 409) | ✅ two-way | 🟡 saved from the studio; no automatic pull on sign-in yet |
 | Build your Pal | ✅ M1 | ⬜ M2 | — | 🟡 Settings → Pal's look | ⬜ |
-| Arrange Home + day rules (Classic keeps its original Home until arranged) | ✅ M1 | ⬜ M2 (no Home yet) | — | 🟡 follows the saved layout + rules (no arrange screen yet) | 🟡 follows the saved layout + rules (no arrange screen yet) |
+| Arrange Home + day rules (Classic keeps its original Home until arranged) | ✅ M1 | 🟡 0.3.0: Home in both skins, Classic's original layout (no arrange screen yet) | — | 🟡 follows the saved layout + rules (no arrange screen yet) | 🟡 follows the saved layout + rules (no arrange screen yet) |
 | Signal Home (S-Today board) and Signal player (S-Reader board) | ✅ M1 | 🟡 M1: Signal player | — | ✅ | ✅ |
 | Signal background fields (Chladni / interference) | ✅ M1 (expo-gl) | ⬜ M2 (fragment shader) | ✅ M1 (WebGL) | ✅ (Canvas, still when motion is off) | ✅ (site WebGL field) |
 | Signal layouts for Library, Notes, Toolbox (tokens apply already) | ⬜ M2 | — | — | 🟡 Library (no Notes/Toolbox yet) | 🟡 Library (no Notes/Toolbox yet) |
@@ -98,12 +98,13 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · — not planned for that 
 | Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + two-source interference | — | — (the site's /learn) |
 | iOS widgets + focus Live Activity (Swift) | — | 🟡 M1: built for the simulator in CI; not run on a device | — | 🟡 check-in (App Intents), next anchor, continue reading, lock screen — no Live Activity; simulator only | — |
 | Sign-in to the public server (invite code, sessions, sign out everywhere) | ✅ 0.3.0 (opens offline without a session) | ✅ 0.2.0 (Cloud first) | 🟡 M1 page (/sign-in) | ✅ (Keychain, host-bound) | ✅ (this tab, or kept on this device) |
-| Check-in slider (drag/tap; thirds decide the state; history) | ✅ 0.3.0 | ⬜ (no Home yet) | — | ✅ | ✅ |
-| Pal assistant: bubble + sheet (What now?, Break it down, Brain dump, Sit with me, Talk; `/api/pal/*`) | ✅ 0.3.0 | ⬜ | — | ✅ (bubble on iPhone, sidebar on iPad) | ✅ (a page, no bubble) |
+| Check-in slider (drag/tap; thirds decide the state; history) | ✅ 0.3.0 | ✅ 0.3.0 | — | ✅ | ✅ |
+| Pal assistant: bubble + sheet (What now?, Break it down, Brain dump, Sit with me, Talk; `/api/pal/*`) | ✅ 0.3.0 | ✅ 0.3.0 (bubble + sheet, crisis check on the phone) | — | ✅ (bubble on iPhone, sidebar on iPad) | ✅ (a page, no bubble) |
 | Android home-screen widget "Pal" (check-in, next anchor, Ask Pal) | ✅ 0.3.0 (react-native-android-widget; not yet run on a device) | — | — | — | — |
 | Modules 1–2 (SCAFFOLD, state system) backend routes | ⬜ M3 | ⬜ M4 | — | ⬜ | ⬜ |
 | Module 7 AI companion | ⬜ M4 | ⬜ M5 | — | ⬜ | ⬜ |
-| Calming steps (TIPP), usable signed out and offline | ✅ (Emergency) | ⬜ | — | ✅ | ✅ |
+| Calming steps (TIPP), usable signed out and offline | ✅ (Emergency) | ✅ 0.3.0 (help lines: tap to call) | — | ✅ | ✅ |
+| Day sync: check-ins, anchors, minimum day, to-dos, brain dump (`/api/me/day*`, `docs/DAY-SYNC.md`) — round 4 | ✅ 0.4.0 | ✅ 0.3.0 (no to-dos list in this app) | — | ⬜ (later) | ✅ |
 | Original PDF download (`GET /documents/:id/file`) | — | — | — | ✅ PDFKit view | — (page images) |
 
 The Dart port covers the palette logic (parity-tested against

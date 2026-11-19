@@ -23,7 +23,7 @@ phone / laptop ──HTTPS──▶ Cloudflare edge ──tunnel──▶ cloudf
 ## First install (as root on the VPS)
 
 ```bash
-git clone --branch v3-apple-web https://github.com/Ryx007/NeuroPal.git /opt/neuropal
+git clone --branch v4-android-web https://github.com/Ryx007/NeuroPal.git /opt/neuropal
 cd /opt/neuropal/deploy/vps
 ./bootstrap.sh      # secrets → .env, asks for the Gemini key, builds, starts
 ./tunnel.sh         # prints a Cloudflare link once; then https://api.ryx007.work
