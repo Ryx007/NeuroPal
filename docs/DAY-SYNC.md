@@ -271,9 +271,10 @@ a run is affected. That is harmless.
   can't turn a deletion into a live item.
 - The request body may be at most 10 MB on this route (5 MB elsewhere):
   enough for a day at every cap, even in a script that takes three bytes a
-  character.
-- One person's syncs are handled one at a time on a server process; past a
-  few waiting, the newest gets `503` with `Retry-After`, like a lost race.
+  character. It is read only after the session check.
+- One person's syncs are handled one at a time on a server process; past 32
+  waiting, the newest gets `503` with `Retry-After`, like a lost race. A sync
+  stuck on the database gives up its turn after 30 seconds.
 - Nothing from a sync body is ever logged.
 
 ## 7. `gen`: erasing everywhere

@@ -1,4 +1,4 @@
-const { Router } = require('express');
+const express = require('express');
 
 const { DayState, DayCheckin } = require('../models');
 const requireAuth = require('../middleware/auth');
@@ -23,7 +23,14 @@ const day = require('../services/dayMerge');
 // Nothing from a request or response body is ever logged: errors from the
 // database are replaced by a content-free one before app.js can log them.
 
-const router = Router();
+const router = express.Router();
+
+// This route reads its own body, after the session check (so a request
+// without a session never gets a 10 MB body parsed) and with a larger limit
+// than the rest of the API: a day at every cap fits in 10 MB even in a
+// script that takes three bytes a character (§6). app.js leaves this path
+// to it.
+const syncBody = express.json({ limit: '10mb' });
 
 // Rounds one sync may take when other syncs for the same person keep landing
 // first. Every round re-reads, so nothing is lost; past the bound the client
@@ -36,9 +43,11 @@ const SETTLE_BATCH = 16;
 // One sync at a time per person in this process (§6): queued, each sync
 // takes one round of the loop below instead of costing the others rounds.
 // Past this many running and waiting, the newest gets the same 503 a lost
-// race gets. The tests of the compare-and-set loop itself (as if there were
-// several API processes) turn the queue off with NP_DAY_QUEUE=off.
-const syncQueue = keyedQueue({ maxPending: 32 });
+// race gets. A sync stuck on the database gives up its turn after 30 s; the
+// loop keeps two overlapping syncs correct. The tests of the loop itself
+// (as if there were several API processes) turn the queue off with
+// NP_DAY_QUEUE=off.
+const syncQueue = keyedQueue({ maxPending: 32, maxRunMs: 30 * 1000 });
 
 // Outcomes of writing one check-in.
 const WROTE = 'wrote';
@@ -395,6 +404,7 @@ router.get(
 router.post(
     '/sync',
     requireAuth,
+    syncBody,
     asyncHandler(async (req, res) => {
         res.set('Cache-Control', 'private, no-store');
         const body = req.body;
@@ -407,9 +417,9 @@ router.post(
         let result;
         try {
             await ready();
-            const nowMs = Date.now();
-            const request = day.normalizeRequest(body, nowMs);
-            const run = () => syncDay(req.userId, request, nowMs);
+            const nowMs = Date.now(); // the clock rule uses the arrival time
+            // Cleaned inside the queue, so a refused sync costs no work.
+            const run = () => syncDay(req.userId, day.normalizeRequest(body, nowMs), nowMs);
             result = process.env.NP_DAY_QUEUE === 'off' ? await run() : await syncQueue.run(String(req.userId), run);
         } catch (err) {
             throw storageError(err);

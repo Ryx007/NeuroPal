@@ -37,6 +37,7 @@ test('one key runs its tasks one at a time, in arrival order', async () => {
     a.open();
     assert.deepEqual(await Promise.all(results), ['a', 'b', 'c']);
     assert.deepEqual(log, ['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
+    await tick();
     assert.equal(q.keys(), 0, 'an idle key is forgotten');
 });
 
@@ -92,8 +93,48 @@ test('past maxPending running and waiting, run() answers FULL without running th
     assert.equal(await q.run('ryx', async () => 'room again'), 'room again');
 });
 
-test('maxPending must be a positive integer', () => {
+test('a task that never settles gives up its turn after maxRunMs, and only then', async () => {
+    const maxRunMs = 300;
+    const q = keyedQueue({ maxPending: 8, maxRunMs });
+    const log = [];
+    let release;
+    const stuck = new Promise((resolve) => {
+        release = resolve;
+    });
+    const t0 = Date.now();
+    q.run('ryx', () => {
+        log.push('stuck starts');
+        return stuck; // a database call that never returns
+    });
+    // Two more queued behind it at once. If their clocks ran while they
+    // waited, the third would start as soon as the first turn ran out.
+    const waiting = gated(log, 'waiting');
+    const next = q.run('ryx', waiting.task);
+    const third = q.run('ryx', async () => {
+        log.push('third');
+        return 'third';
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(log, ['stuck starts'], 'the others wait while the turn lasts');
+    while (!log.includes('start waiting')) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(Date.now() - t0 >= maxRunMs - 1, 'not before maxRunMs');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    waiting.open();
+    assert.equal(await next, 'waiting');
+    assert.equal(await third, 'third');
+    assert.deepEqual(log, ['stuck starts', 'start waiting', 'end waiting', 'third'], 'the second task had its own full turn');
+    // The stuck call returning late changes nothing.
+    release('late');
+    await tick();
+    assert.equal(q.keys(), 0);
+    assert.equal(await q.run('ryx', async () => 'fine'), 'fine');
+});
+
+test('maxPending and maxRunMs must be positive integers', () => {
     for (const bad of [0, -1, 1.5, '3', undefined, Infinity]) {
         assert.throws(() => keyedQueue({ maxPending: bad }), TypeError);
+    }
+    for (const bad of [0, -1, 1.5, '3', Infinity]) {
+        assert.throws(() => keyedQueue({ maxPending: 1, maxRunMs: bad }), TypeError);
     }
 });

@@ -381,6 +381,18 @@ test('stored stamps are not clamped again when read back: a deletion stays a del
     assert.equal(JSON.stringify(stale.body).includes('Therapy'), false);
 });
 
+test('the sync body is read only after the session check', async () => {
+    const me = await account();
+    // Broken JSON: without a session the body is never parsed (401, not 400).
+    assert.equal((await call('POST', '/api/me/day/sync', null, undefined, '{"v":1,')).status, 401);
+    assert.equal((await call('POST', '/api/me/day/sync', me, undefined, '{"v":1,')).status, 400);
+    // A body between the general 5 MB and this route's 10 MB, without a session.
+    const big = JSON.stringify({ v: 1, dump: [{ id: 'd-1', text: 'x'.repeat(6 * 1024 * 1024), at: PAST }] });
+    assert.equal((await call('POST', '/api/me/day/sync', null, undefined, big)).status, 401);
+    // Other routes still parse first, with the general limit.
+    assert.equal((await call('POST', '/api/auth/login', null, undefined, '{"email":')).status, 400);
+});
+
 test('this route takes a day at every cap (10 MB); other routes keep 5 MB', async () => {
     const me = await account();
     const at = clock();

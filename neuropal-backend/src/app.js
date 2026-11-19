@@ -49,11 +49,11 @@ function buildApp() {
         next();
     });
 
-    // Day sync sends the whole day (docs/DAY-SYNC.md §6): a day at every cap
-    // fits in 10 MB even in a script that takes three bytes a character.
-    // Parsed here first, the general parser below then leaves the body alone.
-    app.use('/api/me/day/sync', express.json({ limit: '10mb' }));
-    app.use(express.json({ limit: '5mb' }));
+    // JSON bodies up to 5 MB. Day sync reads its own (routes/day.js): after
+    // the session check, and up to 10 MB, since it sends the whole day.
+    const json = express.json({ limit: '5mb' });
+    const DAY_SYNC_PATH = /^\/api\/me\/day\/sync\/?$/i;
+    app.use((req, res, next) => (DAY_SYNC_PATH.test(req.path) ? next() : json(req, res, next)));
 
     // Health probe — for nginx / uptime checks. Fast by default; pass
     // ?deps=1 for per-dependency up/down + latency (Issue 1: see what's
