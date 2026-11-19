@@ -287,6 +287,21 @@ export function migrateHome(saved, base, { now, today }) {
   next.anchors = migrateList(next.anchors, "anchors", ctx);
   next.todos = migrateList(next.todos, "todos", ctx);
   next.sync = cleanSyncMeta("sync" in p ? p.sync : base.sync);
+  // A starter missing from a save made before sync was deleted by the
+  // person (the deletion predates tombstones). Saying so keeps another
+  // device's 1970 starter from bringing it back (contract §8, "Old saves").
+  if (!("sync" in p)) {
+    for (const [section, starters] of [
+      ["tasks", STARTER_TASKS],
+      ["anchors", mockAnchors],
+    ]) {
+      if (!Array.isArray(p[section])) continue;
+      const have = new Set(next[section].map((it) => it.id));
+      for (const s of starters) {
+        if (!have.has(s.id)) next.sync.gone[section] = withTombstone(next.sync.gone[section], tombstone(s.id, EPOCH, EPOCH, now));
+      }
+    }
+  }
   return deriveDay(next, today);
 }
 

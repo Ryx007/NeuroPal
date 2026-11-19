@@ -1,7 +1,8 @@
 "use client";
 // The anchors editor: every anchor of the day on the left, the one being
 // added or changed on the right (stacked on phones). Time, a window it may
-// move in, and a kind. Delete has Undo. Stored on this device.
+// move in, and a kind. Delete has Undo. Part of the day: stored in this
+// browser and, with day sync on, on the server (daySync.ts).
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   addAnchor,
@@ -145,7 +146,7 @@ function AnchorsEditor({ id, target, anchors, signal, now }: { id: string; targe
       </h2>
       <p id={`${id}-desc`} className={styles.dialogLead}>
         Fixed points in your day: meds, breaks, study blocks. Each one has a window, so it never has to be exact.
-        They stay on this device.
+        With “Keep my day in sync” on, your other devices see them too.
       </p>
 
       <div className={styles.anchorsGrid}>

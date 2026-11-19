@@ -3,20 +3,21 @@
 //
 // Personal — goes when the session ends, and before another account's
 // session can show anything:
-//   Pal's chat · today (check-ins, anchors, the minimum day, the brain dump) ·
+//   Pal's chat · today (check-ins, anchors, the minimum day, the brain dump,
+//   and day sync's own state: its gen, deletions not sent yet) ·
 //   "Sit with me" and its notes · the upload queue · document tickets ·
 //   the study tools' flashcard decks (and, in memory, their summaries) ·
 //   Pal's settings, the Home layout and Undo in the look (the skin and its
 //   colours stay as this device's look, unclaimed, so the next account's
 //   own look wins over them).
 // Kept — this device's preferences: reading voice, speed, fonts and
-// shortcuts (prefs.ts), the server address.
+// shortcuts (prefs.ts), the server address, "Keep my day in sync" (day.ts).
 //
 // Modules with their own in-memory part (uploads, tickets, the look sync)
 // add it with `onForget`; the stored parts are cleared here directly.
 import { sessionStore } from "@/lib/api";
 import { releaseLook } from "@/lib/appearanceStore";
-import { dayStore } from "./day";
+import { forgetDay } from "./day";
 import { accountKey, currentSession, ownerStore } from "./owner";
 import { clearLocalChat, sitStore } from "./palState";
 import { writeRaw } from "@/lib/store";
@@ -81,7 +82,7 @@ export function forgetLocalData(): number {
   const stopped = forgetTab();
   clearLocalChat();
   sitStore.clear();
-  dayStore.clear();
+  forgetDay();
   writeRaw("local", STUDY_DECKS_KEY, null);
   releaseLook();
   return stopped;

@@ -291,7 +291,11 @@ now.
 - anything else gets `createdAt` and `updatedAt` = now. Tasks and to-dos are
   ordered by `createdAt`, so keep the order the person sees: give each next
   item a `createdAt` one millisecond later than the one before it;
-- an item ticked today gets `doneOn` = today and `tickAt` = now.
+- an item ticked today gets `doneOn` = today and `tickAt` = now;
+- **a starter missing from the old save** was deleted by the person before
+  tombstones existed: send it as a tombstone (`createdAt` and `updatedAt`
+  1970, `deletedAt` now), or another device's 1970 starter brings it back.
+  Only for a save from before sync, and only when the save has that list.
 
 New installs seed their starters with the 1970 stamps. Starter ids are the
 same in every client (`mvd-1` … `mvd-3`), so they merge into one copy.

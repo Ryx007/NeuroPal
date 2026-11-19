@@ -21,6 +21,7 @@ import { hostOf } from "@/lib/api";
 import { refreshSession } from "@/lib/neuropal/account";
 import { currentSession } from "@/lib/neuropal/client";
 import { checkServer, useConnection } from "@/lib/neuropal/connection";
+import { useDaySync } from "@/lib/neuropal/daySync";
 import { claimLocalData } from "@/lib/neuropal/localData";
 import { normalizePal, palSay } from "@/lib/neuropal/look";
 import { startLookSync } from "@/lib/neuropal/lookSync";
@@ -68,6 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // The look follows the signed-in account, both ways. Never on the calming
   // steps (no network there); a change still waiting goes up on the next page.
   useEffect(() => (calm ? undefined : startLookSync()), [calm]);
+  useDaySync(!calm); // the day too (lib/neuropal/daySync.ts), by the same rule
 
   // Publish the bottom bar's height (before paint, and again whenever it
   // changes: a rotation, larger text, the safe area) for anything docked
@@ -369,6 +371,7 @@ const SHORTCUT_GROUPS: { title: string; rows: ShortcutRow[] }[] = [
       { chords: [["Space"]], what: "Play or pause reading aloud" },
       { chords: [["←"], ["→"]], join: "or", what: "Previous or next sentence" },
       { chords: [["Shift", "↑"], ["Shift", "↓"]], join: "or", what: "Previous or next paragraph" },
+      { chords: [["S"]], what: "Open or close the study tools" },
     ],
   },
 ];

@@ -173,9 +173,15 @@ jobs:
       - name: Shell, Home, calming steps, Pal, Settings
         working-directory: neuropal-platform
         run: node scripts/qa/web-shell.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4410 --out "$RUNNER_TEMP/shots-shell"
+      - name: Day sync between two browsers (its own account)
+        working-directory: neuropal-platform
+        run: node scripts/qa/web-day-sync.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4410 --out "$RUNNER_TEMP/shots-day"
       - name: Study tools in the reader
         working-directory: neuropal-platform
         run: node scripts/qa/web-study.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4430 --out "$RUNNER_TEMP/shots-study" --stop-api "$(cat "$RUNNER_TEMP/api-study.pid")"
+      - name: The day model (old saves, stamps, adopting an answer)
+        working-directory: neuropal-platform
+        run: node scripts/qa/day-model.mjs
       - name: Pal's crisis check matches the backend
         working-directory: neuropal-platform
         run: node scripts/qa/web-shell-crisis.mjs

@@ -121,9 +121,33 @@ test("a 0.3.0 save keeps every item, and gets the contract's stamps", () => {
   // to-dos keep `done` (it is part of a to-do, not a daily tick)
   assert.equal(byId(s.todos, "td-2").done, true);
 
-  // sync starts on, never synced, nobody's yet
-  assert.deepEqual(s.sync, { enabled: true, gen: 0, owner: null, gone: { tasks: [], anchors: [], todos: [] }, lastSyncAt: null });
+  // sync starts on, never synced, nobody's yet. The save has no starter
+  // anchor a-4: the person deleted it before tombstones existed, so the
+  // deletion is recorded (or another phone's 1970 a-4 would bring it back).
+  assert.deepEqual(s.sync, {
+    enabled: true,
+    gen: 0,
+    owner: null,
+    gone: { tasks: [], anchors: [{ id: "a-4", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: NOW }], todos: [] },
+    lastSyncAt: null,
+  });
   assert.equal(s.dayStamp, DAY1);
+});
+
+test("a starter deleted before sync is sent as a deletion, and only for old saves", () => {
+  const old = save030();
+  old.tasks = old.tasks.filter((x) => x.id !== "mvd-2");
+  const s = homeReducer(undefined, at(H.hydrateHome(old)));
+  assert.deepEqual(s.sync.gone.tasks, [{ id: "mvd-2", createdAt: EPOCH, updatedAt: EPOCH, deletedAt: NOW }]);
+  assert.equal(byId(s.tasks, "mvd-2"), undefined);
+  // The tombstone wins over a 1970 starter on the server (deletedAt >= updatedAt).
+  const body = buildSyncBody(s, freshPal());
+  assert.ok(body.tasks.some((x) => x.id === "mvd-2" && x.deletedAt === NOW && x.title === undefined));
+  // A save that already syncs, or one with no task list at all, adds none.
+  const again = homeReducer(undefined, at(H.hydrateHome(JSON.parse(JSON.stringify(H.persistedHome(s))))));
+  assert.equal(again.sync.gone.tasks.length, 1, "hydrating again adds no second tombstone");
+  const bare = homeReducer(undefined, at(H.hydrateHome({ dayStamp: DAY1 })));
+  assert.deepEqual(bare.sync.gone, { tasks: [], anchors: [], todos: [] });
 });
 
 test("a 0.3.0 save from yesterday: its ticks don't count today (as before)", () => {

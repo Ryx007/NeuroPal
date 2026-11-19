@@ -102,6 +102,10 @@ function seededDay() {
 }
 
 async function context(browser, vp, skin, { signedIn, session, day = seededDay(), extraLocal = {} }) {
+  // Day sync (docs/DAY-SYNC.md): the account's day lives on the server too.
+  // Start each check from an empty server day, so one check's check-ins and
+  // brain dump don't come back in the next (the seeded day joins it).
+  if (signedIn && session?.token) await fetch(`${API}/api/me/day`, { method: "DELETE", headers: { Authorization: `Bearer ${session.token}` } });
   const ctx = await browser.newContext({ viewport: vp.size, reducedMotion: "no-preference" });
   await ctx.addInitScript(
     ({ api, look, s, d, extra }) => {
@@ -346,7 +350,7 @@ async function behaviour(browser, session) {
     check((await shows(dialog, 3000)), "? opens the shortcuts list", "? didn't open the list");
     const readerKeys = (await dialog.getByRole("table", { name: "In the reader" }).innerText().catch(() => "")).replace(/\s+/g, " ");
     check(
-      ["Play or pause reading aloud", "Previous or next sentence", "Previous or next paragraph"].every((t) => readerKeys.includes(t)),
+      ["Play or pause reading aloud", "Previous or next sentence", "Previous or next paragraph", "Open or close the study tools"].every((t) => readerKeys.includes(t)),
       "the list includes the reader's keys",
       `reader keys missing from the list: ${readerKeys.slice(0, 120)}`,
     );

@@ -1,7 +1,7 @@
 "use client";
 // Settings: shape the app around your brain. Look · Reading · Pal ·
-// Keyboard · Account · About. Wide screens keep an "On this page" list in
-// view; everything is saved as you go.
+// Keyboard · Your day · Account · About. Wide screens keep an "On this page"
+// list in view; everything is saved as you go.
 import Link from "next/link";
 import { useId } from "react";
 import { hostOf } from "@/lib/api";
@@ -11,6 +11,7 @@ import { ROUTES, SHORTCUTS_EVENT } from "../common/appNav";
 import { Kbd, Switch } from "../common/bits";
 import { KeyboardIcon } from "../common/icons";
 import { AccountSection } from "./AccountSection";
+import { DaySyncSection } from "./DaySyncSection";
 import { LookSection } from "./LookSection";
 import { PalSection } from "./PalSection";
 import { ReadingSection } from "./ReadingSection";
@@ -21,6 +22,7 @@ const SECTIONS = [
   { id: "reading", title: "Reading" },
   { id: "pal", title: "Pal" },
   { id: "keyboard", title: "Keyboard" },
+  { id: "day", title: "Your day" },
   { id: "account", title: "Account" },
   { id: "about", title: "About and privacy" },
 ] as const;
@@ -99,6 +101,13 @@ export function SettingsView() {
             </div>
           </section>
 
+          <section id="day" className={`np-panel ${styles.section}`} aria-labelledby={`${id}-day`}>
+            <h2 id={`${id}-day`} className={`np-display ${styles.sectionTitle}`}>
+              Your day
+            </h2>
+            <DaySyncSection />
+          </section>
+
           <section id="account" className={`np-panel ${styles.section}`} aria-labelledby={`${id}-account`}>
             <h2 id={`${id}-account`} className={`np-display ${styles.sectionTitle}`}>
               Account
@@ -117,7 +126,10 @@ export function SettingsView() {
                   <ul className={styles.list}>
                     <li>Your day: check-ins, anchors, the minimum viable day, the brain dump.</li>
                     <li>Talk messages: this tab only, or this device when you stay signed in.</li>
-                    <li>Signing out clears both, so the next person here sees none of it. Reading and keyboard settings and the look stay.</li>
+                    <li>
+                      Signing out clears both from this browser, so the next person here sees none of it. Reading and keyboard settings and the look
+                      stay.
+                    </li>
                   </ul>
                 </div>
                 <div>
@@ -125,6 +137,7 @@ export function SettingsView() {
                   <ul className={styles.list}>
                     <li>Your documents, reading progress and questions about them.</li>
                     <li>Your look and your Pal’s settings, so every device shows the same.</li>
+                    <li>Your day, while “Keep my day in sync” is on, so it follows you to your other devices. Sync never sends it to an AI.</li>
                     <li>A copy of your chat with Pal, until you clear it.</li>
                     <li>Questions and Talk messages are answered by the AI service your server uses. Nothing is sold, and there are no ads.</li>
                   </ul>
