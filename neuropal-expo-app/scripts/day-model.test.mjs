@@ -875,6 +875,10 @@ globalThis.require = (id) => {
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => (String(url).endsWith("/healthz") ? { ok: true, status: 200 } : realFetch(url, init));
 process.env.EXPO_PUBLIC_API_BASE_URL = "http://np.test";
+// These tests drive the real-server path. CI's Expo job sets
+// EXPO_PUBLIC_USE_MOCK=true for its bundles; mock mode would park day sync
+// in "demo" and every request below would never be sent.
+process.env.EXPO_PUBLIC_USE_MOCK = "false";
 
 const link = await import("../src/store/ApiLink.js");
 const net = await import("../src/services/network.js");
