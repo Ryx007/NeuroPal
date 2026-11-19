@@ -3,6 +3,7 @@ const { Router } = require('express');
 const { DayState, DayCheckin } = require('../models');
 const requireAuth = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
+const { keyedQueue, FULL } = require('../utils/keyedQueue');
 const day = require('../services/dayMerge');
 
 // Day sync — docs/DAY-SYNC.md is the contract (v1).
@@ -31,6 +32,13 @@ const MAX_ATTEMPTS = 40;
 
 // Check-in writes in flight at once for one sync.
 const SETTLE_BATCH = 16;
+
+// One sync at a time per person in this process (§6): queued, each sync
+// takes one round of the loop below instead of costing the others rounds.
+// Past this many running and waiting, the newest gets the same 503 a lost
+// race gets. The tests of the compare-and-set loop itself (as if there were
+// several API processes) turn the queue off with NP_DAY_QUEUE=off.
+const syncQueue = keyedQueue({ maxPending: 32 });
 
 // Outcomes of writing one check-in.
 const WROTE = 'wrote';
@@ -70,14 +78,14 @@ function storageError(err) {
     return safe;
 }
 
-async function loadState(userId, nowMs) {
+async function loadState(userId) {
     const doc = await DayState.findOne({ userId }).lean();
     if (!doc) return { doc: null, gen: 1, rev: 0, sections: day.emptySections() };
     return {
         doc,
         gen: Number.isSafeInteger(doc.gen) && doc.gen > 0 ? doc.gen : 1,
         rev: Number.isSafeInteger(doc.rev) && doc.rev >= 0 ? doc.rev : 0,
-        sections: day.readSections(doc, nowMs),
+        sections: day.readSections(doc),
     };
 }
 
@@ -300,7 +308,7 @@ async function syncDay(userId, request, nowMs) {
     let seenGen = 0;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         if (attempt > 0) await pause(attempt);
-        const state = await loadState(userId, nowMs);
+        const state = await loadState(userId);
         if (seenGen && state.gen !== seenGen) {
             // An erase landed between two rounds. Rows this request wrote
             // under the old generation are ignored by every read already;
@@ -369,7 +377,7 @@ router.get(
         try {
             await ready();
             const nowMs = Date.now();
-            body = await respond(req.userId, await loadState(req.userId, nowMs), nowMs, false);
+            body = await respond(req.userId, await loadState(req.userId), nowMs, false);
         } catch (err) {
             throw storageError(err);
         }
@@ -400,11 +408,13 @@ router.post(
         try {
             await ready();
             const nowMs = Date.now();
-            result = await syncDay(req.userId, day.normalizeRequest(body, nowMs), nowMs);
+            const request = day.normalizeRequest(body, nowMs);
+            const run = () => syncDay(req.userId, request, nowMs);
+            result = process.env.NP_DAY_QUEUE === 'off' ? await run() : await syncQueue.run(String(req.userId), run);
         } catch (err) {
             throw storageError(err);
         }
-        if (!result) {
+        if (!result || result === FULL) {
             res.set('Retry-After', '5');
             return res.status(503).json({ error: 'The day is busy on the server. Try again in a moment.' });
         }

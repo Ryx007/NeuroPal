@@ -49,6 +49,10 @@ function buildApp() {
         next();
     });
 
+    // Day sync sends the whole day (docs/DAY-SYNC.md §6): a day at every cap
+    // fits in 10 MB even in a script that takes three bytes a character.
+    // Parsed here first, the general parser below then leaves the body alone.
+    app.use('/api/me/day/sync', express.json({ limit: '10mb' }));
     app.use(express.json({ limit: '5mb' }));
 
     // Health probe — for nginx / uptime checks. Fast by default; pass

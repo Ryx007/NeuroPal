@@ -69,9 +69,10 @@ Response `200`:
 - `checkins`: the newest 200, oldest first.
 - `rev` goes up by one each time a sync changes what is stored.
 - Errors: `401` no session; `400` the body is not valid JSON; `422` the body
-  is not an object, or `v` is not the number 1 (`{error}`); `503` with
-  `Retry-After` when other syncs for the same person kept landing first (rare;
-  retry like any 5xx). Bad items never fail the call: see §6.
+  is not an object, or `v` is not the number 1 (`{error}`); `413` the body is
+  over 10 MB; `503` with `Retry-After` when other syncs for the same person
+  kept landing first, or too many of them are waiting (rare; retry like any
+  5xx). Bad items never fail the call: see §6.
 - A server without this route answers `404`. The client then stops trying
   until the next app start, and shows no error.
 
@@ -235,10 +236,13 @@ first.
 
 For anchors, tasks, to-dos and the dump the merge is commutative,
 associative and idempotent: the result never depends on which device synced
-first, and sending the same body twice changes nothing. Check-ins are
-idempotent too, but the 60-second rule looks at what is already stored, so
-two arrival orders can differ by one entry inside the same two minutes. That
-is harmless.
+first, and sending the same body twice changes nothing (within the caps of
+§6, which are set so that a person never reaches them in practice). Check-ins
+are idempotent too, but the server applies the 60-second rule as check-ins
+arrive, against what is already stored. So inside a run of check-ins that
+are each less than a minute apart (quick changes on two devices), two
+arrival orders can keep different entries of that run; nothing outside such
+a run is affected. That is harmless.
 
 ## 6. Limits and bad input (server)
 
@@ -252,13 +256,24 @@ is harmless.
   from the request is stored as-is).
 - **Clocks.** Any timestamp later than the server's clock plus 60 seconds is
   set to the server's clock. One phone with a wrong clock can't win forever.
-- Per request: at most 2000 items per section; the rest are ignored.
+- Per request: at most 5000 items per section (a full section and all its
+  tombstones fit) and 2000 check-ins; the rest are ignored.
 - Stored per user: 200 live anchors, 100 live tasks, 1000 live to-dos, 1000
   live dump items (over a cap the oldest go first: by `createdAt`, the dump by
-  `at`), and 500 tombstones per section (the oldest go first). Check-ins: the
-  newest 5000. An item over a cap is simply missing from the answer.
-- The request body may be at most 5 MB (the server's JSON limit). A full brain
-  dump of 1000 long lines is the only realistic way to get close.
+  `at`), and 3000 tombstones per section (the oldest `deletedAt` go first).
+  Check-ins: the newest 5000. An item over a cap is simply missing from the
+  answer. The tombstone cap is far above the live caps on purpose: a
+  tombstone is what stops a deleted item from coming back from a device that
+  still has it, so clearing a full list must not push out the tombstones of
+  what was deleted just before.
+- Stored stamps are not clamped again when they are read back (the clock rule
+  above applies to what arrives, once), so a server clock that steps back
+  can't turn a deletion into a live item.
+- The request body may be at most 10 MB on this route (5 MB elsewhere):
+  enough for a day at every cap, even in a script that takes three bytes a
+  character.
+- One person's syncs are handled one at a time on a server process; past a
+  few waiting, the newest gets `503` with `Retry-After`, like a lost race.
 - Nothing from a sync body is ever logged.
 
 ## 7. `gen`: erasing everywhere
@@ -282,7 +297,9 @@ for anchors and tasks `doneOn` + `tickAt`. Derive "done" from
 `doneOn === today`. Deleting = set `deletedAt` to now and hide the item.
 Undo = clear `deletedAt` and set `updatedAt` to now. Every edit to the
 definition sets `updatedAt` to now. Every tick or un-tick sets `tickAt` to
-now.
+now. Keep up to 3000 tombstones per section on the device, like the server
+(the oldest `deletedAt` go first): a device that keeps fewer than it can
+delete between two syncs brings the rest back on its next sync.
 
 **Old saves.** Items saved before sync have no stamps. On first load:
 
@@ -293,9 +310,14 @@ now.
   item a `createdAt` one millisecond later than the one before it;
 - an item ticked today gets `doneOn` = today and `tickAt` = now;
 - **a starter missing from the old save** was deleted by the person before
-  tombstones existed: send it as a tombstone (`createdAt` and `updatedAt`
-  1970, `deletedAt` now), or another device's 1970 starter brings it back.
-  Only for a save from before sync, and only when the save has that list.
+  tombstones existed: send it as a tombstone, or another device's 1970
+  starter brings it back. Stamps: `createdAt` and `updatedAt`
+  `1970-01-01T00:00:00.000Z`, `deletedAt` `1970-01-01T00:00:00.001Z` (not
+  now). One millisecond after the starter beats every untouched copy of it,
+  but never a real edit: the deletion happened at some unknown time, an edit
+  made on another device has a real one, so the edit wins whichever device
+  migrated first. Only for a save from before sync, and only when the save
+  has that list.
 
 New installs seed their starters with the 1970 stamps. Starter ids are the
 same in every client (`mvd-1` … `mvd-3`), so they merge into one copy.
@@ -345,11 +367,26 @@ while the request was in flight is covered by "sync again" above. Then:
 
 - if the newest check-in in the answer is newer than the newest one the
   device had, Home's current state and level follow it;
+- if the answer says `"erased": true`, Home's current state and level are
+  cleared too (the erased day has no check-ins to follow);
 - keep the newest 200 check-ins, as before.
 
+**Text limits.** Keep text within the server's limits on the device (task
+title and subtitle 120, to-do title 200, anchor title 120 and subtitle 200,
+dump line 2000), so a cut never happens silently on the first sync. Moving a
+brain-dump line into the minimum day must not lose its end: if the line is
+longer than a task title allows, keep the dump line.
+
 **Failures.** Offline or a 5xx: keep working locally; retry after 5 seconds,
-then 30 seconds, then every 5 minutes. `401`: the session ended, so stop.
-`404`: this server has no day sync, so stop until the next start. Never
+then 30 seconds, then every 5 minutes. `401`: the session ended, so stop
+day sync — but only when the 401 answers the session that is current now (a
+late 401 for an old token must not stop a new session), and without signing
+the person out from a background sync: the next ordinary request does that.
+The status line then says that signing in again resumes sync.
+`404`: this server has no day sync, so stop until the next start. Any other
+`4xx` (for example `413`, a day too big for one request): sending the same
+again can't help, so stop until the next start as well, and the status line
+says that sync stopped. `408` and `429` count as a `5xx`. Never
 interrupt the person: the only place a sync problem is shown is the status
 line under the Settings switch.
 

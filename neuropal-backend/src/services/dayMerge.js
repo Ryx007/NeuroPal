@@ -9,9 +9,17 @@
 // Bad items are dropped quietly: a sync never fails because of one item.
 
 const LIMITS = Object.freeze({
-    perRequest: 2000, // items per section in one request; the rest are ignored
+    // Items per section in one request; the rest are ignored. A full section
+    // and all its tombstones must fit, or a deletion past the cut would never
+    // reach the server and the device would get the item back.
+    perRequest: 5000,
+    checkinsPerRequest: 2000,
     live: Object.freeze({ anchors: 200, tasks: 100, todos: 1000, dump: 1000 }),
-    tombstones: 500, // per section; the oldest go first
+    // Per section; the oldest deletedAt go first. Far above the live caps on
+    // purpose: a tombstone is what keeps a deleted item from coming back from
+    // a device that still has it, so clearing a full list must not push out
+    // the tombstones of what was deleted just before (§6).
+    tombstones: 3000,
     checkinsStored: 5000, // per user; the newest are kept
     checkinsReturned: 200, // newest, sent oldest first
 });
@@ -520,7 +528,7 @@ function normalizeRequest(body, nowMs) {
     let checkins = null;
     if (Array.isArray(rawCheckins)) {
         const list = [];
-        const n = Math.min(rawCheckins.length, LIMITS.perRequest);
+        const n = Math.min(rawCheckins.length, LIMITS.checkinsPerRequest);
         for (let i = 0; i < n; i += 1) {
             const c = normalizeCheckin(rawCheckins[i], nowMs);
             if (c) list.push(c);
@@ -537,12 +545,16 @@ function normalizeRequest(body, nowMs) {
 }
 
 // The sections of a stored DayState document, re-checked the same way as a
-// request (so the merge only ever sees items this module built).
-function readSections(doc, nowMs) {
+// request (so the merge only ever sees items this module built), except for
+// the clock rule: stored stamps were clamped once, when they arrived. Doing
+// it again on every read would let a server clock that steps back (or one
+// long retry loop's older `now`) turn a stored deletion into a live item
+// without content, which is then dropped, and the item comes back (§6).
+function readSections(doc) {
     const out = emptySections();
     if (!doc) return out;
     for (const kind of SECTIONS) {
-        out[kind] = mergeSection(kind, normalizeList(kind, doc[kind], nowMs, Infinity));
+        out[kind] = mergeSection(kind, normalizeList(kind, doc[kind], Infinity, Infinity));
     }
     return out;
 }

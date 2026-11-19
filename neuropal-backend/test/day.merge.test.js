@@ -321,10 +321,14 @@ test('bad items are dropped, never thrown: wrong shape, bad id, empty title, unp
     assert.deepEqual(day.normalizeCheckin({ at: T(1), state: 'red' }, NOW), { at: T(1), state: 'red', level: null });
 });
 
-test('a request: at most 2000 items per section, sections not sent stay untouched, odd gen counts as none', () => {
-    const many = Array.from({ length: 2500 }, (_, i) => ({ id: `t${i}`, title: `T${i}`, createdAt: T(1), updatedAt: T(1) }));
+test('a request: at most 5000 items per section and 2000 check-ins, sections not sent stay untouched, odd gen counts as none', () => {
+    assert.equal(day.LIMITS.perRequest, 5000);
+    assert.ok(day.LIMITS.perRequest >= day.LIMITS.live.todos + day.LIMITS.tombstones, 'a full section and its tombstones fit');
+    const many = Array.from({ length: 5500 }, (_, i) => ({ id: `t${i}`, title: `T${i}`, createdAt: T(1), updatedAt: T(1) }));
     const req = day.normalizeRequest({ v: 1, gen: '3', tasks: many, todos: 'nope', anchors: [null, 1, {}] }, NOW);
-    assert.equal(req.sections.tasks.length, 2000);
+    assert.equal(req.sections.tasks.length, 5000);
+    const checkins = Array.from({ length: 2100 }, (_, i) => ({ at: new Date(Date.UTC(2026, 10, 1) + i * 120000).toISOString(), state: 'green', level: 0.5 }));
+    assert.equal(day.normalizeRequest({ v: 1, checkins }, NOW).checkins.length, 2000);
     assert.equal(req.sections.todos, null);
     assert.equal(req.sections.dump, null);
     assert.deepEqual(req.sections.anchors, []);
@@ -337,7 +341,7 @@ test('a request: at most 2000 items per section, sections not sent stay untouche
     assert.equal(day.mergeSections(stored, req.sections).todos[0].id, 'keep');
 });
 
-test('caps: live items over the limit and tombstones over 500 — the oldest go first', () => {
+test('caps: live items over the limit and tombstones over 3000 — the oldest go first', () => {
     const stamp = (i) => new Date(Date.UTC(2026, 0, 1) + i * 60000).toISOString();
     const anchors = Array.from({ length: 205 }, (_, i) =>
         day.normalizeItem('anchors', { id: `a${i}`, title: 'A', time: { hour: 8, minute: 0 }, createdAt: stamp(i), updatedAt: stamp(i) }, NOW),
@@ -345,13 +349,14 @@ test('caps: live items over the limit and tombstones over 500 — the oldest go 
     const kept = merge('anchors', anchors);
     assert.equal(kept.length, 200);
     assert.ok(!kept.some((a) => ['a0', 'a1', 'a2', 'a3', 'a4'].includes(a.id)));
-    const tombs = Array.from({ length: 510 }, (_, i) =>
+    const tombs = Array.from({ length: 3010 }, (_, i) =>
         day.normalizeItem('tasks', { id: `t${i}`, createdAt: stamp(0), updatedAt: stamp(0), deletedAt: stamp(i) }, NOW),
     );
     const live = [day.normalizeItem('tasks', { id: 'live', title: 'L', createdAt: stamp(0), updatedAt: stamp(0) }, NOW)];
     const tasks = merge('tasks', tombs, live);
-    assert.equal(tasks.filter(day.isTombstone).length, 500);
+    assert.equal(tasks.filter(day.isTombstone).length, 3000);
     assert.ok(!tasks.some((t) => t.id === 't9'), 'the oldest tombstones went first');
+    assert.ok(tasks.some((t) => t.id === 't10'));
     assert.ok(tasks.some((t) => t.id === 'live'));
     const dump = Array.from({ length: 1003 }, (_, i) => day.normalizeItem('dump', { id: `d${i}`, text: 'x', at: stamp(i) }, NOW));
     const keptDump = merge('dump', dump);

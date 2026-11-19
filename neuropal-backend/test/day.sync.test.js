@@ -59,6 +59,7 @@ async function getDay(who) {
 }
 const withoutTime = ({ serverTime, ...rest }) => rest;
 const storedDay = (who) => mongoose.connection.collection('daystates').findOne({ userId: who.id });
+const storedDayUpdate = (who, fields) => mongoose.connection.collection('daystates').updateOne({ userId: who.id }, { $set: fields });
 
 // Stamps relative to the real clock (one fixed base per test), so the suite
 // passes on any date and every stamp is in the past unless a test says so.
@@ -88,6 +89,19 @@ const task = (id, over = {}) => ({ id, title: `Task ${id}`, subtitle: '', create
 const todo = (id, over = {}) => ({ id, title: `To-do ${id}`, done: false, createdAt: PAST, updatedAt: PAST, deletedAt: null, ...over });
 const line = (id, over = {}) => ({ id, text: `Thought ${id}`, at: PAST, deletedAt: null, ...over });
 const checkin = (at, state = 'yellow', level = 0.5) => ({ at, state, level });
+
+// The compare-and-set loop itself, as if several API processes raced: the
+// per-person queue (one process) is turned off for the test.
+function withoutQueue(fn) {
+    return async () => {
+        process.env.NP_DAY_QUEUE = 'off';
+        try {
+            await fn();
+        } finally {
+            delete process.env.NP_DAY_QUEUE;
+        }
+    };
+}
 
 test('every endpoint needs a session in public mode', async () => {
     assert.equal((await call('GET', '/api/me/day')).status, 401);
@@ -304,17 +318,80 @@ test('the server keeps the newest 5000 check-ins; older ones change nothing', as
     assert.equal(await models.DayCheckin.countDocuments({ userId: me.id }), 5000);
 });
 
-test('stored caps: 200 live anchors, 500 tombstones per section', async () => {
+test('stored caps: 200 live anchors, 3000 tombstones per section', async () => {
     const me = await account();
     const at = clock();
     const anchors = Array.from({ length: 205 }, (_, i) => anchor(`a-${i}`, { createdAt: at(-DAY + i * 1000), updatedAt: at(-DAY + i * 1000) }));
     const r = await sync(me, { anchors });
     assert.equal(r.body.anchors.length, 200);
     assert.ok(!r.body.anchors.some((a) => ['a-0', 'a-4'].includes(a.id)), 'the oldest went first');
-    const gone = Array.from({ length: 510 }, (_, i) => task(`t-${i}`, { createdAt: at(-DAY), updatedAt: at(-DAY), deletedAt: at(-DAY + (i + 1) * 1000) }));
+    const gone = Array.from({ length: 3010 }, (_, i) => task(`t-${i}`, { createdAt: at(-DAY), updatedAt: at(-DAY), deletedAt: at(-DAY + (i + 1) * 1000) }));
     const t = await sync(me, { tasks: gone });
-    assert.equal(t.body.tasks.length, 500);
-    assert.ok(!t.body.tasks.some((x) => x.id === 't-0'));
+    assert.equal(t.body.tasks.length, 3000);
+    assert.ok(!t.body.tasks.some((x) => ['t-0', 't-9'].includes(x.id)), 'the oldest deletions went first');
+    assert.ok(t.body.tasks.some((x) => x.id === 't-10'));
+});
+
+test('clearing a full list of to-dos or dump lines: a device that synced before brings nothing back', async () => {
+    const me = await account();
+    const at = clock();
+    const liveCount = (list) => list.filter((x) => x.deletedAt === null).length;
+    // Both devices synced 1000 done to-dos and 1000 dump lines; then one
+    // device clears them all ("Clear done", deleting line by line).
+    const todos = Array.from({ length: 1000 }, (_, i) => todo(`td-${i}`, { done: true }));
+    const dump = Array.from({ length: 1000 }, (_, i) => line(`d-${i}`, { text: `private thought ${i}`, at: at(-DAY + i * 1000) }));
+    assert.equal((await sync(me, { todos, dump })).status, 200);
+    const cleared = await sync(me, {
+        todos: todos.map((t, i) => ({ ...t, deletedAt: at(-HOUR + i) })),
+        dump: dump.map((d, i) => ({ id: d.id, deletedAt: at(-HOUR + i) })),
+    });
+    assert.deepEqual([liveCount(cleared.body.todos), liveCount(cleared.body.dump)], [0, 0]);
+    // The other device still has them all and syncs late.
+    const stale = await sync(me, { todos, dump });
+    assert.deepEqual([liveCount(stale.body.todos), liveCount(stale.body.dump)], [0, 0], 'nothing deleted came back');
+    assert.equal(JSON.stringify(stale.body).includes('private thought'), false);
+});
+
+test('one request holds a full section and all its tombstones', async () => {
+    const me = await account();
+    const at = clock();
+    // A device with 3000 deletions kept, listed first, and 1000 live to-dos.
+    const gone = Array.from({ length: 3000 }, (_, i) => ({ id: `g-${i}`, createdAt: PAST, updatedAt: PAST, deletedAt: at(-DAY + i * 1000) }));
+    const live = Array.from({ length: 1000 }, (_, i) => todo(`l-${i}`, { createdAt: at(-HOUR + i), updatedAt: at(-HOUR + i) }));
+    const r = await sync(me, { todos: [...gone, ...live] });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.todos.filter((t) => t.deletedAt === null).length, 1000, 'no live to-do was cut off');
+    assert.equal(r.body.todos.filter((t) => t.deletedAt !== null).length, 3000);
+});
+
+test('stored stamps are not clamped again when read back: a deletion stays a deletion', async () => {
+    const me = await account();
+    const at = clock();
+    const therapy = task('t-1', { title: 'Therapy', createdAt: PAST, updatedAt: PAST });
+    await sync(me, { tasks: [therapy] });
+    // A deletion that arrived inside the 60-second clock slack, then the
+    // server's clock stepped back: its stored stamps are now in the future.
+    await storedDayUpdate(me, { tasks: [{ id: 't-1', createdAt: PAST, updatedAt: at(30 * 1000), deletedAt: at(90 * 1000) }] });
+    const read = await getDay(me);
+    assert.deepEqual(read.body.tasks, [{ id: 't-1', createdAt: PAST, updatedAt: at(30 * 1000), deletedAt: at(90 * 1000) }]);
+    const stale = await sync(me, { tasks: [therapy] });
+    assert.equal(stale.status, 200);
+    assert.equal(stale.body.tasks.length, 1);
+    assert.notEqual(stale.body.tasks[0].deletedAt, null, 'the stale copy did not bring "Therapy" back');
+    assert.equal(JSON.stringify(stale.body).includes('Therapy'), false);
+});
+
+test('this route takes a day at every cap (10 MB); other routes keep 5 MB', async () => {
+    const me = await account();
+    const at = clock();
+    const long = '\u601d'.repeat(2000); // three bytes a character in UTF-8: about 6 KB a line
+    const dump = Array.from({ length: 1000 }, (_, i) => line(`d-${i}`, { text: long, at: at(-DAY + i * 1000) }));
+    const r = await sync(me, { dump });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.dump.length, 1000);
+    assert.equal(r.body.dump[0].text, long);
+    const big = await call('POST', '/api/auth/login', null, undefined, JSON.stringify({ email: 'x@example.com', password: 'y'.repeat(6 * 1024 * 1024) }));
+    assert.equal(big.status, 413);
 });
 
 test('gen: DELETE erases everywhere; an older gen gets the erased day; none, 0, equal or higher merge', async () => {
@@ -371,7 +448,7 @@ test('one account can never read or change another account’s day', async () =>
     assert.equal(mine.body.gen, 1);
 });
 
-test('overlapping syncs for one person lose nothing, and each moves rev once', async () => {
+test('overlapping syncs for one person lose nothing, and each moves rev once (compare-and-set, no queue)', withoutQueue(async () => {
     const me = await account();
     const at = clock();
     await sync(me, { anchors: [anchor('seed')] }); // the document exists: these race on rev
@@ -398,9 +475,34 @@ test('overlapping syncs for one person lose nothing, and each moves rev once', a
     assert.equal(body.anchors.length, N + 1);
     assert.equal(body.checkins.length, N);
     assert.equal(body.rev, N + 1);
+}));
+
+test('queued: overlapping syncs of one person each take one round and lose nothing', async () => {
+    const me = await account();
+    await sync(me, { anchors: [anchor('seed')] });
+    const model = models.DayState;
+    const own = Object.prototype.hasOwnProperty.call(model, 'updateOne');
+    const original = model.updateOne;
+    let writes = 0;
+    model.updateOne = function countWrites(...args) {
+        writes += 1;
+        return original.apply(this, args);
+    };
+    try {
+        const N = 16;
+        const results = await Promise.all(Array.from({ length: N }, (_, i) => sync(me, { todos: [todo(`td-${i}`)] })));
+        assert.deepEqual(results.map((r) => r.status), Array(N).fill(200));
+        assert.equal(writes, N, 'no sync lost a round to another one');
+        const { body } = await getDay(me);
+        assert.equal(body.todos.length, N);
+        assert.equal(body.rev, N + 1);
+    } finally {
+        if (own) model.updateOne = original;
+        else delete model.updateOne;
+    }
 });
 
-test('the first syncs of a new person, racing each other, create one day', async () => {
+test('the first syncs of a new person, racing each other, create one day (compare-and-set, no queue)', withoutQueue(async () => {
     const me = await account();
     const N = 12;
     const results = await Promise.all(Array.from({ length: N }, (_, i) => sync(me, { todos: [todo(`td-${i}`)] })));
@@ -409,9 +511,9 @@ test('the first syncs of a new person, racing each other, create one day', async
     const { body } = await getDay(me);
     assert.equal(body.todos.length, N);
     assert.equal(body.rev, N);
-});
+}));
 
-test('check-ins sent at the same moment within a minute of each other still end up refined', async () => {
+test('check-ins sent at the same moment within a minute of each other still end up refined (compare-and-set, no queue)', withoutQueue(async () => {
     const me = await account();
     const at = clock();
     for (let round = 0; round < 8; round += 1) {
@@ -423,9 +525,9 @@ test('check-ins sent at the same moment within a minute of each other still end 
         rows.map((r) => r.at.toISOString()),
         Array.from({ length: 8 }, (_, round) => at(-DAY + round * 10 * MIN + 30000)),
     );
-});
+}));
 
-test('the same moment from two devices at once: the greater canonical JSON wins whatever the timing', async () => {
+test('the same moment from two devices at once: the greater canonical JSON wins whatever the timing (compare-and-set, no queue)', withoutQueue(async () => {
     const me = await account();
     const at = clock();
     for (let round = 0; round < 8; round += 1) {
@@ -437,7 +539,7 @@ test('the same moment from two devices at once: the greater canonical JSON wins 
     const rows = await models.DayCheckin.find({ userId: me.id }).lean();
     assert.equal(rows.length, 8);
     assert.deepEqual(rows.map((r) => r.state), Array(8).fill('red'));
-});
+}));
 
 test('an erase racing a sync wins: nothing of the old day survives, not even on disk', async () => {
     const me = await account();
