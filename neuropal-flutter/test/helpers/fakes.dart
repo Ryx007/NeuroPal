@@ -143,6 +143,11 @@ class FakeAccountsServer {
   /// When set, /api/auth/me waits for it before answering (a slow server).
   Completer<void>? holdMe;
 
+  /// When set, the next data request waits for it and only then checks its
+  /// session (an answer that comes back after the session changed). Used
+  /// once, then cleared.
+  Completer<void>? holdData;
+
   int _issued = 0;
 
   /// A valid session for [email], as the server would sign it.
@@ -176,6 +181,11 @@ class FakeAccountsServer {
           return _login(request);
         case 'POST /api/auth/register':
           return _register(request);
+      }
+      final hold = holdData;
+      if (hold != null && key != 'GET /api/auth/me') {
+        holdData = null;
+        await hold.future;
       }
       final header = request.headers['Authorization'] ?? '';
       final email = sessions[header.replaceFirst('Bearer ', '')];
@@ -261,12 +271,14 @@ http.Response jsonResponse(Object? body, [int status = 200]) => http.Response(
 /// An in-memory `POST /api/me/day/sync` (docs/DAY-SYNC.md §5–§7), merging
 /// the way the server does: per item, the definition with the later
 /// `updatedAt` wins whole, the later tick wins, the later `deletedAt` wins
-/// and a deleted item is a tombstone without content; check-ins are the
-/// union by `at` with the 60-second rule, and one stamped later than the
-/// server's clock + 60 s is stored at the server's clock (a phone whose
-/// clock is ahead); a lower `gen` means "erased elsewhere": nothing is
-/// merged and the answer says `erased: true`. Fields the server doesn't
-/// know are dropped, as the real one does.
+/// and a deleted item is a tombstone without content; a dump line keeps
+/// the first copy's text (the earlier `at`) and a deletion is final, its
+/// tombstone `{id, deletedAt}`; check-ins are the union by `at` with the
+/// 60-second rule, and one stamped later than the server's clock + 60 s is
+/// stored at the server's clock (a phone whose clock is ahead); a lower
+/// `gen` means "erased elsewhere": nothing is merged and the answer says
+/// `erased: true`. Fields the server doesn't know are dropped, as the real
+/// one does.
 class FakeDayServer {
   FakeDayServer({DateTime Function()? clock}) : clock = clock ?? DateTime.now;
 
@@ -276,7 +288,12 @@ class FakeDayServer {
   int rev = 0;
   final Map<String, Map<String, Object?>> anchors = {};
   final Map<String, Map<String, Object?>> tasks = {};
+  final Map<String, Map<String, Object?>> dump = {};
   List<Map<String, Object?>> checkins = [];
+
+  /// Ids the server drops as if over a limit: the answer never mentions
+  /// them.
+  final Set<String> refused = {};
 
   /// Every body received.
   final List<Map<String, Object?>> bodies = [];
@@ -299,6 +316,7 @@ class FakeDayServer {
     if (!erased) {
       _mergeAll(anchors, body['anchors'], _anchorFields);
       _mergeAll(tasks, body['tasks'], _taskFields);
+      _mergeDump(body['dump']);
       _mergeCheckins(body['checkins']);
       rev += 1;
     }
@@ -309,6 +327,7 @@ class FakeDayServer {
   void erase() {
     anchors.clear();
     tasks.clear();
+    dump.clear();
     checkins = [];
     gen += 1;
   }
@@ -330,6 +349,18 @@ class FakeDayServer {
         final byTime = ms(a['createdAt']) - ms(b['createdAt']);
         return byTime != 0 ? byTime : (a['id'] as String).compareTo(b['id'] as String);
       });
+    // Live lines newest first, then tombstones newest deletion first.
+    int newest(Map<String, Object?> a, Map<String, Object?> b, String field) {
+      final byTime = ms(b[field]) - ms(a[field]);
+      return byTime != 0 ? byTime : (a['id'] as String).compareTo(b['id'] as String);
+    }
+
+    final dumpList = [
+      ...dump.values.where((d) => d['deletedAt'] == null).toList()
+        ..sort((a, b) => newest(a, b, 'at')),
+      ...dump.values.where((d) => d['deletedAt'] != null).toList()
+        ..sort((a, b) => newest(a, b, 'deletedAt')),
+    ];
     return {
       'v': 1,
       'gen': gen,
@@ -339,7 +370,7 @@ class FakeDayServer {
       'anchors': anchorList,
       'tasks': taskList,
       'todos': const [],
-      'dump': const [],
+      'dump': dumpList,
       'checkins': checkins.length > 200
           ? checkins.sublist(checkins.length - 200)
           : checkins,
@@ -356,7 +387,7 @@ class FakeDayServer {
   ) {
     if (list is! List) return;
     for (final raw in list) {
-      if (raw is! Map || raw['id'] is! String) continue;
+      if (raw is! Map || raw['id'] is! String || refused.contains(raw['id'])) continue;
       final item = raw.cast<String, Object?>();
       final old = into[item['id']];
       into[item['id'] as String] = _settle(
@@ -417,6 +448,42 @@ class FakeDayServer {
       'doneOn': item['doneOn'],
       'tickAt': item['tickAt'],
     };
+  }
+
+  void _mergeDump(Object? list) {
+    if (list is! List) return;
+    for (final raw in list) {
+      if (raw is! Map || raw['id'] is! String || refused.contains(raw['id'])) continue;
+      final id = raw['id'] as String;
+      final Map<String, Object?> item;
+      if (_ms(raw['deletedAt']) != null) {
+        item = {'id': id, 'deletedAt': raw['deletedAt']};
+      } else if (raw['text'] is String && _ms(raw['at']) != null) {
+        item = {'id': id, 'text': raw['text'], 'at': raw['at'], 'deletedAt': null};
+      } else {
+        continue; // a bad item is dropped, never an error
+      }
+      final old = dump[id];
+      dump[id] = old == null ? item : _mergeDumpItem(old, item);
+    }
+  }
+
+  /// A deletion is final (the later one); otherwise the first copy wins its
+  /// text and at: the earlier `at`, a tie to the greater canonical JSON.
+  static Map<String, Object?> _mergeDumpItem(Map<String, Object?> a, Map<String, Object?> b) {
+    final ad = _ms(a['deletedAt']);
+    final bd = _ms(b['deletedAt']);
+    if (ad != null || bd != null) {
+      final later = bd != null && (ad == null || bd > ad) ? b['deletedAt'] : a['deletedAt'];
+      return {'id': a['id'], 'deletedAt': later};
+    }
+    String canonical(Map<String, Object?> d) => jsonEncode({'at': d['at'], 'text': d['text']});
+    final aAt = _ms(a['at'])!;
+    final bAt = _ms(b['at'])!;
+    final first = aAt != bAt
+        ? (aAt < bAt ? a : b)
+        : (canonical(a).compareTo(canonical(b)) >= 0 ? a : b);
+    return {'id': a['id'], 'text': first['text'], 'at': first['at'], 'deletedAt': null};
   }
 
   void _mergeCheckins(Object? list) {

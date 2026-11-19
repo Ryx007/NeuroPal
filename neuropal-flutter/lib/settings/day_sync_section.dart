@@ -40,9 +40,9 @@ class DaySyncSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Check-ins, anchors and the minimum day are kept on your '
-                      'NeuroPal server too, so your other devices see them. '
-                      'Sync never sends them to an AI.',
+                      'Check-ins, anchors, the minimum day and your brain dump '
+                      'are kept on your NeuroPal server too, so your other '
+                      'devices see them. Sync never sends them to an AI.',
                       style: s.fonts.body(13.5, s.textMuted),
                     ),
                   ],

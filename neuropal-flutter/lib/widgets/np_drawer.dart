@@ -72,7 +72,8 @@ class NpDrawer extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const NpLabel('Flutter · reader first'),
+                  // What the app is for, in one line (with Pal's own name).
+                  NpLabel('Read, plan your day, ask ${pal.name}'),
                 ],
               ),
             ),

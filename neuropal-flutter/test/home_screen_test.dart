@@ -59,8 +59,11 @@ Future<void> scrollTo(WidgetTester tester, Finder target) async {
 /// [f] inside the anchors sheet (Home stays on screen under it).
 Finder inSheet(Finder f) => find.descendant(of: find.byType(AnchorsSheet), matching: f);
 
-/// Taps the editor's Save (the sheet scrolls).
+/// Taps the editor's Save (the sheet scrolls). A field just typed into
+/// brings its caret into view on the next frame: let that settle first, or
+/// it scrolls Save away again.
 Future<void> save(WidgetTester tester) async {
+  await tester.pumpAndSettle();
   await scrollTo(tester, find.text('Save'));
   await tester.tap(find.text('Save'));
   await tester.pumpAndSettle();

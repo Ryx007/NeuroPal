@@ -193,7 +193,7 @@ class _ToolList extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = NpStyle.of(context);
     final controller = context.watch<PalController>();
-    final dumpCount = controller.dump.length;
+    final dumpCount = context.select<DayStore, int>((d) => d.dump.length);
     final sit = controller.sit;
 
     String sub(PalTool t) {
@@ -263,7 +263,7 @@ class _ToolRow extends StatelessWidget {
       onTap: onTap,
       semanticLabel: '$title, $sub',
       focusRadius: radius,
-      minSize: const Size(44, 62),
+      minSize: const Size(kNpTarget, 62),
       builder: (context, pressed, focused) => Container(
         width: double.infinity,
         constraints: const BoxConstraints(minHeight: 62),

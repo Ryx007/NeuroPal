@@ -5,9 +5,8 @@
 //   * the chat keeps the last 30 messages (the sheet shows 10), across a
 //     restart; "Clear chat" deletes the server's copy too;
 //   * a failed answer is worded in Pal's voice; an answer that arrives
-//     after the session ended is dropped;
-//   * the dump: add, delete with a tombstone, Undo under a new id, and a
-//     day that changes account takes its dump with it.
+//     after the session ended is dropped.
+// (The brain dump is part of the day: test/day_store_test.dart.)
 
 import 'dart:async';
 import 'dart:convert';
@@ -252,43 +251,4 @@ void main() {
     });
   });
 
-  group('Brain dump', () {
-    test('add, delete (a tombstone stays, the text goes), Undo under a new id', () async {
-      final (pal, _) = await boot();
-      expect(pal.addDump('   '), isFalse);
-      expect(pal.addDump('  buy   more coffee '), isTrue);
-      now = now.add(const Duration(minutes: 1));
-      expect(pal.addDump('email the lab'), isTrue);
-      expect(pal.dump.map((d) => d.text), ['email the lab', 'buy more coffee'], reason: 'newest first');
-
-      final gone = pal.removeDump(pal.dump.last.id)!;
-      expect(pal.dump.map((d) => d.text), ['email the lab']);
-      final tomb = pal.dumpForSync().firstWhere((j) => j['deletedAt'] != null);
-      expect(tomb.keys.toSet(), {'id', 'deletedAt'}, reason: 'a tombstone carries no text');
-      expect(tomb['id'], gone.id);
-
-      pal.addDump(gone.text); // Undo
-      expect(pal.dump.map((d) => d.text), contains('buy more coffee'));
-      expect(pal.dump.firstWhere((d) => d.text == 'buy more coffee').id, isNot(gone.id));
-
-      final (again, _) = await boot();
-      expect(again.dump.map((d) => d.text).toSet(), {'email the lab', 'buy more coffee'});
-      expect(again.dumpForSync().where((j) => j['deletedAt'] != null), hasLength(1));
-      for (final j in again.dumpForSync()) {
-        expect(DumpItem.fromJson(j), isNotNull, reason: 'DAY-SYNC item shape');
-      }
-    });
-
-    test('the dump follows the day: another account’s day is cleared, so is its dump', () async {
-      final (pal, day) = await boot();
-      pal.addDump('a private thought');
-      day.claim('account-a');
-      day.recordCheckin(NervousState.green, 0.2); // any change: the day notifies
-      expect(pal.dump, hasLength(1), reason: 'a never-synced day joins the first account');
-      day.resetFor('account-b');
-      expect(pal.dump, isEmpty);
-      final (again, _) = await boot();
-      expect(again.dump, isEmpty);
-    });
-  });
 }

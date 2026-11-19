@@ -156,13 +156,10 @@ void main() {
     SharedPreferences.setMockInitialValues({
       PalController.sitKey: '{not json',
       PalController.chatKey: '[{"role":"robot","text":"x"},{"role":"pal","text":"  hi  "}]',
-      PalController.dumpKey: '{"v":1,"items":[{"id":"bad id!","text":"x","at":"2026-11-19T10:00:00.000Z"},'
-          '{"id":"d-1","text":" keep  me ","at":"2026-11-19T10:00:00.000Z"}]}',
     });
     prefs = await SharedPreferences.getInstance();
     final pal = boot();
     expect(pal.sit, isNull);
     expect(pal.chat.single.text, 'hi');
-    expect(pal.dump.single.text, 'keep me');
   });
 }

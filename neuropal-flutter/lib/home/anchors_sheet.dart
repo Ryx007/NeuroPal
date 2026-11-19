@@ -22,6 +22,7 @@ import '../widgets/np_buttons.dart';
 import '../widgets/np_panel.dart';
 import '../widgets/np_sheet.dart';
 import '../widgets/np_text.dart';
+import '../widgets/text_limit.dart';
 import 'home_bits.dart';
 
 /// Opens the sheet: on the list, or straight in the editor for [editId]
@@ -297,7 +298,9 @@ class _AnchorsSheetState extends State<AnchorsSheet> {
         TextField(
           controller: _title,
           focusNode: _titleFocus,
+          // No more than an anchor keeps (DAY-SYNC §8 "Text limits").
           maxLength: kTitleMax,
+          inputFormatters: const [TextLimit(kTitleMax)],
           textCapitalization: TextCapitalization.sentences,
           style: s.fonts.body(16, s.text),
           decoration: InputDecoration(
@@ -316,6 +319,7 @@ class _AnchorsSheetState extends State<AnchorsSheet> {
         TextField(
           controller: _details,
           maxLength: kAnchorSubtitleMax,
+          inputFormatters: const [TextLimit(kAnchorSubtitleMax)],
           textCapitalization: TextCapitalization.sentences,
           style: s.fonts.body(16, s.text),
           decoration: const InputDecoration(
@@ -588,26 +592,37 @@ class _Spinner extends StatelessWidget {
           onPressed: onDown,
         ),
         const SizedBox(width: 6),
-        Semantics(
-          container: true,
-          slider: true,
-          label: name,
-          value: spoken,
-          increasedValue: spokenUp,
-          decreasedValue: spokenDown,
-          onIncrease: onUp,
-          onDecrease: onDown,
-          child: ExcludeSemantics(
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 72, minHeight: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: s.panelSolid,
-                borderRadius: BorderRadius.circular(s.radiusMedium),
-                border: Border.all(color: s.control, width: 1.5),
+        // Hugs its value; on a narrow phone at big text it takes what is
+        // left between the buttons and the value wraps ("11 / AM").
+        Flexible(
+          child: Semantics(
+            container: true,
+            slider: true,
+            label: name,
+            value: spoken,
+            increasedValue: spokenUp,
+            decreasedValue: spokenDown,
+            onIncrease: onUp,
+            onDecrease: onDown,
+            child: ExcludeSemantics(
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 72, minHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: s.panelSolid,
+                  borderRadius: BorderRadius.circular(s.radiusMedium),
+                  border: Border.all(color: s.control, width: 1.5),
+                ),
+                child: Center(
+                  widthFactor: 1,
+                  heightFactor: 1,
+                  child: Text(
+                    shown,
+                    textAlign: TextAlign.center,
+                    style: s.fonts.mono(20, s.text, weight: FontWeight.w700),
+                  ),
+                ),
               ),
-              child: Text(shown, style: s.fonts.mono(20, s.text, weight: FontWeight.w700)),
             ),
           ),
         ),

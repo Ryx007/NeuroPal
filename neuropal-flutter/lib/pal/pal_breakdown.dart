@@ -336,7 +336,7 @@ class _StepRow extends StatelessWidget {
                   onTap: onTick,
                   semanticLabel: 'Step ${index + 1}: $step',
                   focusRadius: s.radiusMedium,
-                  minSize: const Size(44, 48),
+                  minSize: const Size(kNpTarget, 48),
                   builder: (context, pressed, focused) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     child: Row(

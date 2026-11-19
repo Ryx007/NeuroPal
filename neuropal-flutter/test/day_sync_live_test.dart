@@ -175,6 +175,31 @@ void main() {
   );
 
   test(
+    'the brain dump: a line made here is on the server and on the other phone; a deletion goes as a tombstone',
+    () async {
+      final a = await Phone.signIn();
+      final b = await Phone.signIn();
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final text = 'Live dump line ${DateTime.now().microsecondsSinceEpoch}';
+      a.store.addDump(text);
+      a.store.addDump('deleted before it was ever synced');
+      final gone = a.store.removeDump(a.store.dump.first.id)!;
+      await a.syncNow();
+
+      final day = (await a.backend.getJson('/api/me/day'))! as Map;
+      final dump = (day['dump']! as List).cast<Map<Object?, Object?>>();
+      expect(dump.where((d) => d['text'] == text), hasLength(1));
+      expect(dump.firstWhere((d) => d['id'] == gone.id), {'id': gone.id, 'deletedAt': isA<String>()});
+
+      await b.syncNow();
+      expect(b.store.dump.map((d) => d.text), contains(text));
+      expect(b.store.dump.map((d) => d.text), isNot(contains('deleted before it was ever synced')));
+    },
+    skip: api == null ? 'set NP_TEST_API to run against a live backend' : false,
+  );
+
+  test(
     'a phone whose clock is 10 minutes ahead: its check-in is stored once',
     () async {
       final fast = await Phone.signIn(clockAhead: const Duration(minutes: 10));

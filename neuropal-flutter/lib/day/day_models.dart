@@ -1,4 +1,5 @@
-// The day's items, shaped for day sync (docs/DAY-SYNC.md §4 and §8).
+// The day's items, shaped for day sync (docs/DAY-SYNC.md §4 and §8):
+// anchors, the minimum day's tasks, check-ins and Pal's brain-dump lines.
 //
 // Every anchor and task carries createdAt / updatedAt / deletedAt, and the
 // two that can be ticked carry doneOn + tickAt. "Done" is never stored: it
@@ -26,6 +27,18 @@ const int kTitleMax = 120;
 const int kAnchorSubtitleMax = 200;
 const int kTaskSubtitleMax = 120;
 
+/// A brain-dump line is never edited after it is written (DAY-SYNC §4).
+const int kDumpTextMax = 2000;
+
+/// Live brain-dump lines kept, the newest by `at` (the server keeps 1000
+/// too, so a line past it would only come back to be dropped again).
+const int kDumpKeep = 1000;
+
+/// Tombstones kept per section, the newest `deletedAt` (§8 "Local model",
+/// like the server): a device that keeps fewer than it can delete between
+/// two syncs brings the rest back on its next sync.
+const int kTombstoneCap = 3000;
+
 /// The ± window (minutes) an anchor may move in: ADHD-friendly, never to
 /// the minute. The same choices as the web app.
 const List<int> kFlexChoices = [0, 10, 15, 30, 45, 60];
@@ -35,6 +48,11 @@ const int kFlexMax = 120;
 /// The stamp a never-edited starter item carries on every client, so the
 /// starters of all devices merge into one copy.
 const String kEpochIso = '1970-01-01T00:00:00.000Z';
+
+/// The deletion stamp of a starter missing from a save made before sync
+/// (§8 "Old saves"): one millisecond after the starter beats every
+/// untouched copy of it, but never a real edit made on another device.
+const String kStarterGoneIso = '1970-01-01T00:00:00.001Z';
 
 // ---- the three states: never colour alone ---------------------------------
 
@@ -116,6 +134,20 @@ int? parseIsoMs(Object? value) {
   return DateTime.tryParse(value)?.millisecondsSinceEpoch;
 }
 
+/// [now], but always after every stamp in [previous] (the Expo and web
+/// apps' `later`): an edit, tick, deletion or Undo made here has to win
+/// over the version this phone is looking at, even when another device's
+/// clock ran ahead and its stamp lies in our future (the server keeps
+/// stamps up to 60 s ahead).
+String later(DateTime now, [Iterable<String?> previous = const []]) {
+  var t = now.millisecondsSinceEpoch;
+  for (final p in previous) {
+    final v = parseIsoMs(p);
+    if (v != null && v + 1 > t) t = v + 1;
+  }
+  return isoMs(DateTime.fromMillisecondsSinceEpoch(t, isUtc: true));
+}
+
 /// The same time in the canonical format, or null when unreadable.
 String? canonicalIso(Object? value) {
   final ms = parseIsoMs(value);
@@ -154,6 +186,21 @@ String cleanText(Object? value, int max) {
   return s;
 }
 
+/// A title made from a longer text (a brain-dump line moved to the minimum
+/// day), within [max]: the whole text when it fits, else cut at a word
+/// (unless that loses too much) and marked "…" — the Expo and web apps'
+/// shortTitle, so all three give the day the same copy.
+String shortTitle(Object? value, int max) {
+  final full = cleanText(value, 0x7FFFFFFF);
+  if (full.length <= max) return full;
+  var s = cleanText(full, max - 1);
+  // Inside a word: back to the space before it.
+  final space = s.lastIndexOf(' ');
+  final atWordEnd = s.length < full.length && full[s.length] == ' ';
+  if (!atWordEnd && space >= max * 0.6) s = s.substring(0, space);
+  return '${s.replaceAll(RegExp(r'[\s,;:.\-–—]+$'), '')}…';
+}
+
 double? cleanLevel(Object? v) {
   if (v is! num || !v.isFinite) return null;
   return v.toDouble().clamp(0.0, 1.0);
@@ -177,6 +224,21 @@ String freshId(String prefix, DateTime now) {
   ).join();
   return '$prefix-${now.millisecondsSinceEpoch.toRadixString(36)}-'
       '${_idCounter.toRadixString(36)}$rand';
+}
+
+/// The deletion stamp an item read from a save or an answer carries, or
+/// null when it is live. Deleted when `deletedAt >= updatedAt`; an earlier
+/// deletedAt means an Undo won (§5) — unless the item has no content to
+/// come back with: then it is a tombstone this phone made before its stamps
+/// were `later`, under an edit from a clock that ran ahead. It stays a
+/// deletion, one millisecond after the version it deleted, so it holds.
+String? _deletion(Object? raw, String updatedAt, {required bool hasContent}) {
+  final deletedAt = canonicalIso(raw);
+  if (deletedAt == null) return null;
+  final updated = parseIsoMs(updatedAt)!;
+  if (parseIsoMs(deletedAt)! >= updated) return deletedAt;
+  if (hasContent) return null;
+  return isoMs(DateTime.fromMillisecondsSinceEpoch(updated + 1, isUtc: true));
 }
 
 Map<String, Object?> _extraOf(Map<String, Object?> json, Set<String> known) => {
@@ -379,10 +441,9 @@ class DayAnchor {
     final createdAt = canonicalIso(m['createdAt']);
     final updatedAt = canonicalIso(m['updatedAt']) ?? createdAt;
     if (createdAt == null || updatedAt == null) return null;
-    final deletedAt = canonicalIso(m['deletedAt']);
-    // Deleted when deletedAt >= updatedAt; otherwise an Undo won (§5).
-    if (deletedAt != null &&
-        parseIsoMs(deletedAt)! >= parseIsoMs(updatedAt)!) {
+    final title = cleanText(m['title'], kTitleMax);
+    final deletedAt = _deletion(m['deletedAt'], updatedAt, hasContent: title.isNotEmpty);
+    if (deletedAt != null) {
       return DayAnchor(
         id: id as String,
         createdAt: createdAt,
@@ -390,7 +451,6 @@ class DayAnchor {
         deletedAt: deletedAt,
       );
     }
-    final title = cleanText(m['title'], kTitleMax);
     if (title.isEmpty) return null;
     final time = m['time'] is Map ? (m['time'] as Map) : const {};
     final flex = m['flexMinutes'];
@@ -504,9 +564,9 @@ class DayTask {
     final createdAt = canonicalIso(m['createdAt']);
     final updatedAt = canonicalIso(m['updatedAt']) ?? createdAt;
     if (createdAt == null || updatedAt == null) return null;
-    final deletedAt = canonicalIso(m['deletedAt']);
-    if (deletedAt != null &&
-        parseIsoMs(deletedAt)! >= parseIsoMs(updatedAt)!) {
+    final title = cleanText(m['title'], kTitleMax);
+    final deletedAt = _deletion(m['deletedAt'], updatedAt, hasContent: title.isNotEmpty);
+    if (deletedAt != null) {
       return DayTask(
         id: id as String,
         createdAt: createdAt,
@@ -514,7 +574,6 @@ class DayTask {
         deletedAt: deletedAt,
       );
     }
-    final title = cleanText(m['title'], kTitleMax);
     if (title.isEmpty) return null;
     return DayTask(
       id: id as String,
@@ -528,6 +587,55 @@ class DayTask {
     );
   }
 }
+
+// ---- brain-dump line ----------------------------------------------------------
+
+/// One line of Pal's brain dump (DAY-SYNC §4): its text is never edited, so
+/// there is no updatedAt; a deletion is final (Undo writes the text again
+/// under a new id, §5).
+@immutable
+class DumpItem {
+  const DumpItem({required this.id, required this.text, required this.at, this.deletedAt});
+
+  final String id;
+  final String text;
+
+  /// When it was written (ISO, canonical).
+  final String at;
+
+  /// Set once it is deleted: a tombstone, with no text (DAY-SYNC §5).
+  final String? deletedAt;
+
+  bool get isDeleted => deletedAt != null;
+
+  DumpItem tombstone(String when) => DumpItem(id: id, text: '', at: at, deletedAt: when);
+
+  /// The contract's shape; a tombstone is `{id, deletedAt}` only.
+  Map<String, Object?> toJson() => isDeleted
+      ? {'id': id, 'deletedAt': deletedAt}
+      : {'id': id, 'text': text, 'at': at, 'deletedAt': null};
+
+  static DumpItem? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'];
+    if (!isValidId(id)) return null;
+    final deletedAt = canonicalIso(json['deletedAt']);
+    if (deletedAt != null) {
+      return DumpItem(
+        id: id as String,
+        text: '',
+        at: canonicalIso(json['at']) ?? deletedAt,
+        deletedAt: deletedAt,
+      );
+    }
+    final text = cleanText(json['text'], kDumpTextMax);
+    final at = canonicalIso(json['at']);
+    if (text.isEmpty || at == null) return null;
+    return DumpItem(id: id as String, text: text, at: at);
+  }
+}
+
+// ---- starters ---------------------------------------------------------------------
 
 /// The starter minimum day (the Expo app's: small, physical, kind). The
 /// ids and words are the same in every client.

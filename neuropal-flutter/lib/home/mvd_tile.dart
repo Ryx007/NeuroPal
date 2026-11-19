@@ -10,6 +10,7 @@ import '../day/day_store.dart';
 import '../theme/np_style.dart';
 import '../widgets/np_buttons.dart';
 import '../widgets/np_pressable.dart';
+import '../widgets/text_limit.dart';
 import 'home_bits.dart';
 
 class MvdTile extends StatefulWidget {
@@ -171,7 +172,9 @@ class _MvdTileState extends State<MvdTile> {
               Expanded(
                 child: TextField(
                   controller: _draft,
+                  // No more than a task title keeps (DAY-SYNC §8).
                   maxLength: kTitleMax,
+                  inputFormatters: const [TextLimit(kTitleMax)],
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.done,
                   style: s.fonts.body(16, s.text),
@@ -276,7 +279,7 @@ class _CheckRow extends StatelessWidget {
               ? task.title
               : '${task.title}, ${task.subtitle}',
           focusRadius: s.radiusMedium,
-          minSize: const Size(44, 54),
+          minSize: const Size(kNpTarget, 54),
           builder: (context, pressed, focused) => Container(
             width: double.infinity,
             padding: s.isSignal

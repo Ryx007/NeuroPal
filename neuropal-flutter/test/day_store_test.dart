@@ -1,7 +1,9 @@
 // The day store's rules (docs/DAY-SYNC.md §8 and the web app's day.ts):
 // check-ins (refine within a minute, older ones, the cap), "done" derived
-// from doneOn across midnight, tombstones and Undo, old saves, unknown
-// fields kept, sync answers, and whose day it is.
+// from doneOn across midnight, tombstones (and their cap) and Undo, the
+// brain dump (and its move from Pal's old key), old saves (and the
+// starters deleted before sync), unknown fields kept, sync answers, and
+// whose day it is.
 
 import 'dart:convert';
 
@@ -230,6 +232,320 @@ void main() {
     });
   });
 
+  group('the brain dump', () {
+    test('add, newest first; delete leaves {id, deletedAt}; Undo is a new line', () async {
+      final d = await Day.open(at: DateTime.utc(2026, 11, 19, 10));
+      expect(d.store.addDump('   '), isFalse);
+      expect(d.store.addDump('  buy   more coffee '), isTrue);
+      d.advance(const Duration(minutes: 1));
+      expect(d.store.addDump('email the lab'), isTrue);
+      expect(d.store.dump.map((x) => x.text), ['email the lab', 'buy more coffee']);
+      expect(d.store.localRevision, 2, reason: 'a change made here: day sync sends it');
+
+      d.advance(const Duration(minutes: 1));
+      final gone = d.store.removeDump(d.store.dump.last.id)!;
+      expect(gone.text, 'buy more coffee');
+      expect(d.store.dump.map((x) => x.text), ['email the lab']);
+      final sent = (d.store.syncBody()['dump']! as List).cast<Map<String, Object?>>();
+      expect(sent.last, {'id': gone.id, 'deletedAt': isoMs(d.now)}, reason: 'no text in a tombstone');
+      expect(d.prefs.getString(DayStore.storageKey), isNot(contains('buy more coffee')));
+
+      d.advance(const Duration(seconds: 5));
+      expect(d.store.addDump(gone.text), isTrue); // Undo
+      expect(d.store.dump.first.text, 'buy more coffee');
+      expect(d.store.dump.first.id, isNot(gone.id), reason: 'a deletion is final (§5)');
+
+      final again = d.reopen();
+      expect(again.dump.map((x) => x.text), ['buy more coffee', 'email the lab']);
+      expect(
+        (again.syncBody()['dump']! as List).where((j) => (j as Map)['deletedAt'] != null),
+        hasLength(1),
+      );
+    });
+
+    test('a line over 2000 is cut on entry, never inside an emoji', () async {
+      final d = await Day.open();
+      d.store.addDump('${'a' * 1999}😀 and more');
+      expect(d.store.dump.single.text, 'a' * 1999);
+    });
+
+    test('a line too long for a task title gives a copy cut at a word, with “…”', () {
+      expect(shortTitle('  Buy   oat milk ', kTitleMax), 'Buy oat milk', reason: 'fits: whole');
+      final words = List.filled(30, 'word').join(' '); // 149 characters
+      final cut = shortTitle(words, kTitleMax);
+      expect(cut.length, lessThanOrEqualTo(kTitleMax));
+      expect(cut, endsWith('word…'), reason: 'never half a word');
+      expect(shortTitle('${'a' * 150} b', kTitleMax), '${'a' * 119}…', reason: 'one long word: cut');
+      expect(
+        shortTitle('${'x' * 100}, and then some more words to go past the end', kTitleMax),
+        '${'x' * 100}, and then some…',
+      );
+      expect(shortTitle('${'y' * 117}, tail', kTitleMax), '${'y' * 117}…', reason: 'no comma before “…”');
+    });
+
+    test('another account’s day starts without this dump', () async {
+      final d = await Day.open();
+      d.store.claim('acct-a');
+      d.store.addDump('a private thought');
+      d.store.resetFor('acct-b');
+      expect(d.store.dump, isEmpty);
+      expect(d.store.syncBody()['dump'], isEmpty);
+      expect(d.prefs.getString(DayStore.storageKey), isNot(contains('private thought')));
+    });
+  });
+
+  group('Pal’s old brain dump (np.pal.dump) joins the day once', () {
+    String legacy(List<Map<String, Object?>> items, {String? owner}) =>
+        jsonEncode({'v': 1, 'owner': owner, 'items': items});
+
+    final syncedDay = jsonEncode({
+      'v': 2,
+      'owner': 'acct-a',
+      'gen': 3,
+      'tasks': [
+        for (final t in starterTasks()) t.toJson(),
+      ],
+      'anchors': <Object?>[],
+    });
+
+    test('ids and times kept (a bad id gets a new one); the old key goes after the save', () async {
+      SharedPreferences.setMockInitialValues({
+        DayStore.storageKey: syncedDay,
+        DayStore.legacyDumpKey: legacy(owner: 'acct-a', [
+          {'id': 'd-new', 'text': 'newest line', 'at': '2026-11-19T11:00:00.000Z', 'deletedAt': null},
+          {'id': 'bad id!', 'text': ' bad   id ', 'at': '2026-11-19T10:00:00.000Z', 'deletedAt': null},
+          {'id': 'd-gone', 'deletedAt': '2026-11-19T09:30:00.000Z'},
+          {'id': 'd-old', 'text': 'oldest line', 'at': '2026-11-19T09:00:00.000Z', 'deletedAt': null},
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final store = DayStore(prefs: prefs, clock: () => DateTime.utc(2026, 11, 19, 12));
+      Map<String, Object?> day() =>
+          (jsonDecode(prefs.getString(DayStore.storageKey)!) as Map).cast<String, Object?>();
+
+      // At once: the day holding the lines is written, the old copy not
+      // touched yet — it goes only once that save is done.
+      expect(day()['v'], 3);
+      expect(day()['dump'], hasLength(3));
+      expect(prefs.getString(DayStore.legacyDumpKey), isNotNull);
+      await pumpEventQueue();
+      expect(prefs.getString(DayStore.legacyDumpKey), isNull);
+
+      final dump = store.dump;
+      expect(dump.map((x) => x.text), ['newest line', 'bad id', 'oldest line']);
+      expect([dump[0].id, dump[2].id], ['d-new', 'd-old']);
+      expect(isValidId(dump[1].id) && dump[1].id != 'bad id!', isTrue);
+      expect(dump.map((x) => x.at), [
+        '2026-11-19T11:00:00.000Z',
+        '2026-11-19T10:00:00.000Z',
+        '2026-11-19T09:00:00.000Z',
+      ]);
+      expect(
+        store.syncBody()['dump'],
+        hasLength(3),
+        reason: 'a line deleted before it ever left the phone has nothing to stop',
+      );
+      expect(store.gen, 3, reason: 'the rest of the day is untouched');
+      // Once: a restart finds them in the day, not twice.
+      final again = DayStore(prefs: prefs, clock: () => DateTime.utc(2026, 11, 19, 12));
+      expect(again.dump.map((x) => x.id), dump.map((x) => x.id));
+    });
+
+    test('a new install (no day saved yet) takes the lines as well', () async {
+      final d = await Day.open(
+        saved: {
+          DayStore.legacyDumpKey: legacy([
+            {'id': 'd-1', 'text': 'keep me', 'at': '2026-11-19T09:00:00.000Z', 'deletedAt': null},
+          ]),
+        },
+      );
+      expect(d.store.dump.single.text, 'keep me');
+      expect(d.store.tasks, hasLength(3));
+      await pumpEventQueue();
+      expect(d.prefs.getString(DayStore.legacyDumpKey), isNull);
+      expect(d.reopen().dump.single.id, 'd-1');
+    });
+
+    test('lines without a saved time get now, each next one a millisecond earlier', () async {
+      final d = await Day.open(
+        at: DateTime.utc(2026, 11, 19, 12),
+        saved: {
+          DayStore.storageKey: syncedDay,
+          DayStore.legacyDumpKey: legacy([
+            {'id': 'd-a', 'text': 'first in the list'},
+            {'id': 'd-b', 'text': 'second in the list', 'at': 'yesterday-ish'},
+          ]),
+        },
+      );
+      expect(d.store.dump.map((x) => (x.id, x.at)), [
+        ('d-a', '2026-11-19T12:00:00.000Z'),
+        ('d-b', '2026-11-19T11:59:59.999Z'),
+      ]);
+    });
+
+    test('lines of another account’s day stay out; the old key still goes', () async {
+      final d = await Day.open(
+        saved: {
+          DayStore.storageKey: syncedDay,
+          DayStore.legacyDumpKey: legacy(owner: 'acct-b', [
+            {'id': 'd-1', 'text': 'someone else’s', 'at': '2026-11-19T09:00:00.000Z', 'deletedAt': null},
+          ]),
+        },
+      );
+      expect(d.store.dump, isEmpty);
+      await pumpEventQueue();
+      expect(d.prefs.getString(DayStore.legacyDumpKey), isNull);
+    });
+
+    test('a day that already holds the dump only drops the old copy', () async {
+      final d = await Day.open(
+        saved: {
+          DayStore.storageKey: jsonEncode({
+            'v': 3,
+            'dump': [
+              {'id': 'd-day', 'text': 'in the day', 'at': '2026-11-19T09:00:00.000Z', 'deletedAt': null},
+            ],
+          }),
+          DayStore.legacyDumpKey: legacy([
+            {'id': 'd-old', 'text': 'moved already', 'at': '2026-11-19T08:00:00.000Z', 'deletedAt': null},
+          ]),
+        },
+      );
+      expect(d.store.dump.map((x) => x.id), ['d-day']);
+      await pumpEventQueue();
+      expect(d.prefs.getString(DayStore.legacyDumpKey), isNull);
+    });
+  });
+
+  group('stamps', () {
+    test('every stamp made here is later than the one it replaces (a clock ahead elsewhere)', () async {
+      final d = await Day.open(at: DateTime.utc(2026, 11, 19, 10));
+      final ahead = isoMs(d.now.add(const Duration(seconds: 45)));
+      int ms(String? iso) => parseIsoMs(iso)!;
+      d.store.applyServer({
+        'anchors': [
+          {
+            'id': 'a-1',
+            'title': 'Lab meeting',
+            'subtitle': '',
+            'time': {'hour': 14, 'minute': 0},
+            'createdAt': ahead,
+            'updatedAt': ahead,
+            'deletedAt': null,
+            'doneOn': null,
+            'tickAt': ahead,
+          },
+        ],
+        'tasks': [
+          {
+            'id': 'mvd-1',
+            'title': 'Stay hydrated',
+            'subtitle': '',
+            'createdAt': kEpochIso,
+            'updatedAt': ahead,
+            'deletedAt': null,
+            'doneOn': null,
+            'tickAt': ahead,
+          },
+        ],
+      });
+      d.store.setAnchorDone('a-1', true);
+      expect(ms(d.store.anchors.single.tickAt), ms(ahead) + 1);
+      d.store.setTaskDone('mvd-1', true);
+      expect(ms(d.store.tasks.first.tickAt), ms(ahead) + 1);
+      d.store.updateAnchor('a-1', const AnchorInput(title: 'Lab meeting, room 2', hour: 14, minute: 0));
+      final edited = d.store.anchors.single.updatedAt;
+      expect(ms(edited), ms(ahead) + 1);
+
+      final gone = d.store.removeAnchor('a-1')!;
+      final tomb = (d.store.syncBody()['anchors']! as List).single as Map;
+      expect(ms(tomb['deletedAt'] as String), ms(edited) + 1, reason: 'deletedAt ≥ updatedAt: it holds');
+      d.store.restoreAnchor(gone);
+      expect(ms(d.store.anchors.single.updatedAt), ms(tomb['deletedAt'] as String) + 1, reason: 'Undo wins');
+
+      final task = d.store.removeTask('mvd-1')!;
+      final taskTomb = (d.store.syncBody()['tasks']! as List).first as Map;
+      expect(ms(taskTomb['deletedAt'] as String), ms(ahead) + 1);
+      d.store.restoreTask(task);
+      expect(ms(d.store.tasks.first.updatedAt), ms(taskTomb['deletedAt'] as String) + 1);
+    });
+
+    test('a content-free tombstone older than its updatedAt still loads as a deletion that holds', () async {
+      // Saved by a build that stamped deletions with a bare "now" under an
+      // edit from a clock that ran ahead.
+      const updated = '2026-11-19T10:00:45.000Z';
+      final d = await Day.open(
+        saved: {
+          DayStore.storageKey: jsonEncode({
+            'v': 2,
+            'tasks': <Object?>[],
+            'anchors': [
+              {'id': 'a-gone', 'createdAt': updated, 'updatedAt': updated, 'deletedAt': '2026-11-19T10:00:10.000Z'},
+              {
+                'id': 'a-back',
+                'title': 'Undo won',
+                'subtitle': '',
+                'time': {'hour': 9, 'minute': 0},
+                'createdAt': updated,
+                'updatedAt': updated,
+                'deletedAt': '2026-11-19T10:00:10.000Z',
+              },
+            ],
+          }),
+        },
+      );
+      expect(d.store.anchors.map((a) => a.title), ['Undo won'], reason: 'with content: an Undo won (§5)');
+      final sent = (d.store.syncBody()['anchors']! as List).cast<Map<String, Object?>>();
+      expect(sent.last, {
+        'id': 'a-gone',
+        'createdAt': updated,
+        'updatedAt': updated,
+        'deletedAt': '2026-11-19T10:00:45.001Z',
+      });
+    });
+  });
+
+  group('tombstones', () {
+    String at(int i) => isoMs(DateTime.utc(2026, 11, 1).add(Duration(seconds: i)));
+    Set<Object?> gone(DayStore store, String section) => {
+      for (final j in store.syncBody()[section]! as List)
+        if ((j as Map)['deletedAt'] != null) j['id'],
+    };
+
+    test('the newest 3000 per section stay; the oldest deletedAt go first', () async {
+      final d = await Day.open(at: DateTime.utc(2026, 11, 19));
+      d.store.applyServer({
+        'tasks': [
+          for (var i = 0; i < 3005; i++)
+            {'id': 't-$i', 'createdAt': kEpochIso, 'updatedAt': kEpochIso, 'deletedAt': at(i)},
+        ],
+        'anchors': [
+          for (var i = 0; i < 3002; i++)
+            {'id': 'a-$i', 'createdAt': kEpochIso, 'updatedAt': kEpochIso, 'deletedAt': at(i)},
+        ],
+        'dump': [
+          for (var i = 0; i < 3003; i++) {'id': 'd-$i', 'deletedAt': at(i)},
+        ],
+      });
+      for (final (section, prefix, n) in [('tasks', 't', 3005), ('anchors', 'a', 3002), ('dump', 'd', 3003)]) {
+        final ids = gone(d.store, section);
+        expect(ids, hasLength(kTombstoneCap), reason: section);
+        expect(ids, isNot(contains('$prefix-${n - kTombstoneCap - 1}')), reason: section);
+        expect(ids, containsAll(['$prefix-${n - kTombstoneCap}', '$prefix-${n - 1}']), reason: section);
+      }
+      expect(d.store.tasks.map((t) => t.id), ['mvd-1', 'mvd-2', 'mvd-3'], reason: 'live items all stay');
+
+      // A deletion made here is the newest: it stays, the oldest goes.
+      d.store.removeTask('mvd-1');
+      final tasks = gone(d.store, 'tasks');
+      expect(tasks, hasLength(kTombstoneCap));
+      expect(tasks, contains('mvd-1'));
+      expect(tasks, isNot(contains('t-5')));
+      // ...and after a restart.
+      expect(gone(d.reopen(), 'tasks'), tasks);
+    });
+  });
+
   group('saves', () {
     test('everything survives a restart', () async {
       final d = await Day.open();
@@ -291,7 +607,7 @@ void main() {
       expect(lunch.extra, {'icon': 'free-breakfast'});
       expect(d.store.state, NervousState.green);
       // Written back in the new shape at once.
-      expect(d.saved['v'], 2);
+      expect(d.saved['v'], 3);
     });
 
     test('an old save from yesterday keeps no ticks', () async {
@@ -314,6 +630,63 @@ void main() {
       final d = await Day.open(saved: {DayStore.storageKey: '{not json'});
       expect(d.store.tasks, hasLength(3));
       expect(d.store.state, isNull);
+    });
+
+    List<Map<String, Object?>> tombstones(DayStore store) => [
+      for (final j in store.syncBody()['tasks']! as List)
+        if ((j as Map)['deletedAt'] != null) j.cast<String, Object?>(),
+    ];
+
+    test('a starter missing from a save made before sync is sent as a deletion, 1970 + 1 ms', () async {
+      final d = await Day.open(
+        saved: {
+          DayStore.storageKey: jsonEncode({
+            'v': 1,
+            'dayStamp': '2026-11-19',
+            'tasks': [
+              {'id': 'mvd-1', 'title': 'Stay hydrated', 'subtitle': '2 glasses left', 'done': false},
+              {'id': 'mvd-3', 'title': 'Walk, 20 minutes', 'subtitle': '', 'done': false},
+              {'id': 't-x', 'title': 'Email the lab', 'subtitle': '', 'done': false},
+            ],
+          }),
+        },
+      );
+      expect(d.store.tasks.map((t) => t.id), ['mvd-1', 'mvd-3', 't-x']);
+      expect(tombstones(d.store), [
+        {
+          'id': 'mvd-2',
+          'createdAt': '1970-01-01T00:00:00.000Z',
+          'updatedAt': '1970-01-01T00:00:00.000Z',
+          'deletedAt': '1970-01-01T00:00:00.001Z',
+        },
+      ]);
+      // Written in the new shape at once: a restart doesn't add it again.
+      expect(d.saved['v'], 3);
+      expect(tombstones(d.reopen()), hasLength(1));
+    });
+
+    test('no starter deletions for a new install, a save made with sync, or an old save without the list', () async {
+      final fresh = await Day.open();
+      expect(tombstones(fresh.store), isEmpty);
+
+      final synced = await Day.open(
+        saved: {
+          DayStore.storageKey: jsonEncode({
+            'v': 2,
+            'tasks': [starterTasks().first.toJson()],
+          }),
+        },
+      );
+      expect(synced.store.tasks.map((t) => t.id), ['mvd-1']);
+      expect(tombstones(synced.store), isEmpty, reason: 'its deletions carry their own tombstones');
+
+      final noList = await Day.open(
+        saved: {
+          DayStore.storageKey: jsonEncode({'v': 1, 'state': 'green', 'level': 0.2}),
+        },
+      );
+      expect(noList.store.tasks.map((t) => t.id), ['mvd-1', 'mvd-2', 'mvd-3']);
+      expect(tombstones(noList.store), isEmpty);
     });
   });
 
@@ -422,6 +795,66 @@ void main() {
       expect(d.store.checkins, isEmpty);
       expect(d.store.state, isNull);
       expect(d.store.gen, 4);
+    });
+
+    test('erased: Home’s state and level are cleared, unless a newer check-in came with it', () async {
+      final d = await Day.open(at: DateTime.utc(2026, 11, 19, 10));
+      d.store.recordCheckin(NervousState.red, 0.9);
+      // The erased day still holds an older check-in (made elsewhere after
+      // the erase): it is the history now, but it isn't Home's state.
+      final followed = d.store.applyServer({
+        'gen': 5,
+        'erased': true,
+        'checkins': [
+          {'at': '2026-11-19T09:00:00.000Z', 'state': 'green', 'level': 0.1},
+        ],
+      });
+      expect(followed, isFalse);
+      expect(d.store.state, isNull);
+      expect(d.store.level, isNull);
+      expect(d.store.checkins.single.state, NervousState.green);
+      expect(d.reopen().state, isNull, reason: 'saved that way');
+
+      // A check-in newer than any here: Home follows it, erased or not.
+      d.store.recordCheckin(NervousState.red, 0.9);
+      d.store.applyServer({
+        'gen': 6,
+        'erased': true,
+        'checkins': [
+          {'at': '2026-11-19T10:30:00.000Z', 'state': 'yellow', 'level': 0.5},
+        ],
+      });
+      expect(d.store.state, NervousState.yellow);
+      expect(d.store.level, 0.5);
+
+      // An erased answer without a history of its own: none here either.
+      d.store.applyServer({'gen': 7, 'erased': true});
+      expect(d.store.checkins, isEmpty);
+      expect(d.store.state, isNull);
+    });
+
+    test('the dump: the answer replaces it; a line it never mentions stays; erased replaces all', () async {
+      final d = await Day.open(at: DateTime.utc(2026, 11, 19, 10));
+      d.store.addDump('mine, refused by the server');
+      final mine = d.store.dump.single.id;
+      d.store.applyServer({
+        'dump': [
+          {'id': 'd-web', 'text': 'from the web', 'at': '2026-11-19T09:30:00.000Z', 'deletedAt': null},
+          {'id': 'd-gone', 'deletedAt': '2026-11-19T09:00:00.000Z'},
+          {'id': 'bad id!', 'text': 'dropped', 'at': '2026-11-19T09:00:00.000Z', 'deletedAt': null},
+        ],
+      });
+      expect(d.store.dump.map((x) => x.id), [mine, 'd-web']);
+      expect(
+        (d.store.syncBody()['dump']! as List).map((j) => (j as Map)['id']),
+        [mine, 'd-web', 'd-gone'],
+        reason: 'sent again next time, with the tombstone',
+      );
+      expect(d.store.localRevision, 1, reason: 'an answer is not a change made here');
+
+      d.store.applyServer({'gen': 9, 'erased': true, 'dump': <Object?>[]});
+      expect(d.store.dump, isEmpty);
+      expect(d.store.syncBody()['dump'], isEmpty);
     });
 
     test('a newer check-in from another device moves the state; an older one doesn’t', () async {

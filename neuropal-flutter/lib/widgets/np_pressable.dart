@@ -3,13 +3,17 @@
 // It gives every control the same accessibility basics:
 //   * a semantic label and button role for TalkBack / VoiceOver,
 //   * keyboard / switch-access focus with a visible 3 px focus ring,
-//   * at least 44 × 44 logical pixels of touch target,
+//   * at least 48 × 48 logical pixels of touch target ([kNpTarget], the
+//     size Android's accessibility guidance and our tests ask for),
 //   * a "pressed" flag the skins use for their press effect (Signal buttons
 //     sink into their hard shadow; nothing moves when motion is Still).
 
 import 'package:flutter/material.dart';
 
 import '../theme/np_style.dart';
+
+/// The smallest touch target the app uses, in logical pixels.
+const double kNpTarget = 48;
 
 typedef PressableBuilder =
     Widget Function(BuildContext context, bool pressed, bool focused);
@@ -24,7 +28,7 @@ class NpPressable extends StatefulWidget {
     this.selected,
     this.toggled,
     this.focusRadius = 8,
-    this.minSize = const Size(44, 44),
+    this.minSize = const Size(kNpTarget, kNpTarget),
     this.excludeChildSemantics = false,
   });
 

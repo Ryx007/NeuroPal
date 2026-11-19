@@ -2,7 +2,10 @@
 // alone: word + shape + colour), the tile frame and head, the one-line row
 // of a small tile, and the status line with Undo.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../day/day_models.dart';
 import '../theme/np_style.dart';
@@ -92,7 +95,10 @@ class HomeTileFrame extends StatelessWidget {
 }
 
 /// A tile's heading (a mono label, a heading for screen readers) and
-/// anything to its right.
+/// anything to its right. While the label's longest word still fits next to
+/// those things, they share one row and the label takes the rest of it (and
+/// wraps there); when it doesn't (200 % text on a narrow phone), they move
+/// under the label and wrap themselves. Nothing is ever clipped.
 class TileHead extends StatelessWidget {
   const TileHead(this.title, {super.key, this.trailing = const []});
 
@@ -100,12 +106,168 @@ class TileHead extends StatelessWidget {
   final List<Widget> trailing;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(child: Semantics(header: true, child: NpLabel(title))),
-      for (final t in trailing) ...[const SizedBox(width: 8), t],
-    ],
+  Widget build(BuildContext context) {
+    final label = Semantics(header: true, child: NpLabel(title));
+    if (trailing.isEmpty) return label;
+    return _HeadLayout(
+      label: label,
+      trailing: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: trailing,
+      ),
+    );
+  }
+}
+
+/// [TileHead]'s layout: one row while it fits, else stacked.
+class _HeadLayout extends MultiChildRenderObjectWidget {
+  _HeadLayout({required Widget label, required Widget trailing})
+    : super(children: [label, trailing]);
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderHead(Directionality.of(context));
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderHead renderObject) {
+    renderObject.textDirection = Directionality.of(context);
+  }
+}
+
+class _HeadParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderHead extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _HeadParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _HeadParentData> {
+  _RenderHead(this._textDirection);
+
+  /// Between the label and the things beside it, and under it.
+  static const double _gap = 8;
+  static const double _runGap = 6;
+
+  TextDirection _textDirection;
+  set textDirection(TextDirection value) {
+    if (value == _textDirection) return;
+    _textDirection = value;
+    markNeedsLayout();
+  }
+
+  RenderBox get _label => firstChild!;
+  RenderBox get _trailing => lastChild!;
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _HeadParentData) child.parentData = _HeadParentData();
+  }
+
+  /// One row when the trailing things and the label's longest word fit
+  /// side by side.
+  bool _fitsInRow(double trailingWidth, double width) =>
+      trailingWidth + _gap + _label.getMinIntrinsicWidth(double.infinity) <= width;
+
+  ({Size size, bool row, Size label, Size trailing}) _measure(
+    BoxConstraints constraints,
+    ChildLayouter layoutChild,
+  ) {
+    if (!constraints.hasBoundedWidth) {
+      final label = layoutChild(_label, const BoxConstraints());
+      final trailing = layoutChild(_trailing, const BoxConstraints());
+      final size = Size(
+        label.width + _gap + trailing.width,
+        math.max(label.height, trailing.height),
+      );
+      return (size: constraints.constrain(size), row: true, label: label, trailing: trailing);
+    }
+    final width = constraints.maxWidth;
+    final trailing = layoutChild(_trailing, BoxConstraints(maxWidth: width));
+    if (_fitsInRow(trailing.width, width)) {
+      final label = layoutChild(
+        _label,
+        BoxConstraints.tightFor(width: width - trailing.width - _gap),
+      );
+      final size = Size(width, math.max(label.height, trailing.height));
+      return (size: constraints.constrain(size), row: true, label: label, trailing: trailing);
+    }
+    final label = layoutChild(_label, BoxConstraints.tightFor(width: width));
+    final size = Size(width, label.height + _runGap + trailing.height);
+    return (size: constraints.constrain(size), row: false, label: label, trailing: trailing);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      _measure(constraints, ChildLayoutHelper.dryLayoutChild).size;
+
+  @override
+  void performLayout() {
+    final m = _measure(constraints, ChildLayoutHelper.layoutChild);
+    size = m.size;
+    final rtl = _textDirection == TextDirection.rtl;
+    final label = _label.parentData! as _HeadParentData;
+    final trailing = _trailing.parentData! as _HeadParentData;
+    final w = size.width;
+    if (m.row) {
+      final h = size.height;
+      label.offset = Offset(rtl ? w - m.label.width : 0, (h - m.label.height) / 2);
+      trailing.offset = Offset(rtl ? 0 : w - m.trailing.width, (h - m.trailing.height) / 2);
+    } else {
+      label.offset = Offset(rtl ? w - m.label.width : 0, 0);
+      trailing.offset = Offset(
+        rtl ? w - m.trailing.width : 0,
+        m.label.height + _runGap,
+      );
+    }
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) => math.max(
+    _label.getMinIntrinsicWidth(double.infinity),
+    _trailing.getMinIntrinsicWidth(double.infinity),
   );
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      _label.getMaxIntrinsicWidth(double.infinity) +
+      _gap +
+      _trailing.getMaxIntrinsicWidth(double.infinity);
+
+  double _heightFor(double width) {
+    if (!width.isFinite) {
+      return math.max(
+        _label.getMaxIntrinsicHeight(width),
+        _trailing.getMaxIntrinsicHeight(width),
+      );
+    }
+    final trailingWidth = math.min(_trailing.getMaxIntrinsicWidth(double.infinity), width);
+    if (_fitsInRow(trailingWidth, width)) {
+      return math.max(
+        _label.getMaxIntrinsicHeight(width - trailingWidth - _gap),
+        _trailing.getMaxIntrinsicHeight(trailingWidth),
+      );
+    }
+    return _label.getMaxIntrinsicHeight(width) +
+        _runGap +
+        _trailing.getMaxIntrinsicHeight(width);
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _heightFor(width);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _heightFor(width);
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      defaultComputeDistanceToFirstActualBaseline(baseline);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+
+  @override
+  void paint(PaintingContext context, Offset offset) => defaultPaint(context, offset);
 }
 
 /// A small (S) tile: one tappable line — an icon, a label and the value.
@@ -134,7 +296,7 @@ class OneLineTile extends StatelessWidget {
         onTap: onTap,
         semanticLabel: semanticLabel ?? '$label: $value',
         focusRadius: s.radiusMedium,
-        minSize: const Size(44, 48),
+        minSize: const Size(kNpTarget, 48),
         builder: (context, pressed, focused) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
@@ -191,7 +353,6 @@ class UndoStatus extends StatelessWidget {
                       label: 'Undo',
                       icon: Icons.undo_rounded,
                       kind: NpButtonKind.ghost,
-                      minHeight: 44,
                       onPressed: onUndo,
                     ),
                 ],

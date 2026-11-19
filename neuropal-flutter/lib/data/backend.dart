@@ -13,7 +13,9 @@
 // SIGN-IN: every request carries `Authorization: Bearer <token>` with the
 // session saved for THAT server (session_store.dart) — a token never goes
 // to another address. A 401 from a data route is reported through
-// [Backend.onUnauthorized] (lib/auth/auth_controller.dart listens). A
+// [Backend.onUnauthorized] (lib/auth/auth_controller.dart listens), except
+// for a background request (day sync): that 401 goes to its caller only,
+// and the next ordinary request ends the session (DAY-SYNC §8). A
 // single-user LOCAL_MODE server (the Mac mini) simply needs no token.
 //
 // FAILURES ARE VISIBLE: when nothing answers, `state` becomes offline and
@@ -278,12 +280,23 @@ class Backend extends ChangeNotifier {
   Future<Object?> getJson(String path, {Duration? timeout, String? server}) =>
       _send('GET', path, timeout: timeout, server: server);
 
+  /// [background]: a request the person didn't make (day sync). Its 401 is
+  /// only thrown to the caller, never reported to [onUnauthorized]: a
+  /// background request never signs anyone out by itself.
   Future<Object?> postJson(
     String path,
     Object? body, {
     Duration? timeout,
     String? server,
-  }) => _send('POST', path, body: body, timeout: timeout, server: server);
+    bool background = false,
+  }) => _send(
+    'POST',
+    path,
+    body: body,
+    timeout: timeout,
+    server: server,
+    background: background,
+  );
 
   Future<Object?> patchJson(String path, Object? body, {Duration? timeout}) =>
       _send('PATCH', path, body: body, timeout: timeout);
@@ -318,6 +331,7 @@ class Backend extends ChangeNotifier {
     Object? body,
     Duration? timeout,
     String? server,
+    bool background = false,
   }) async {
     final base = await _baseFor(server);
     final limit = timeout ?? const Duration(seconds: 20);
@@ -348,7 +362,7 @@ class Backend extends ChangeNotifier {
         timedOut: e is TimeoutException,
       );
     }
-    return _answer(res, base, token, path);
+    return _answer(res, base, token, path, background: background);
   }
 
   /// Sends one file as multipart/form-data (field [field], plus [fields])
@@ -461,13 +475,15 @@ class Backend extends ChangeNotifier {
   }
 
   /// A response → its decoded JSON, or an [ApiException] in words (and the
-  /// 401 rule: a refused data request ends the session).
+  /// 401 rule: a refused data request ends the session, unless it was a
+  /// [background] one).
   Object? _answer(
     http.Response res,
     BackendCandidate base,
     String? token,
-    String path,
-  ) {
+    String path, {
+    bool background = false,
+  }) {
     // Decode the bytes as UTF-8 ourselves (big documents, non-Latin text).
     final hasBody = res.bodyBytes.isNotEmpty;
     Object? decoded;
@@ -487,7 +503,7 @@ class Backend extends ChangeNotifier {
       }
       return decoded;
     }
-    if (res.statusCode == 401 && !path.startsWith('/api/auth/')) {
+    if (res.statusCode == 401 && !background && !path.startsWith('/api/auth/')) {
       onUnauthorized?.call(base.base, token);
     }
     final error = decoded is Map ? decoded : const {};

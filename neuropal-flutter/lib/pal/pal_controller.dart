@@ -1,11 +1,12 @@
-// Pal, the assistant: what the five tools keep between visits, saved on the
+// Pal, the assistant: what the tools keep between visits, saved on the
 // phone after every change (shared_preferences), so nothing is lost when
 // Android stops the app.
 //   * bubble    hidden or not (Settings and the sheet both switch it);
-//   * dump      the brain dump, newest first, with tombstones for deletions;
 //   * chat      Talk's last 30 messages (the sheet shows 10; the server
 //               keeps its own copy until "Clear chat");
 //   * sit       the running "Sit with me" and the notes written after one.
+// The brain dump is part of the day (DAY-SYNC §1): it lives in DayStore
+// (lib/day/), syncs with it and follows the day's owner.
 //
 // Sit with me runs on an absolute clock (epoch ms), so it survives closing
 // the sheet and restarting the app: a watcher ticks once a second while a
@@ -13,16 +14,8 @@
 // forgets an unanswered "Want to note what you did?" after 30 minutes.
 // What Pal says by itself is published as [news] for the app to read out.
 //
-// THE BRAIN DUMP AND DAY SYNC. DAY-SYNC §1 lists the dump as part of the
-// day, but this app's DayStore (lib/day/) has no dump section yet, and it
-// isn't this module's to change. Until it gets one, the dump is kept here,
-// on this phone only, in exactly the contract's item shape ({id, text, at,
-// deletedAt}, tombstones included), and it follows the day's owner the way
-// the day does: a day that changes account is cleared, so is this.
-//
 // Signing out ends what belongs to that session: the chat, the sit and its
-// notes are forgotten (the web app does the same). The dump is day data
-// and stays with the day, as the day does in this app.
+// notes are forgotten (the web app does the same).
 
 import 'dart:async';
 import 'dart:convert';
@@ -63,8 +56,6 @@ class PalController extends ChangeNotifier {
     PalTimerFactory? timer,
   }) : _timer = timer ?? Timer.periodic {
     _load();
-    day.addListener(_onDay);
-    _onDay();
     // A session that ran on while the app was closed: catch up quietly
     // (ended on time, or past halfway), then keep watching.
     _tick(announce: false);
@@ -72,7 +63,6 @@ class PalController extends ChangeNotifier {
   }
 
   static const bubbleKey = 'np.pal.bubbleHidden';
-  static const dumpKey = 'np.pal.dump';
   static const chatKey = 'np.pal.chat';
   static const sitKey = 'np.pal.sit';
 
@@ -80,6 +70,8 @@ class PalController extends ChangeNotifier {
   static const forgetEnded = Duration(minutes: 30);
 
   final SharedPreferences prefs;
+
+  /// The day: its clock, and the minimum day Pal's tools add to.
   final DayStore day;
   final PalApi api;
 
@@ -88,8 +80,6 @@ class PalController extends ChangeNotifier {
   final PalTimerFactory _timer;
 
   bool _bubbleHidden = false;
-  List<DumpItem> _dump = const [];
-  String? _dumpOwner;
   List<PalChatItem> _chat = const [];
   bool _sending = false;
   PalSit? _sit;
@@ -115,41 +105,6 @@ class PalController extends ChangeNotifier {
     _bubbleHidden = hidden;
     unawaited(prefs.setBool(bubbleKey, hidden));
     _notify();
-  }
-
-  // ---- the brain dump --------------------------------------------------------
-
-  /// Live lines, newest first.
-  List<DumpItem> get dump => [
-    for (final d in _dump)
-      if (!d.isDeleted) d,
-  ];
-
-  /// Everything, tombstones included, as day sync would send it.
-  List<Map<String, Object?>> dumpForSync() => [for (final d in _dump) d.toJson()];
-
-  /// Adds a line. False when it is empty.
-  bool addDump(String text) {
-    final t = cleanText(text, kDumpTextMax);
-    if (t.isEmpty) return false;
-    final now = day.now();
-    _dump = _sortedDump([DumpItem(id: freshId('d', now), text: t, at: isoMs(now)), ..._dump]);
-    _saveDump();
-    _notify();
-    return true;
-  }
-
-  /// Deletes a line: the text goes at once, a tombstone stays (for sync).
-  /// Returns the line as it was, for Undo — which adds the text again
-  /// under a new id (DAY-SYNC §5: there is no restore for the dump).
-  DumpItem? removeDump(String id) {
-    final i = _dump.indexWhere((d) => d.id == id && !d.isDeleted);
-    if (i < 0) return null;
-    final gone = _dump[i];
-    _dump = _sortedDump(List.of(_dump)..[i] = gone.tombstone(isoMs(day.now())));
-    _saveDump();
-    _notify();
-    return gone;
   }
 
   // ---- Talk ------------------------------------------------------------------
@@ -387,29 +342,7 @@ class PalController extends ChangeNotifier {
     _notify();
   }
 
-  /// The day changed hands (DayStore.resetFor): so does the dump.
-  void _onDay() {
-    final owner = day.owner;
-    if (owner == _dumpOwner) return;
-    if (owner != null && _dumpOwner != null) _dump = const [];
-    _dumpOwner = owner;
-    _saveDump();
-    _notify();
-  }
-
   // ---- storage --------------------------------------------------------------------
-
-  static List<DumpItem> _sortedDump(List<DumpItem> list) {
-    final live = [
-      for (final d in list)
-        if (!d.isDeleted) d,
-    ]..sort((a, b) => (parseIsoMs(b.at) ?? 0).compareTo(parseIsoMs(a.at) ?? 0));
-    final gone = [
-      for (final d in list)
-        if (d.isDeleted) d,
-    ]..sort((a, b) => (parseIsoMs(b.deletedAt) ?? 0).compareTo(parseIsoMs(a.deletedAt) ?? 0));
-    return [...live.take(kDumpKeep), ...gone.take(kDumpTombstonesKeep)];
-  }
 
   void _write(String key, Object? value) {
     // shared_preferences updates its cache at once and writes in the
@@ -420,12 +353,6 @@ class PalController extends ChangeNotifier {
       return false;
     });
   }
-
-  void _saveDump() => _write(dumpKey, {
-    'v': 1,
-    'owner': _dumpOwner,
-    'items': [for (final d in _dump) d.toJson()],
-  });
 
   void _saveChat() => _write(chatKey, [for (final m in _chat) m.toJson()]);
 
@@ -446,15 +373,6 @@ class PalController extends ChangeNotifier {
 
   void _load() {
     _bubbleHidden = prefs.getBool(bubbleKey) ?? false;
-    final dump = _read(dumpKey);
-    if (dump is Map) {
-      final owner = dump['owner'];
-      _dumpOwner = owner is String && owner.isNotEmpty ? owner : null;
-      final items = dump['items'];
-      _dump = _sortedDump([
-        for (final j in items is List ? items : const []) ?DumpItem.fromJson(j),
-      ]);
-    }
     final chat = _read(chatKey);
     if (chat is List) {
       final list = [for (final j in chat) ?PalChatItem.fromJson(j)];
@@ -478,7 +396,6 @@ class PalController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _watcher?.cancel();
-    day.removeListener(_onDay);
     clock.dispose();
     super.dispose();
   }

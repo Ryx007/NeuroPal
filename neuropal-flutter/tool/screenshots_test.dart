@@ -54,11 +54,12 @@ Future<AppServices> boot(
   SessionStore? sessions,
   DateTime Function()? clock,
   Widget Function(Widget app)? wrap,
+  double width = 412,
 }) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures(disableAnimations: true);
   addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
-  tester.view.physicalSize = const Size(412 * 2, 915 * 2);
+  tester.view.physicalSize = Size(width * 2, 915 * 2);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
   // Test-only API: fine here, this file runs under `flutter test` too.
@@ -512,6 +513,27 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    // The narrowest common phone: the tile heads must wrap, not clip.
+    testWidgets('bigtext-home-360-$name', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final services = await boot(
+        tester,
+        {'np.appearance': ?look},
+        online: true,
+        clock: homeClock,
+        width: 360,
+      );
+      seedDay(services);
+      services.day.recordCheckin(NervousState.red, 0.86);
+      await shot(tester, 'bigtext-home-360-$name');
+      for (var i = 2; i <= 6; i++) {
+        await tester.drag(find.byType(ListView).first, const Offset(0, -760));
+        await shot(tester, 'bigtext-home-360-$name-$i');
+      }
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('bigtext-anchors-$name', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -556,7 +578,7 @@ void main() {
         clock: homeClock,
       );
       seedDay(services);
-      services.pal
+      services.day
         ..addDump('Ask Milena about the SPAD dead time')
         ..addDump('Buy oat milk');
       await tester.pumpAndSettle();

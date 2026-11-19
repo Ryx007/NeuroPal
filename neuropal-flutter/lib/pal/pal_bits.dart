@@ -128,7 +128,7 @@ class PalStateChoices extends StatelessWidget {
         selected: on,
         semanticLabel: st.long,
         focusRadius: radius,
-        minSize: const Size(44, 52),
+        minSize: const Size(kNpTarget, 52),
         builder: (context, pressed, focused) => Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 52),

@@ -3,7 +3,8 @@
 //
 // THE RULES (server side: neuropal-backend/src/routes/auth.js):
 //   * GET /api/auth/config says `localMode: true` → a single-user server
-//     (the Mac mini): no sign-in, ever.
+//     (the Mac mini): no sign-in, ever. /api/auth/me still names the local
+//     user (day sync keys the day on its id).
 //   * Otherwise the server needs a session. None saved → sign-in. One saved
 //     → GET /api/auth/me checks it: a refreshed `token` in the answer is
 //     saved (sessions slide); 401 → the session is over → sign-in.
@@ -115,6 +116,10 @@ class AuthController extends ChangeNotifier {
   Future<void>? _checking;
   bool _disposed = false;
 
+  /// The backend's last settled state (online / offline), to tell a server
+  /// coming back from a routine re-probe.
+  BackendState? _settled;
+
   AuthStatus get status => _status;
 
   /// The current server's sign-up rules (null until it answered).
@@ -147,11 +152,26 @@ class AuthController extends ChangeNotifier {
   // ---- checking the server -------------------------------------------------
 
   void _onBackendChanged() {
-    if (backend.state != BackendState.online) return;
+    final state = backend.state;
+    if (state == BackendState.checking) return;
+    final back = state == BackendState.online && _settled == BackendState.offline;
+    _settled = state;
+    if (state != BackendState.online) return;
     final base = backend.active!.base;
     // A new server, or one we couldn't check yet: find out what it needs.
-    if (base != _server || _status == AuthStatus.unknown) unawaited(check());
+    // A /me that didn't answer (who is signed in isn't known; day sync
+    // waits on it) is asked again when the server comes back — not on
+    // every re-probe: a failed request re-probes, so that would go round
+    // and round while /healthz answers and /me doesn't. (Day sync also
+    // asks when it wants to sync, lib/day/day_sync.dart.)
+    if (base != _server || _status == AuthStatus.unknown || (back && userUnknown)) {
+      unawaited(check());
+    }
   }
+
+  /// Requests are accepted (signed in, or no accounts) but the server
+  /// hasn't said who this is yet: its /me didn't answer.
+  bool get userUnknown => hasAccess && _user == null;
 
   /// Finds out what the active server needs and whether the saved session
   /// still works. Concurrent calls share one check; if the active server
@@ -200,7 +220,25 @@ class AuthController extends ChangeNotifier {
     if (base != _server) return;
     _config = config;
     if (config != null && config.localMode) {
-      _user = null;
+      // No sign-in, ever. /me still says who the local user is: day sync
+      // keys the day on that id (never on the address, which changes). Not
+      // known yet = asked again at the next check; nobody waits on it.
+      AuthUser? user;
+      try {
+        user = AuthUser.fromJson(
+          _map(
+            await backend.getJson(
+              '/api/auth/me',
+              server: base,
+              timeout: _checkTimeout,
+            ),
+          ),
+        );
+      } on ApiException {
+        user = null;
+      }
+      if (base != _server) return;
+      _user = user ?? _user;
       _setStatus(AuthStatus.open);
       return;
     }

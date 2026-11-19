@@ -122,7 +122,7 @@ class _LengthButton extends StatelessWidget {
       onTap: onTap,
       semanticLabel: 'Sit with $palName for $minutes minutes',
       focusRadius: radius,
-      minSize: const Size(44, 76),
+      minSize: const Size(kNpTarget, 76),
       builder: (context, pressed, focused) => Container(
         width: double.infinity,
         constraints: const BoxConstraints(minHeight: 76),

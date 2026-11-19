@@ -359,14 +359,14 @@ void main() {
 
     await press(tester, 'Delete “buy more coffee”');
     expect(find.text('Deleted.'), findsOneWidget);
-    expect(rig.services.pal.dump, isEmpty);
+    expect(rig.services.day.dump, isEmpty);
     await press(tester, 'Undo');
     expect(find.text('Back in the dump.'), findsOneWidget);
-    expect(rig.services.pal.dump.single.text, 'buy more coffee');
+    expect(rig.services.day.dump.single.text, 'buy more coffee');
 
     await press(tester, 'Minimum day: add “buy more coffee”');
     expect(rig.services.day.tasks.last.title, 'buy more coffee');
-    expect(rig.services.pal.dump, isEmpty);
+    expect(rig.services.day.dump, isEmpty);
     expect(find.text('Added “buy more coffee” to your minimum day.'), findsOneWidget);
     expect(rig.requests.where((r) => r.url.path.contains('dump')), isEmpty);
     semantics.dispose();
@@ -382,8 +382,12 @@ void main() {
         'Ask Milena whether the TDC coincidence window needs recalibrating before Friday’s CPI run, '
         'and send her the SPAD dead-time plots from the last acquisition';
     expect(long.length, greaterThan(kTitleMax));
-    rig.services.pal.addDump(long);
-    final cut = cleanText(long, kTitleMax);
+    rig.services.day.addDump(long);
+    // Cut at a word with "…", as the Expo and web apps do.
+    final cut = shortTitle(long, kTitleMax);
+    expect(cut, endsWith('…'));
+    expect(long, startsWith(cut.substring(0, cut.length - 1)));
+    expect(long[cut.length - 1], ' ', reason: 'a whole word');
     await openPal(tester);
     await openTool(tester, 'Brain dump');
 
@@ -391,14 +395,14 @@ void main() {
     final added = rig.services.day.tasks.where((t) => t.title == cut).toList();
     expect(added, hasLength(1), reason: 'the day got the cut title at once');
     expect(added.single.title.length, lessThanOrEqualTo(kTitleMax));
-    expect(rig.services.pal.dump.single.text, long, reason: 'nothing is lost: the full note stays');
+    expect(rig.services.day.dump.single.text, long, reason: 'nothing is lost: the full note stays');
     expect(find.text(long), findsOneWidget);
     expect(find.textContaining('to your minimum day. The full note stays in your brain dump.'), findsOneWidget);
 
     // Again: no second copy on the day; the note still stays.
     await press(tester, RegExp('^Minimum day: add “Ask Milena'));
     expect(rig.services.day.tasks.where((t) => t.title == cut), hasLength(1));
-    expect(rig.services.pal.dump.single.text, long);
+    expect(rig.services.day.dump.single.text, long);
     expect(find.text('Already on your minimum day. The full note stays in your brain dump.'), findsOneWidget);
     semantics.dispose();
   });
