@@ -24,12 +24,21 @@ name: neuropal-v2
 x-restart: &restart
   restart: unless-stopped
 
+# The server's /etc/resolv.conf points at systemd-resolved, which isn't
+# running. The host still resolves names through its local BIND, but
+# Docker's DNS on these networks has nothing to forward to ("DNS resolver has
+# no external nameservers"). So the containers that reach the internet (the
+# AI providers, arXiv, the Ollama registry, Cloudflare) ask public resolvers
+# directly. Nothing outside this project changes.
+x-dns: &dns [1.1.1.1, 9.9.9.9]
+
 services:
   api:
     <<: *restart
     build:
       context: ../../neuropal-backend
     image: neuropal-api:local
+    dns: *dns
     env_file: .env
     environment:
       NODE_ENV: production
@@ -62,15 +71,32 @@ services:
       ollama:
         condition: service_started
     networks: [edge, data]
-    mem_limit: 1536m
+    # The server is shared and has no swap (8 GB, ~1.7 GB free on
+    # 2026-10-31). NeuroPal's containers stay small, and if the server ever
+    # runs out of memory the kernel stops NeuroPal's processes first
+    # (oom_score_adj), never the server's other services. On a bigger
+    # machine, the NP_* keys in .env raise the caps.
+    mem_limit: ${NP_API_MEM:-1024m}
+    oom_score_adj: 900
 
   mongo:
     <<: *restart
-    image: mongo:8.0
+    # Pinned to the patch release (like the other images) so a restart never
+    # changes the database version. Raise it on purpose, then test.
+    image: mongo:8.0.34
     # Cap the cache: the default (half of RAM) would crowd the other
     # services on a shared VPS.
-    command: ["--wiredTigerCacheSizeGB", "0.5", "--bind_ip_all"]
+    command: ["--wiredTigerCacheSizeGB", "${NP_MONGO_CACHE_GB:-0.25}", "--bind_ip_all"]
     environment:
+      # MongoDB 8 refuses to start on Linux kernels 6.19+ when its allocator
+      # (TCMalloc) owns "rseq": SERVER-121912. 8.0.30+ allows 7.0.14+ again,
+      # but Ubuntu reports its 7.0.14 kernel as "7.0.0-43", so the check
+      # still says no. That took this database down on 2026-11-15, when the
+      # server moved to Ubuntu 26.04. The image's default is rseq=0. With
+      # rseq=1, glibc owns rseq and the allocator uses per-thread caches,
+      # which work on every kernel. The speed cost doesn't matter at this
+      # size.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-neuropal}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set in .env}
       MONGO_INITDB_DATABASE: neuropal
@@ -86,7 +112,8 @@ services:
       timeout: 5s
       retries: 12
     networks: [data]
-    mem_limit: 1024m
+    mem_limit: ${NP_MONGO_MEM:-512m}
+    oom_score_adj: 700
 
   qdrant:
     <<: *restart
@@ -97,25 +124,30 @@ services:
     volumes:
       - qdrant:/qdrant/storage
     networks: [data]
-    mem_limit: 768m
+    mem_limit: ${NP_QDRANT_MEM:-512m}
+    oom_score_adj: 800
 
   ollama:
     <<: *restart
     image: ollama/ollama:0.40.10
+    dns: *dns
     environment:
-      # keep the embedder warm; one request at a time is plenty here
-      OLLAMA_KEEP_ALIVE: 24h
+      # The embedder stays loaded for 10 minutes after use, then frees its
+      # ~0.5 GB (the server is shared). One request at a time is plenty.
+      OLLAMA_KEEP_ALIVE: ${NP_OLLAMA_KEEP_ALIVE:-10m}
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
     volumes:
       - ollama:/root/.ollama
     networks: [data]
-    mem_limit: 1536m
+    mem_limit: ${NP_OLLAMA_MEM:-1024m}
+    oom_score_adj: 1000
 
   # One-shot: makes sure the embedder is present. The vectors are 768-dim
   # nomic-embed-text; another model would invalidate every stored vector.
   ollama-pull:
     image: ollama/ollama:0.40.10
+    dns: *dns
     depends_on: [ollama]
     environment:
       OLLAMA_HOST: http://ollama:11434
@@ -128,16 +160,21 @@ services:
         exit 1
     restart: "no"
     networks: [data]
+    mem_limit: 256m
+    oom_score_adj: 1000
 
   cloudflared:
     <<: *restart
     image: cloudflare/cloudflared:2026.10.3
+    dns: *dns
     profiles: [tunnel]
     command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
     volumes:
       - ./cloudflared:/etc/cloudflared:ro
     depends_on: [api]
     networks: [edge]
+    mem_limit: 256m
+    oom_score_adj: 500
 
   # Nightly MongoDB dump to ./backups, keeps the newest 14 that succeeded,
   # plus a weekly copy of the uploaded files (newest 2). Vectors are derived
@@ -145,7 +182,8 @@ services:
   # server now and then (scripts/pull-backup.sh on the Mac).
   backup:
     <<: *restart
-    image: mongo:8.0
+    # the same image as the database (only mongodump and bash are used)
+    image: mongo:8.0.34
     depends_on:
       mongo:
         condition: service_healthy
@@ -188,6 +226,8 @@ services:
       - ./backups:/backups
       - storage:/data/storage:ro
     networks: [data]
+    mem_limit: 512m
+    oom_score_adj: 1000
 
 networks:
   edge: {}

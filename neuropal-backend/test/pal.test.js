@@ -115,6 +115,23 @@ test('breakdown answers 502 when the steps are unusable, so the app uses its own
     assert.ok((await r.json()).error);
 });
 
+test('a crisis-sounding task never reaches the model; whitespace variants included', async () => {
+    let called = 0;
+    answer = async () => {
+        called += 1;
+        return { data: { steps: ['Open it', 'Read one line', 'Stop'] }, provider: 'stub' };
+    };
+    for (const task of ['I want to end my life', 'i want to  end   my life', 'kill\tmyself', 'voglio\u00a0morire']) {
+        const r = await post('/api/pal/breakdown', { task });
+        assert.equal(r.status, 200, task);
+        const body = await r.json();
+        assert.equal(body.crisis, true, task);
+        assert.deepEqual(body.steps, []);
+        assert.match(body.reply, /emergency number/);
+    }
+    assert.equal(called, 0);
+});
+
 test('a failing model is a clean error, and an exposed one keeps its status', async () => {
     answer = async () => {
         throw new Error('GEMINI_API_KEY is not set');

@@ -2,7 +2,7 @@
 # One command to install or update the NeuroPal backend on the VPS, as root,
 # from any SSH session (laptop, or a phone SSH app):
 #
-#   curl -fsSL https://raw.githubusercontent.com/Ryx007/NeuroPal/v2-platform/deploy/vps/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Ryx007/NeuroPal/v3-apple-web/deploy/vps/install.sh | bash
 #
 # Clones (or fast-forwards) the repo into /opt/neuropal, then runs
 # bootstrap.sh (secrets, Gemini key prompt, build, start) and tunnel.sh
@@ -10,7 +10,9 @@
 # server. Needs git and Docker with the compose plugin already installed.
 set -euo pipefail
 
-BRANCH="${NEUROPAL_BRANCH:-v2-platform}"
+# The newest backend. Once PRs #2 and #3 are merged, this becomes main (and
+# the server switches with: git -C /opt/neuropal checkout main).
+BRANCH="${NEUROPAL_BRANCH:-v3-apple-web}"
 DIR="${NEUROPAL_DIR:-/opt/neuropal}"
 REPO="https://github.com/Ryx007/NeuroPal.git"
 

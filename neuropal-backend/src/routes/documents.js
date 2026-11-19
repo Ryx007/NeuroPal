@@ -535,6 +535,44 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// GET /api/documents/:id/file
+// The original PDF, for native viewers (the iOS app's PDFKit view). PDF and
+// arXiv documents only. Always a download (a browser never renders it inline
+// in this origin), sandboxed, never in a shared cache. Header or doc ticket.
+// ---------------------------------------------------------------------------
+router.get(
+    '/:id/file',
+    requireDocAccess,
+    asyncHandler(async (req, res) => {
+        const doc = await Document.findOne({
+            _id: req.params.id,
+            userId: req.userId,
+            deletedAt: null,
+        }).lean();
+        if (!doc) return res.status(404).json({ error: 'document not found' });
+        if (doc.type !== 'pdf' && doc.type !== 'arxiv') {
+            return res.status(400).json({ error: 'the original file is only available for PDF documents' });
+        }
+        const root = path.resolve(STORAGE_ROOT);
+        const abs = doc.file && doc.file.relativePath ? path.resolve(root, doc.file.relativePath) : '';
+        if (!abs || !abs.startsWith(root + path.sep)) {
+            return res.status(404).json({ error: 'file not found' });
+        }
+        try {
+            await fs.access(abs);
+        } catch (e) {
+            return res.status(404).json({ error: 'file not found' });
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="document.pdf"');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+        res.sendFile(abs);
+    }),
+);
+
+// ---------------------------------------------------------------------------
 // GET /api/documents/:id/progress
 // The reader's resume point: last word index / page / progress for this user.
 // Returns nulls (not 404) when the doc has never been opened, so the client

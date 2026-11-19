@@ -23,6 +23,10 @@ services:
     ports:
       - "127.0.0.1:27017:27017"
     environment:
+      # MongoDB 8 refuses to start on Linux kernels 6.19+ (which newer Docker
+      # Desktop versions ship) unless glibc owns "rseq": SERVER-121912.
+      # Harmless on older kernels. See deploy/vps/docker-compose.yml.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
       MONGO_INITDB_DATABASE: neuropal

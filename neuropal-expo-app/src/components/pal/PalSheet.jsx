@@ -7,7 +7,7 @@ import { useDispatch, useSelector, useStore } from "react-redux";
 
 import { announce } from "../../services/announce";
 import { requestBreakdown } from "../../services/palApi";
-import { TASK_MAX_CHARS, helloFor, localBreakdown, moodFor, suggestionsFor, unfinishedReading } from "../../services/palAssistant";
+import { CRISIS_REPLY, TASK_MAX_CHARS, helloFor, localBreakdown, looksLikeCrisis, moodFor, suggestionsFor, unfinishedReading } from "../../services/palAssistant";
 import { addTask, addTodo, recordCheckin, setNervousState } from "../../store/slices/homeSlice";
 import { setHome } from "../../store/slices/lookSlice";
 import { addDump, closeSheet, removeDump, setBubbleHidden, setSection } from "../../store/slices/palSlice";
@@ -123,7 +123,7 @@ export function PalSheet({ visible, navigation, now }) {
                 showsVerticalScrollIndicator={false}
               >
                 {section === "now" ? <NowPanel pal={pal} nervous={nervous} go={go} /> : null}
-                {section === "breakdown" ? <BreakdownPanel pal={pal} /> : null}
+                {section === "breakdown" ? <BreakdownPanel pal={pal} onCalm={() => go("Emergency")} /> : null}
                 {section === "dump" ? <DumpPanel pal={pal} /> : null}
                 {section === "sit" ? <SitPanel pal={pal} now={now} /> : null}
                 {!section ? <Menu pal={pal} now={now} go={go} /> : null}
@@ -400,7 +400,7 @@ const stepsLine = (n) => `${n} small ${n === 1 ? "step" : "steps"}`;
 // Status lines are spoken with announce(): a live region that appears
 // already filled is never read on the web, and on Android the whole new
 // step list would be read out.
-function BreakdownPanel({ pal }) {
+function BreakdownPanel({ pal, onCalm }) {
   const palette = usePalette();
   const dispatch = useDispatch();
   const store = useStore();
@@ -436,14 +436,19 @@ function BreakdownPanel({ pal }) {
     setResult(r);
     setLoading(false);
     setSlow(false);
-    announce(stepsLine(r.steps.length));
+    announce(r.crisis ? r.reply : stepsLine(r.steps.length));
   };
   const quick = () => {
     request.current += 1;
-    const steps = localBreakdown(task);
-    setResult({ steps, source: "local", reason: "quick" });
     setLoading(false);
     setSlow(false);
+    if (looksLikeCrisis(task)) {
+      setResult({ steps: [], crisis: true, reply: CRISIS_REPLY, source: "local" });
+      announce(CRISIS_REPLY);
+      return;
+    }
+    const steps = localBreakdown(task);
+    setResult({ steps, source: "local", reason: "quick" });
     announce(stepsLine(steps.length));
   };
   const add = (i, step) => {
@@ -474,7 +479,16 @@ function BreakdownPanel({ pal }) {
           {slow ? SLOW_LINE : "Making the steps…"}
         </Text>
       ) : null}
-      {result ? (
+      {result?.crisis ? (
+        <PalCard>
+          <Text selectable style={{ color: palette.onSurface, fontFamily: palette.fonts.body, fontSize: 15, lineHeight: 21 }}>
+            {result.reply}
+          </Text>
+          <View style={{ marginTop: 12 }}>
+            <NpPrimaryButton label="Open the calming steps" icon="spa" onPress={onCalm} />
+          </View>
+        </PalCard>
+      ) : result ? (
         <PalCard>
           <Text accessibilityRole="header" style={{ color: palette.onSurface, fontFamily: palette.fonts.bodyBold, fontSize: 15 }}>
             {stepsLine(result.steps.length)}

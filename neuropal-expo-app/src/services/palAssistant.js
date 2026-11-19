@@ -347,8 +347,11 @@ export function localBreakdown(task) {
 const CRISIS =
   /\b(suicid\w*|suizid\w*|kill(?:ing)? my ?self|(?<![\d.,]\s?)kms|end(?:ing)? (?:it all|my life|myself)|(?:want(?:ed)?|going|gonna|plan(?:ning)?|ready) to end it|take my (?:own )?life|want(?:ed)? to die|wish i (?:was|were) dead|better off (?:dead|without me)|no reason to (?:live|go on)|don'?t want to (?:live|be alive|exist|be here|wake up)|(?:nobody|no one|no-one) would (?:miss|care about|notice) me|can'?t go on|hang(?:ing)? my ?self|jump(?:ing)? (?:off|from) (?:a|the|this|my) (?:bridge|building|roof|cliff|balcony|tower)|(?:took|take|taking|swallow(?:ed|ing)?) (?:all|a bunch|too many|the whole (?:bottle|pack|box)) (?:of )?(?:my |the |those )?(?:pills|meds|tablets)|self[- ]?harm\w*|hurt(?:ing)? my ?self|cut(?:ting)? my ?self|overdos\w*|uccider(?:mi|si)|ammazzarmi|farla finita|voglio morire|vorrei morire|togliermi la vita|farmi del male|non voglio (?:pi[uù] )?vivere|quiero morir(?:me)?|matarme|quitarme la vida|je veux mourir|me tuer|en finir avec (?:la vie|tout)|ich will (?:nicht mehr leben|sterben)|mich umbringen|khudkushi|aa?tm(?:a|o)?h(?:a|o)tya|marna chaht[ai]|mar jaa?na chaht[ai]|more jete chai)\b/i;
 
+// Normalised exactly like the server (pal.js): runs of whitespace — tabs,
+// newlines, non-breaking spaces — become one space, so "kill  myself" or a
+// pasted NBSP can't slip past the pattern.
 export function looksLikeCrisis(text) {
-  return CRISIS.test(String(text || "").replace(/[’‘]/g, "'"));
+  return CRISIS.test(String(text || "").replace(/\s+/g, " ").trim().replace(/[’‘]/g, "'"));
 }
 
 export const CRISIS_REPLY =

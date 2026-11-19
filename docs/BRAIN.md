@@ -46,6 +46,7 @@ call (Gemini free tier) for reasoning.
 
 - Backend: Node 20 / Express, Mongoose (14 schemas), Qdrant JS client, provider-agnostic `aiProvider` (gemini | ollama | anthropic).
 - Frontend: one Expo SDK 55 codebase (React Native 0.83, Redux Toolkit, NativeWind), three targets: Android (release APK), iOS (Expo Go), web (`expo start --web`).
+- Since v2/v3 (branches `v2-platform`, `v3-apple-web`) three more clients use the same API and sign-in: the Flutter app (`neuropal-flutter/`), the native SwiftUI app for iPhone + iPad (`neuropal-ios/`, Keychain session bound to the server address) and the web app at `/app/` of the Next.js platform (`neuropal-platform/`, static, calls the API with CORS — the API's `CORS_ORIGINS` must list its origin). The public cloud server is https://api.ryx007.work (`deploy/vps/`, not yet deployed). See `docs/PLATFORM-PLAN.md` §4 for what each client has.
 - Embeddings always local (Ollama `nomic-embed-text`, 768-dim). Storage always local. TTS always on-device. Only reasoning may touch the cloud.
 
 ## 3. Machine truth (Mac Mini, verified 2026-07-08)
@@ -116,6 +117,7 @@ BEFORE the check. AI routes spend a per-user daily budget
 | `PATCH /api/documents/:id` | `{title?,subtitle?}` | rename (library long-press UI) |
 | `GET /api/documents/:id/ticket` | — | `{ticket, expiresAt}` — 12 h read pass for ONE document (JWT `{sub,v,doc,scope:'doc'}`), for requests that can't send a header; `{ticket:null}` in LOCAL_MODE |
 | `GET /api/documents/:id/page/:n` | `?t=<ticket>` optional | rendered PDF page JPEG (reader "Original pages" view), disk-cached, `Cache-Control: private`; works for `pdf` and `arxiv` types. pdftoppm found via PATH (Linux + Homebrew) |
+| `GET /api/documents/:id/file` | `?t=<ticket>` optional | 2026-10-29: the ORIGINAL PDF for native viewers (iOS PDFKit); `pdf`/`arxiv` only (400 otherwise); always `Content-Disposition: attachment`, `Cache-Control: private, no-store`, `CSP: sandbox`; stored paths outside STORAGE_ROOT are never served |
 | `GET /api/documents/:id/annotations` | — | Annotation[] (highlights + bookmarks, word-index anchored) |
 | `POST /api/documents/:id/annotations` | `{kind:'highlight'\|'bookmark', wordStart, wordEnd[,color,excerpt,note,page]}` | 201 Annotation |
 | `PATCH /api/annotations/:id` | `{color?,note?}` | updated Annotation |
@@ -130,7 +132,7 @@ BEFORE the check. AI routes spend a per-user daily budget
 | `GET/POST /api/simulations`, `DELETE /:id` | POST: `{title, kind:'template'\|'ai', templateId?/spec?}` | P5 saved sims (model `SavedSimulation`, soft-delete). The SPEC is persisted, never a render — saved sims re-open live and sync across devices; 'ai' specs re-run the same validator before persisting |
 | `GET/POST /api/notes`, `PUT/DELETE /:id` | GET: `?documentId=` optional. POST/PUT: `{kind:'typed'\|'ink'\|'canvas', title, contentMarkdown?, strokes?, blocks?, documentId?, anchor?{wordStart,wordEnd,page}}` | P6 notes + Issue 2 (2026-07-19) unified canvas. `'canvas'` = ONE surface: `blocks` (positioned text boxes `[{id,type:'text',x,y,w,content:<Markdown>}]`, `w:-1` = stretch to right margin, numeric x/y/w validated server-side) + `strokes` (`[{points:[[x,y]…],color,width}]`) together. Legacy typed/ink open losslessly in the unified editor and upgrade on first save — the ONLY kind change the PUT permits is `→ 'canvas'` (typed's `contentMarkdown` field is kept alongside the migrated block). `anchor` pins a note to a reader position |
 | `GET /api/ai/provider` | — | active provider + models + localMode |
-| `POST /api/pal/breakdown` | `{task ≤ 500 chars}` | 2026-10-24, Pal assistant: `{steps:[3–7 strings], provider, model}`; 400 missing, 422 too long, 502 model failure/unusable steps, 503 exposed quota error. The app falls back to offline template steps and says so |
+| `POST /api/pal/breakdown` | `{task ≤ 500 chars}` | 2026-10-24, Pal assistant: `{steps:[3–7 strings], provider, model}`; 400 missing, 422 too long, 502 model failure/unusable steps, 503 exposed quota error. The app falls back to offline template steps and says so. Since 2026-10-29 a crisis-sounding task (same pattern and whitespace normalising as `/chat`) gets `{steps:[], crisis:true, reply}` without the model, the cap or the budget — every app checks first and shows the calming steps instead |
 | `POST /api/pal/chat` | `{message ≤ 1000, context?}` | `{reply, crisis, provider?, model?}`. `context` = `{state, localTime "HH:MM", nextAnchor{title,at,inMinutes}, minimumDay[], palName, talkStyle, people}`. Both turns stored in `CompanionMessage` (thread `"pal"`). A crisis-sounding message gets a fixed careful reply and skips the model, the caps and the budget (the app checks first and never sends those) |
 | `DELETE /api/pal/chat` | — | `{deleted}` — "Clear chat" removes the server copy too |
 

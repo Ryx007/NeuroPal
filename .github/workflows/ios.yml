@@ -6,10 +6,11 @@ name: iOS builds
 on:
   workflow_dispatch:
   push:
-    branches: [main, v2-platform]
+    branches: [main, v2-platform, v3-apple-web]
     paths:
       - "neuropal-expo-app/**"
       - "neuropal-flutter/**"
+      - "neuropal-ios/**"
       - "packages/tokens/**"
       - ".github/workflows/ios.yml"
 
@@ -82,3 +83,37 @@ jobs:
         run: |
           ls -la build/ios/iphonesimulator/Runner.app/PlugIns/
           test -x build/ios/iphonesimulator/Runner.app/PlugIns/NeuroPalWidget.appex/NeuroPalWidget
+
+  # The native SwiftUI app (neuropal-ios): the Xcode project is generated
+  # from project.yml, so XcodeGen comes first. NeuroPalCore's tests run on
+  # macOS itself (no simulator needed).
+  native-ios:
+    name: Native iOS app (simulator)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        working-directory: neuropal-ios
+        run: xcodegen generate
+      - name: Build for the iOS simulator
+        working-directory: neuropal-ios
+        run: |
+          set -o pipefail
+          xcodebuild -project NeuroPal.xcodeproj -scheme NeuroPal -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 80
+      # Prove the widget extension was compiled and embedded, not skipped.
+      - name: The widget extension is embedded
+        working-directory: neuropal-ios
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/NeuroPal.app
+          ls -la "$APP/PlugIns/"
+          test -x "$APP/PlugIns/NeuroPalWidgets.appex/NeuroPalWidgets"
+      - name: NeuroPalCore tests (macOS)
+        run: swift test --package-path neuropal-ios/Packages/NeuroPalCore

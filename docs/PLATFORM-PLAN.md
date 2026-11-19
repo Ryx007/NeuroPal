@@ -11,6 +11,7 @@
 |---|---|
 | Second app version | **Flutter for Android and iOS.** Swift only for iOS-native extras Flutter cannot do (WidgetKit widgets, Live Activities, later the Apple Watch app). |
 | Order | **Expo leads.** The existing Expo app gets the v2 design and new modules first; the Flutter app starts with the reader (Module 0) and catches up feature by feature. |
+| Priority (2026-10-31) | **Android and web first.** All four clients stay. New work lands first in Expo, Flutter and the web app (`/app/`). The native iOS app (`neuropal-ios/`) comes last until the Apple Developer account is sorted. |
 | Web | **Two web surfaces:** the existing Expo web build (the NeuroPal app in a browser, served by `neuropal-web` on :8081) **plus** a separate Next.js platform site (`neuropal-platform/`): landing, accounts, the science-for-anyone lessons, WebGL/WebGPU. |
 | Where work happens | Coded in a cloud workspace, pushed as branches/PRs to `Ryx007/NeuroPal`. Android APKs are built there and handed over; iOS builds are verified on GitHub's macOS runners and installed from a Mac. |
 | Look | Two skins, one system: **Classic** (the original, unchanged: 4 themes × 4 accents) and **Signal** (brutal glass, red on graphite by default, every token user-adjustable). Signed off from the v2 render. |
@@ -24,12 +25,13 @@ NeuroPal/
 ├── neuropal-expo-app/     Expo SDK 55 app — Android (primary), iOS, web   [LEADS]
 ├── neuropal-flutter/      ★ Flutter app — Android + iOS, reader-first      [FOLLOWS]
 │   └── ios/NeuroPalWidget/  Swift WidgetKit extension (iOS extras)
-├── neuropal-platform/     ★ Next.js platform site (static export)
+├── neuropal-ios/          ◆ native SwiftUI app — iPhone + iPad (XcodeGen + two Swift packages)
+├── neuropal-platform/     ★ Next.js platform site (static export) + ◆ the web app at /app/
 ├── neuropal-mathserve/    Nougat microservice (unchanged)
 ├── docs/                  BRAIN · HANDOFF · PROJECT-STATUS · this plan
 └── .github/workflows/     ★ CI for all of the above
 ```
-★ = new in v2.
+★ = new in v2. ◆ = new in round 3 (2026-10-29, branch `v3-apple-web`, PR #3).
 
 ## 3. Shared contracts
 
@@ -81,26 +83,28 @@ Everything in BRAIN §4 is unchanged. New in v2:
 
 Legend: ✅ done · 🟡 partial · ⬜ not started · — not planned for that client.
 
-| Feature | Expo (Android/iOS/web) | Flutter (Android/iOS) | Platform site |
-|---|---|---|---|
-| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 M1: library with ingest status, reader + TTS highlight, Ask with sources (no upload or study tools yet) | — |
-| Two skins (Classic + Signal) with auto-contrast | ✅ M1 | ✅ M1 | ✅ M1 (Signal default) |
-| Make it yours: studio, vibes, fine-tune, Ask Pal, saved looks, undo | ✅ M1 | 🟡 M1: skin, vibes, Classic theme/accent in Settings | ✅ M1 (/appearance) |
-| Appearance sync (GET/PUT `/api/me/appearance`, 409 → adopt) | ✅ M1 (two-way) | 🟡 M1 (push only) | ✅ M1 (save; asks on 409) |
-| Build your Pal | ✅ M1 | ⬜ M2 | — |
-| Arrange Home + day rules (Classic keeps its original Home until arranged) | ✅ M1 | ⬜ M2 (no Home yet) | — |
-| Signal Home (S-Today board) and Signal player (S-Reader board) | ✅ M1 | 🟡 M1: Signal player | — |
-| Signal background fields (Chladni / interference) | ✅ M1 (expo-gl) | ⬜ M2 (fragment shader) | ✅ M1 (WebGL) |
-| Signal layouts for Library, Notes, Toolbox (tokens apply already) | ⬜ M2 | — | — |
-| Focus soundscapes with evidence badges | ⬜ M2 | ⬜ M3 | — |
-| Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + two-source interference |
-| iOS widgets + focus Live Activity (Swift) | — | 🟡 M1: built for the simulator in CI; not run on a device | — |
-| Sign-in to the public server (invite code, sessions, sign out everywhere) | ✅ 0.3.0 (opens offline without a session) | ✅ 0.2.0 (Cloud first) | 🟡 M1 page (/sign-in) |
-| Check-in slider (drag/tap; thirds decide the state; history) | ✅ 0.3.0 | ⬜ (no Home yet) | — |
-| Pal assistant: bubble + sheet (What now?, Break it down, Brain dump, Sit with me, Talk; `/api/pal/*`) | ✅ 0.3.0 | ⬜ | — |
-| Android home-screen widget "Pal" (check-in, next anchor, Ask Pal) | ✅ 0.3.0 (react-native-android-widget; not yet run on a device) | — | — |
-| Modules 1–2 (SCAFFOLD, state system) backend routes | ⬜ M3 | ⬜ M4 | — |
-| Module 7 AI companion | ⬜ M4 | ⬜ M5 | — |
+| Feature | Expo (Android/iOS/web) | Flutter (Android/iOS) | Platform site | Native iOS + iPadOS ◆ | Web app `/app/` ◆ |
+|---|---|---|---|---|---|
+| Module 0: library, upload, reader + karaoke TTS, Ask (RAG), study tools | ✅ (pre-v2) | 🟡 M1: library with ingest status, reader + TTS highlight, Ask with sources (no upload or study tools yet) | — | 🟡 library, upload, reader + word-by-word read-aloud, PDF original (PDFKit), EPUB, Ask with sources — no study tools yet | 🟡 the same, desktop-first — no study tools yet |
+| Two skins (Classic + Signal) with auto-contrast | ✅ M1 | ✅ M1 | ✅ M1 (Signal default) | ✅ (Swift port of the tokens, fixture-proven) | ✅ |
+| Make it yours: studio, vibes, fine-tune, Ask Pal, saved looks, undo | ✅ M1 | 🟡 M1: skin, vibes, Classic theme/accent in Settings | ✅ M1 (/appearance) | ✅ Settings → Make it yours (incl. Ask Pal, undo) | 🟡 core controls in Settings; the full studio is the site's /appearance |
+| Appearance sync (GET/PUT `/api/me/appearance`, 409 → adopt) | ✅ M1 (two-way) | 🟡 M1 (push only) | ✅ M1 (save; asks on 409) | ✅ two-way | 🟡 saved from the studio; no automatic pull on sign-in yet |
+| Build your Pal | ✅ M1 | ⬜ M2 | — | 🟡 Settings → Pal's look | ⬜ |
+| Arrange Home + day rules (Classic keeps its original Home until arranged) | ✅ M1 | ⬜ M2 (no Home yet) | — | 🟡 follows the saved layout + rules (no arrange screen yet) | 🟡 follows the saved layout + rules (no arrange screen yet) |
+| Signal Home (S-Today board) and Signal player (S-Reader board) | ✅ M1 | 🟡 M1: Signal player | — | ✅ | ✅ |
+| Signal background fields (Chladni / interference) | ✅ M1 (expo-gl) | ⬜ M2 (fragment shader) | ✅ M1 (WebGL) | ✅ (Canvas, still when motion is off) | ✅ (site WebGL field) |
+| Signal layouts for Library, Notes, Toolbox (tokens apply already) | ⬜ M2 | — | — | 🟡 Library (no Notes/Toolbox yet) | 🟡 Library (no Notes/Toolbox yet) |
+| Focus soundscapes with evidence badges | ⬜ M2 | ⬜ M3 | — | ⬜ | ⬜ |
+| Science-for-anyone lessons | — | — | 🟡 M1: lesson shell + two-source interference | — | — (the site's /learn) |
+| iOS widgets + focus Live Activity (Swift) | — | 🟡 M1: built for the simulator in CI; not run on a device | — | 🟡 check-in (App Intents), next anchor, continue reading, lock screen — no Live Activity; simulator only | — |
+| Sign-in to the public server (invite code, sessions, sign out everywhere) | ✅ 0.3.0 (opens offline without a session) | ✅ 0.2.0 (Cloud first) | 🟡 M1 page (/sign-in) | ✅ (Keychain, host-bound) | ✅ (this tab, or kept on this device) |
+| Check-in slider (drag/tap; thirds decide the state; history) | ✅ 0.3.0 | ⬜ (no Home yet) | — | ✅ | ✅ |
+| Pal assistant: bubble + sheet (What now?, Break it down, Brain dump, Sit with me, Talk; `/api/pal/*`) | ✅ 0.3.0 | ⬜ | — | ✅ (bubble on iPhone, sidebar on iPad) | ✅ (a page, no bubble) |
+| Android home-screen widget "Pal" (check-in, next anchor, Ask Pal) | ✅ 0.3.0 (react-native-android-widget; not yet run on a device) | — | — | — | — |
+| Modules 1–2 (SCAFFOLD, state system) backend routes | ⬜ M3 | ⬜ M4 | — | ⬜ | ⬜ |
+| Module 7 AI companion | ⬜ M4 | ⬜ M5 | — | ⬜ | ⬜ |
+| Calming steps (TIPP), usable signed out and offline | ✅ (Emergency) | ⬜ | — | ✅ | ✅ |
+| Original PDF download (`GET /documents/:id/file`) | — | — | — | ✅ PDFKit view | — (page images) |
 
 The Dart port covers the palette logic (parity-tested against
 `token_cases.json`); the Ask-Pal interpreters and Home rules are ported in M2
@@ -128,6 +132,8 @@ The Dart port covers the palette logic (parity-tested against
 | Expo | `cd neuropal-expo-app && npx expo start` | BRAIN §6 "Build the Android APK" |
 | Flutter | `cd neuropal-flutter && flutter run` | `flutter build apk --release` / `flutter build ios` |
 | Platform | `cd neuropal-platform && npm run dev` | `npm run build` (static export to `out/`) |
+| Native iOS | `cd neuropal-ios && xcodegen generate && open NeuroPal.xcodeproj`, or `scripts/mac-build.sh build iphone` + `shot …` | Xcode archive (needs an Apple team) |
+| Web app checks | `node scripts/qa/dev-api.cjs 4420` + `npm run build && npm run serve` | `node scripts/qa/web-reader.mjs --web http://127.0.0.1:4321 --api http://127.0.0.1:4420` (and `web-shell.mjs`) |
 
 ## 7. Ground rules (all clients)
 
@@ -138,5 +144,6 @@ The Dart port covers the palette logic (parity-tested against
 - Motion lives in the frame, never in reading or lesson content.
 - No streaks, no ads, no data selling; user data never trains models.
 - Mock/demo data is explicit opt-in; real mode surfaces every failure.
-- Two app IDs so both apps install side by side: Expo `io.neuropal.app`,
-  Flutter `io.neuropal.flutter`.
+- App IDs so the apps install side by side: Expo `io.neuropal.app`,
+  Flutter `io.neuropal.flutter`, native iOS `io.neuropal.ios` (widgets
+  `io.neuropal.ios.widgets`, App Group `group.io.neuropal.ios`).

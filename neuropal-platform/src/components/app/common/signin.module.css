@@ -1,0 +1,232 @@
+/* The app's sign-in gate: one column on phones; on wide screens Pal and a
+   few calm words on the left, the form card on the right. */
+.gate {
+  display: grid;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: clamp(0.5rem, 3vh, 2.5rem);
+}
+
+@media (min-width: 1000px) {
+  .gate {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 520px);
+    align-items: center;
+    gap: clamp(2rem, 5vw, 4.5rem);
+    min-height: calc(100dvh - 4rem);
+  }
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.875rem;
+  max-width: 34rem;
+}
+
+@media (max-width: 999px) {
+  .intro {
+    order: 2;
+  }
+}
+
+.introLabel {
+  margin-top: 0.25rem;
+}
+
+.introLine {
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.625rem);
+  line-height: 1.35;
+}
+
+.introText {
+  color: var(--np-on-surface-variant);
+  line-height: 1.6;
+  max-width: 44ch;
+}
+
+.calmLink {
+  margin-top: 0.5rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+}
+
+.title {
+  font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
+  line-height: 1;
+}
+
+.subtitle {
+  color: var(--np-on-surface-variant);
+  line-height: 1.5;
+}
+
+/* How the last session ended: a calm note, not an error. */
+.notice {
+  padding: 0.625rem 0.875rem;
+  border: var(--rule);
+  border-left: 6px solid var(--np-accent-fill);
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  line-height: 1.5;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--np-on-surface-variant);
+}
+
+.passwordRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.passwordRow > button {
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .passwordRow {
+    flex-direction: column;
+  }
+}
+
+.keep {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.checkbox {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 10px 0 0;
+  accent-color: var(--np-accent-fill);
+  cursor: pointer;
+}
+
+.keepLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.keep .keepLabel + p {
+  margin-top: -0.375rem;
+}
+
+.error {
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.error:empty {
+  display: none;
+}
+
+.error:not(:empty) {
+  padding: 0.625rem 0.875rem;
+  border: 2px solid var(--np-on-surface);
+  border-left-width: 8px;
+  border-left-color: var(--np-warn);
+  border-radius: var(--radius-box);
+  background: var(--panel-solid);
+}
+
+.wait {
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+}
+
+.submit {
+  width: 100%;
+}
+
+.switchMode {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--np-accent-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.switchMode:hover {
+  color: var(--np-on-surface);
+}
+
+.closed {
+  align-self: center;
+  color: var(--np-on-surface-variant);
+  font-size: 0.9375rem;
+}
+
+.server {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: var(--rule);
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+}
+
+.serverRow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+}
+
+.serverLine {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}
+
+.serverLine :global(.np-label) {
+  margin-right: 0.375rem;
+}
+
+.ledOff {
+  background: var(--np-outline);
+  box-shadow: none;
+}
+
+.serverForm {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.serverForm[hidden] {
+  display: none;
+}
+
+.privacy {
+  color: var(--np-on-surface-variant);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
