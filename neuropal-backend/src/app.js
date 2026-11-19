@@ -10,6 +10,7 @@ const simulationsRoutes = require('./routes/simulations');
 const vizRoutes = require('./routes/viz');
 const authRoutes = require('./routes/auth');
 const meRoutes = require('./routes/me');
+const dayRoutes = require('./routes/day');
 const documentsRoutes = require('./routes/documents');
 const queryRoutes = require('./routes/query');
 const studyRoutes = require('./routes/study');
@@ -104,6 +105,7 @@ function buildApp() {
     // Routers. Each file uses Express Router with GET/POST only.
     app.use('/api/auth', authRoutes);
     app.use('/api/me', meRoutes); // v2 appearance sync (skin, Pal, Home layout)
+    app.use('/api/me/day', dayRoutes); // day sync: check-ins, anchors, MVD, to-dos, dump (docs/DAY-SYNC.md)
     app.use('/api/documents', documentsRoutes);
     app.use('/api', queryRoutes); // owns POST /api/documents/:id/query
     app.use('/api', studyRoutes); // owns /api/documents/:id/{summarize,quiz,cheatsheet,explain}
@@ -186,6 +188,12 @@ function buildApp() {
         }
         if (err && err.name === 'CastError') {
             return res.status(400).json({ error: 'Invalid identifier' });
+        }
+        // The JSON parser's message quotes the start of the body ("Unexpected
+        // token … "hello wor"... is not valid JSON"), which can be a check-in
+        // or a brain-dump line: never send it back.
+        if (err && err.type === 'entity.parse.failed') {
+            return res.status(400).json({ error: 'The request body is not valid JSON' });
         }
         if (err && err.status && err.expose) {
             return res.status(err.status).json({ error: err.message });

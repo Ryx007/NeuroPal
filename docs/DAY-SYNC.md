@@ -68,8 +68,10 @@ Response `200`:
   ones and tombstones** (`deletedAt` set), in the order of §5.
 - `checkins`: the newest 200, oldest first.
 - `rev` goes up by one each time a sync changes what is stored.
-- Errors: `401` no session; `422` the body is not an object, or `v` is not 1
-  (`{error}`). Bad items never fail the call: see §6.
+- Errors: `401` no session; `400` the body is not valid JSON; `422` the body
+  is not an object, or `v` is not the number 1 (`{error}`); `503` with
+  `Retry-After` when other syncs for the same person kept landing first (rare;
+  retry like any 5xx). Bad items never fail the call: see §6.
 - A server without this route answers `404`. The client then stops trying
   until the next app start, and shows no error.
 
@@ -80,7 +82,8 @@ The same body as the sync response, without sending anything.
 ### `DELETE /api/me/day`
 
 Erases the day on the server: every section and the whole check-in history.
-Answers `{ "deleted": true, "gen": 4 }`. See §7 for what `gen` does. No client
+Answers `{ "deleted": true, "gen": 4 }` (`rev` goes up too). See §7 for what
+`gen` does. No client
 has a button for this in v1; the protocol is complete so that adding one
 needs no migration.
 
@@ -89,7 +92,10 @@ needs no migration.
 Rules for all of them:
 
 - `id`: 1–64 characters from `A-Z a-z 0-9 . _ : -`.
-- Times are ISO-8601 UTC with milliseconds: `2026-11-19T17:20:00.000Z`.
+- Times are ISO-8601 UTC with milliseconds: `2026-11-19T17:20:00.000Z`. The
+  server also accepts an explicit offset (`+01:00`) and answers in UTC. A time
+  without a zone, a number, or an impossible date drops the item. In Dart,
+  format with `.toUtc().toIso8601String()`.
 - `doneOn` is a **local calendar date**, `YYYY-MM-DD`, on the device that
   ticked. An item is "done today" when `doneOn` equals the device's local
   date. There is no rollover job: tomorrow the dates differ, so the tick no
@@ -205,21 +211,27 @@ Each item has up to three independent parts.
    the server stores and returns `deletedAt: null`.
 
 **A tombstone carries no content.** A deleted item is stored and returned as
-`{id, createdAt, updatedAt, deletedAt}` only: title, text and the rest are
-removed from the server at once, and a stale device that still has the item
-can't put the content back.
+`{id, createdAt, updatedAt, deletedAt}` only: title, text, the tick and the
+rest are removed from the server at once, and a stale device that still has
+the item can't put the content back. One consequence: a tick made on another
+device around a delete-then-Undo can be lost (the person ticks again). The
+merge is exact everywhere else.
 
-`dump`: matched by `id`. The copy stored first keeps its `text` and `at`;
-`deletedAt` is the later of the two. A tombstone is `{id, deletedAt}`. There
-is no restore: Undo adds the text again under a **new id**.
+`dump`: matched by `id`. The first copy wins its `text` and `at`: the one
+with the earlier `at`, ties to the greater canonical JSON (in practice one id
+always has one text). `deletedAt` is the later of the two. A tombstone is
+`{id, deletedAt}`. There is no restore: Undo adds the text again under a
+**new id**.
 
 `checkins`: the union by `at` (the same `at` twice: the greater canonical
 JSON wins). Then the rule the clients already apply locally: sorted by time,
-**a check-in followed by another within 60 seconds is dropped** (the later
-one refines it).
+**a check-in followed by another less than 60 seconds later is dropped** (the
+later one refines it).
 
-Order in responses: anchors by time of day, then `id`; tasks and to-dos by
-`createdAt`, then `id`; dump newest first; check-ins oldest first.
+Order in responses: live anchors by time of day, then `id`, then anchor
+tombstones by `id`; tasks and to-dos by `createdAt`, then `id`; the live dump
+newest first, then dump tombstones newest `deletedAt` first; check-ins oldest
+first.
 
 For anchors, tasks, to-dos and the dump the merge is commutative,
 associative and idempotent: the result never depends on which device synced
@@ -231,15 +243,22 @@ is harmless.
 ## 6. Limits and bad input (server)
 
 - Bad items are dropped, never an error: wrong shape, bad `id`, empty title,
-  unparseable time.
+  unparseable time. A bad **optional** field is left out instead (the item
+  stays); `flexMinutes` and `level` are clamped to their range; a to-do's
+  `done` counts only when it is exactly `true`. A section that is not an
+  array counts as not sent. A `gen` that is not a positive integer counts as
+  none.
 - Unknown fields are dropped. Objects are rebuilt field by field (nothing
   from the request is stored as-is).
 - **Clocks.** Any timestamp later than the server's clock plus 60 seconds is
   set to the server's clock. One phone with a wrong clock can't win forever.
 - Per request: at most 2000 items per section; the rest are ignored.
 - Stored per user: 200 live anchors, 100 live tasks, 1000 live to-dos, 1000
-  live dump items, and 500 tombstones per section (the oldest tombstones go
-  first). Check-ins: the newest 5000.
+  live dump items (over a cap the oldest go first: by `createdAt`, the dump by
+  `at`), and 500 tombstones per section (the oldest go first). Check-ins: the
+  newest 5000. An item over a cap is simply missing from the answer.
+- The request body may be at most 5 MB (the server's JSON limit). A full brain
+  dump of 1000 long lines is the only realistic way to get close.
 - Nothing from a sync body is ever logged.
 
 ## 7. `gen`: erasing everywhere
@@ -308,11 +327,17 @@ included, and the stored `gen`.
 **Receiving.** If anything changed locally while the request was in flight,
 throw the answer away and sync again. Otherwise replace the local sections
 with the answer. Sections the client doesn't know are ignored. One
-exception protects the device's data: **a local item that the answer doesn't
-mention at all** (neither live nor as a tombstone) **stays on the device**.
-The server refused it or is over a limit; it is simply sent again next time.
-When the answer says `"erased": true` there is no exception: the answer
-replaces everything. Then:
+exception protects the device's data: **an anchor, task, to-do or dump item
+that the answer doesn't mention at all** (neither live nor as a tombstone)
+**stays on the device**. The server refused it or is over a limit; it is
+simply sent again next time. When the answer says `"erased": true` there is
+no exception: the answer replaces everything.
+
+**Check-ins are always replaced** by the answer's list (no exception). The
+server stores a check-in from the future (a phone with a wrong clock) at
+server time, so the device's copy never appears in the answer under its own
+`at`; keeping it would add a new server copy on every sync. A check-in made
+while the request was in flight is covered by "sync again" above. Then:
 
 - if the newest check-in in the answer is newer than the newest one the
   device had, Home's current state and level follow it;
@@ -330,7 +355,9 @@ client that keeps working signed out (Expo, Flutter) keeps the day on the
 device and follows "Whose day it is" above.
 
 **Undo.** Anchors, tasks and to-dos: send the item again with `updatedAt` =
-now. Brain dump: add the text again under a new id.
+now. Brain dump: add the text again under a new id. Once a deletion has
+synced, the server's copy has no content, so the device must keep the item's
+content itself (in its undo state) for as long as Undo is offered.
 
 ## 9. Privacy
 
@@ -340,6 +367,15 @@ that account's session. They are not sent to an AI provider by sync. An
 anchor with a place trigger (Expo) carries that place's coordinates, so
 those are stored on the server too. The Settings switch turns sync off for
 one device; the data then stays on that device.
+
+## 9a. Server notes
+
+- Check-in rows carry the generation they were written under, so a sync that
+  was in flight during an erase can't bring old check-ins back.
+- Nothing of a sync body reaches a log line or an error message; a malformed
+  body gets a fixed `400` message that never quotes it.
+- If an account is ever deleted, its `DayState` document and `DayCheckin`
+  rows go with it (there is no account deletion yet).
 
 ## 10. Not in v1
 
