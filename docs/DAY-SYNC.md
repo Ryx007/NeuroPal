@@ -269,7 +269,9 @@ now.
 
 - a starter item that was never edited (same `id` and title as the starter)
   gets `createdAt` and `updatedAt` = `1970-01-01T00:00:00.000Z`;
-- anything else gets `createdAt` and `updatedAt` = now;
+- anything else gets `createdAt` and `updatedAt` = now. Tasks and to-dos are
+  ordered by `createdAt`, so keep the order the person sees: give each next
+  item a `createdAt` one millisecond later than the one before it;
 - an item ticked today gets `doneOn` = today and `tickAt` = now.
 
 New installs seed their starters with the 1970 stamps. Starter ids are the
@@ -284,9 +286,9 @@ another client's field.
 
 **Whose day it is.** The local day remembers the account it last synced
 with. A day that has never synced (made while signed out) joins the first
-account that signs in. A day last synced as account A is cleared before
-anything is synced as account B, so one person's check-ins never reach
-another person's account.
+account that signs in. A day last synced as account A is cleared (with its
+stored `gen`) before anything is synced as account B, so one person's
+check-ins never reach another person's account.
 
 **When to sync.** Only while signed in and with "Keep my day in sync" on
 (Settings, on by default):
@@ -296,12 +298,21 @@ another person's account.
 - when the connection comes back;
 - every 5 minutes while the app is in front.
 
+Turning the switch on again counts as a first sync: forget the stored `gen`
+and send none. A device that was switched off while the day was erased
+elsewhere then adds its day back instead of losing it (§7).
+
 **Sending.** All local items of the sections the client knows, tombstones
 included, and the stored `gen`.
 
 **Receiving.** If anything changed locally while the request was in flight,
 throw the answer away and sync again. Otherwise replace the local sections
-with the answer. Sections the client doesn't know are ignored. Then:
+with the answer. Sections the client doesn't know are ignored. One
+exception protects the device's data: **a local item that the answer doesn't
+mention at all** (neither live nor as a tombstone) **stays on the device**.
+The server refused it or is over a limit; it is simply sent again next time.
+When the answer says `"erased": true` there is no exception: the answer
+replaces everything. Then:
 
 - if the newest check-in in the answer is newer than the newest one the
   device had, Home's current state and level follow it;
@@ -325,9 +336,10 @@ now. Brain dump: add the text again under a new id.
 
 Check-ins and the brain dump are personal. With sync on they are stored on
 the user's NeuroPal server, like notes and Pal's chat, readable only with
-that account's session. They are not sent to an AI provider by sync. The
-Settings switch turns sync off for one device; the data then stays on that
-device.
+that account's session. They are not sent to an AI provider by sync. An
+anchor with a place trigger (Expo) carries that place's coordinates, so
+those are stored on the server too. The Settings switch turns sync off for
+one device; the data then stays on that device.
 
 ## 10. Not in v1
 
