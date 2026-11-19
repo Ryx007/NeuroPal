@@ -17,6 +17,8 @@ import 'data/session_store.dart';
 import 'data/settings_controller.dart';
 import 'day/day_store.dart';
 import 'day/day_sync.dart';
+import 'pal/pal_api.dart';
+import 'pal/pal_controller.dart';
 import 'platform/widget_bridge.dart';
 import 'reader/speech_engine.dart';
 import 'theme/appearance_controller.dart';
@@ -24,7 +26,8 @@ import 'theme/appearance_controller.dart';
 class AppServices {
   /// [sessions] defaults to an in-memory store (tests, screenshots); the
   /// app passes the secure one loaded in main(). [clock] and [dayTimer]
-  /// let tests set the day's time and drive sync's timers.
+  /// let tests set the day's time and drive sync's timers; [palTimer]
+  /// drives Pal's Sit with me watcher.
   AppServices({
     required this.prefs,
     required this.engine,
@@ -34,6 +37,7 @@ class AppServices {
     SessionStore? sessions,
     DateTime Function()? clock,
     DayTimerFactory? dayTimer,
+    PalTimerFactory? palTimer,
   }) : sessions = sessions ?? SessionStore.memory(),
        settings = SettingsController(prefs) {
     backend = Backend(
@@ -66,6 +70,15 @@ class AppServices {
       prefs: prefs,
       timer: dayTimer,
     );
+    // Pal, the assistant: the bubble's state, the brain dump, Talk's chat
+    // and Sit with me (lib/pal/).
+    pal = PalController(
+      prefs: prefs,
+      day: day,
+      api: PalApi(backend),
+      look: () => appearance.appearance.pal,
+      timer: palTimer,
+    );
   }
 
   final SharedPreferences prefs;
@@ -79,6 +92,7 @@ class AppServices {
   late final AppearanceController appearance;
   late final DayStore day;
   late final DaySync daySync;
+  late final PalController pal;
 
   /// The document source the user chose (demo is explicit opt-in only).
   DocumentSource get source => settings.demoMode ? demo : api;

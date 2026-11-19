@@ -1,8 +1,10 @@
-// The Library's state: the document list, loading and error status.
+// The Library's state: the document list, loading and error status, and
+// the upload from this phone ([uploads]).
 //
 // While any document is still being processed on the backend (pending →
 // parsing → chunking → embedding), the list refreshes itself every few
-// seconds so statuses move on their own, like the Expo library.
+// seconds so statuses move on their own, like the Expo library. A file
+// uploaded from here joins the list at once and is followed the same way.
 
 import 'dart:async';
 
@@ -11,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import '../data/backend.dart';
 import '../data/models.dart';
 import '../services.dart';
+import 'upload_controller.dart';
 
 class LibraryController extends ChangeNotifier {
   LibraryController(this.services) {
@@ -18,9 +21,18 @@ class LibraryController extends ChangeNotifier {
     _wasOnline = services.backend.isOnline;
     services.settings.addListener(_onSettingsChanged);
     services.backend.addListener(_onBackendChanged);
+    uploads = UploadController(
+      source: services.api,
+      isDemo: () => services.settings.demoMode,
+      onUploaded: _adopt,
+    );
   }
 
   final AppServices services;
+
+  /// Adding a document from this phone (its own listeners: progress
+  /// repaints only the upload row, not the whole list).
+  late final UploadController uploads;
 
   static const pollInterval = Duration(seconds: 4);
 
@@ -87,7 +99,8 @@ class LibraryController extends ChangeNotifier {
   bool _reloadPending = false;
 
   /// Forgets the list (the session ended): the next person to sign in
-  /// never sees it, and the next Library visit loads afresh.
+  /// never sees it, and the next Library visit loads afresh. A running
+  /// upload belongs to that session: it stops, and its row goes too.
   void clear() {
     _epoch++;
     _poll?.cancel();
@@ -97,7 +110,24 @@ class LibraryController extends ChangeNotifier {
     _loading = false;
     _loadedOnce = false;
     _reloadPending = false;
+    uploads.reset();
     _notify();
+  }
+
+  /// A document just uploaded from this phone: on the list at once (the
+  /// server answered with it, status pending), then followed like any
+  /// other while the server processes it.
+  void _adopt(DocumentSummary doc) {
+    if (isDemo) return;
+    _docs = [
+      doc,
+      for (final d in _docs)
+        if (d.id != doc.id) d,
+    ];
+    _error = null;
+    _schedulePoll();
+    _notify();
+    unawaited(refresh(quiet: true));
   }
 
   void _schedulePoll() {
@@ -136,6 +166,7 @@ class LibraryController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _poll?.cancel();
+    uploads.dispose();
     services.settings.removeListener(_onSettingsChanged);
     services.backend.removeListener(_onBackendChanged);
     super.dispose();

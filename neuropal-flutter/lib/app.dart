@@ -2,7 +2,8 @@
 // (provider), builds the theme from the user's appearance, and puts the
 // sign-in screen in front of everything while the server needs one. Home
 // is the first screen; day sync runs while the app is alive (it syncs when
-// the app comes back to the front).
+// the app comes back to the front). Pal's own words (Sit with me's halfway
+// question and its end) are read out from here, whatever screen is open.
 
 import 'dart:async';
 
@@ -21,6 +22,8 @@ import 'day/day_sync.dart';
 import 'home/home_screen.dart';
 import 'library/library_controller.dart';
 import 'library/library_screen.dart';
+import 'pal/pal_controller.dart';
+import 'pal/pal_news.dart';
 import 'reader/reader_controller.dart';
 import 'reader/reader_screen.dart';
 import 'services.dart';
@@ -65,8 +68,9 @@ class _NeuroPalAppState extends State<NeuroPalApp> {
   }
 
   /// A session ended (signed out, or the server said 401) or began. Nothing
-  /// of the old one stays: no open document, no list, no Ask threads — and
-  /// the Library loads afresh with the new session.
+  /// of the old one stays: no open document, no list, no Ask threads, no
+  /// Pal chat (and on sign-out no running sit) — the Library loads afresh,
+  /// and an upload in flight stops.
   void _onAuthChanged() {
     final out = widget.services.auth.needsSignIn;
     if (out == _signedOut) return;
@@ -74,6 +78,7 @@ class _NeuroPalAppState extends State<NeuroPalApp> {
     if (out) unawaited(_reader.close());
     _library.clear();
     _ask.clear();
+    widget.services.pal.forgetSession(endSit: out);
   }
 
   @override
@@ -104,6 +109,7 @@ class _NeuroPalAppState extends State<NeuroPalApp> {
         ChangeNotifierProvider<AskController>.value(value: _ask),
         ChangeNotifierProvider<DayStore>.value(value: services.day),
         ChangeNotifierProvider<DaySync>.value(value: services.daySync),
+        ChangeNotifierProvider<PalController>.value(value: services.pal),
       ],
       child: Consumer<AppearanceController>(
         builder: (context, appearance, _) {
@@ -127,6 +133,7 @@ class _NeuroPalAppState extends State<NeuroPalApp> {
             theme: buildMaterialTheme(style),
             // Skin changes switch instantly: no animated theme cross-fade.
             themeAnimationDuration: Duration.zero,
+            builder: (context, child) => PalNewsReader(child: child!),
             onGenerateInitialRoutes: (_) => [
               MaterialPageRoute<void>(
                 settings: RouteSettings(

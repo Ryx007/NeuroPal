@@ -1,19 +1,23 @@
 // Settings: where the backend is, the demo library switch, the look
-// (Classic theme × accent, or a Signal preset), day sync and the account.
-// Appearance changes apply instantly and are saved as the shared
-// appearance object.
+// (Classic theme × accent, or a Signal preset), day sync, Pal's bubble and
+// the account. Appearance changes apply instantly and are saved as the
+// shared appearance object.
 //
 // The bigger sections live in their own files:
 //   backend_section.dart     — backend address + live connection status
 //   appearance_section.dart  — skin, Classic theme × accent, Signal presets
 //   day_sync_section.dart    — "Keep my day in sync" + its status line
+//   pal_section.dart         — Pal's floating bubble (show it again)
 //   account_section.dart     — who is signed in + Sign out
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_routes.dart';
 import '../data/settings_controller.dart';
+import '../pal/pal_bubble.dart';
 import '../theme/np_style.dart';
 import '../widgets/np_buttons.dart';
 import '../widgets/np_scaffold.dart';
@@ -22,6 +26,7 @@ import 'account_section.dart';
 import 'appearance_section.dart';
 import 'backend_section.dart';
 import 'day_sync_section.dart';
+import 'pal_section.dart';
 import 'settings_section.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -34,7 +39,13 @@ class SettingsScreen extends StatelessWidget {
       header: const NpHeader(title: NpHeaderTitle('Settings')),
       bottom: const NowPlayingBar(from: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+        // Room under the last section for Pal's bubble.
+        padding: EdgeInsets.fromLTRB(
+          16,
+          18,
+          16,
+          math.max(32, palBubbleClearance(context, AppRoutes.settings)),
+        ),
         children: const [
           BackendSection(),
           SizedBox(height: 14),
@@ -43,6 +54,8 @@ class SettingsScreen extends StatelessWidget {
           AppearanceSection(),
           SizedBox(height: 14),
           DaySyncSection(),
+          SizedBox(height: 14),
+          PalSection(),
           SizedBox(height: 14),
           AccountSection(),
           SizedBox(height: 14),
@@ -110,8 +123,9 @@ class _AboutSection extends StatelessWidget {
       title: 'About',
       children: [
         Text(
-          'NeuroPal for Flutter · M1 (reader first). Voices are your '
-          'device’s own; no audio leaves the phone.',
+          'NeuroPal for Flutter: Home, the reader with Ask, the calming steps '
+          'and Pal, your assistant. Voices are your device’s own; no audio '
+          'leaves the phone.',
           style: s.fonts.body(14, s.textMuted),
         ),
         const SizedBox(height: 10),

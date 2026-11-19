@@ -1,12 +1,17 @@
-// Test doubles: a scriptable speech engine and in-memory backends (a
-// single-user LOCAL_MODE one, and one with accounts).
+// Test doubles: a scriptable speech engine, in-memory backends (a
+// single-user LOCAL_MODE one, and one with accounts), the day-sync server,
+// an upload server that reads the body as it streams, and a file picker
+// and a phone dialer the test drives.
 
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:neuropal/calm/help_lines.dart';
 import 'package:neuropal/data/settings_controller.dart';
+import 'package:neuropal/library/document_picker.dart';
 import 'package:neuropal/reader/speech_engine.dart';
 
 /// The default backend addresses, as hosts and base URLs.
@@ -438,4 +443,181 @@ class FakeDayServer {
           sorted[i].value,
     ];
   }
+}
+
+// ---- upload ---------------------------------------------------------------------
+
+/// [length] bytes of a pretend file, in chunks of [chunk].
+Stream<List<int>> fakeFileBytes(int length, {int chunk = 64 * 1024}) async* {
+  var left = length;
+  while (left > 0) {
+    final n = left < chunk ? left : chunk;
+    left -= n;
+    yield Uint8List(n);
+  }
+}
+
+/// A picked file of [size] bytes (null = the phone couldn't tell).
+PickedDocument fakePicked(String name, int? size, {Stream<List<int>> Function()? open}) =>
+    PickedDocument(
+      name: name,
+      size: size,
+      open: open ?? () => fakeFileBytes(size ?? 0),
+    );
+
+/// A file picker the test scripts: [next] is what the next pick returns
+/// (null = the person closed the picker); [error] makes it throw.
+class FakeDocumentPicker extends DocumentPicker {
+  FakeDocumentPicker({this.next, this.error, this.preparing = false});
+
+  PickedDocument? next;
+  Object? error;
+
+  /// Calls onPreparing first (a big file copied in from a cloud drive).
+  bool preparing;
+
+  /// Completes the pick only when the test says so (to see "preparing").
+  Completer<void>? hold;
+  int picks = 0;
+
+  @override
+  Future<PickedDocument?> pick({VoidCallback? onPreparing}) async {
+    picks += 1;
+    if (preparing) onPreparing?.call();
+    if (hold != null) await hold!.future;
+    final e = error;
+    if (e != null) throw e;
+    return next;
+  }
+}
+
+/// A phone dialer that records the numbers and answers [canCall].
+class FakePhoneDialer extends PhoneDialer {
+  FakePhoneDialer({this.canCall = true});
+
+  bool canCall;
+  final List<String> dialled = [];
+
+  @override
+  Future<bool> dial(String number) async {
+    dialled.add(number);
+    return canCall;
+  }
+}
+
+/// `POST /api/documents/upload`, reading the multipart body as it streams
+/// (so progress is real), honouring the request's abort trigger the way
+/// the app's IOClient does, and answering [status] with [answer]. Other
+/// routes are served from [routes] (LOCAL_MODE auth by default).
+class FakeUploadServer {
+  FakeUploadServer({this.routes = const {}});
+
+  final Map<String, Handler> routes;
+
+  /// The answer to the next upload (default: a new pending document).
+  int status = 201;
+  Object? answer;
+
+  /// When set, the upload stops reading after this many bytes until
+  /// [release] completes (or forever, for a stall).
+  int? pauseAfter;
+  Completer<void> release = Completer<void>();
+
+  /// When set, the upload route fails at the network level after reading
+  /// this many bytes (a dropped connection).
+  int? dropAfter;
+
+  /// Bytes of upload body read so far, every upload request, and how many
+  /// were aborted by their trigger (Cancel, sign-out, a stall).
+  int received = 0;
+  int aborts = 0;
+  final List<http.BaseRequest> uploads = [];
+  final List<http.BaseRequest> requests = [];
+
+  /// Completes when the server has paused (pauseAfter reached).
+  Completer<void> paused = Completer<void>();
+
+  http.Client client({Set<String> reachableHosts = const {tailscaleHost}}) {
+    return MockClient.streaming((request, body) async {
+      if (!reachableHosts.contains(request.url.host)) {
+        throw http.ClientException('Connection refused', request.url);
+      }
+      requests.add(request);
+      if (request.url.path == '/healthz') {
+        await body.drain<void>();
+        return _streamed(_healthy, 200);
+      }
+      final key = '${request.method} ${request.url.path}';
+      if (key == 'POST /api/documents/upload') return _upload(request, body);
+      final bytes = await body.toBytes();
+      final handler = routes[key] ?? localModeAuth[key];
+      if (handler == null) return _streamed(jsonEncode({'error': 'not found: $key'}), 404);
+      final plain = http.Request(request.method, request.url)
+        ..headers.addAll(request.headers)
+        ..bodyBytes = bytes;
+      final r = handler(plain);
+      return _streamed(r.body, r.statusCode, headers: r.headers);
+    });
+  }
+
+  Future<http.StreamedResponse> _upload(http.BaseRequest request, http.ByteStream body) async {
+    uploads.add(request);
+    final done = Completer<void>();
+    late final StreamSubscription<List<int>> sub;
+    if (request case http.Abortable(:final abortTrigger?)) {
+      unawaited(
+        abortTrigger.whenComplete(() {
+          if (done.isCompleted) return;
+          aborts += 1;
+          done.completeError(http.RequestAbortedException(request.url));
+        }),
+      );
+    }
+    sub = body.listen(
+      (chunk) {
+        received += chunk.length;
+        final drop = dropAfter;
+        if (drop != null && received >= drop && !done.isCompleted) {
+          done.completeError(http.ClientException('Connection reset by peer', request.url));
+          return;
+        }
+        final pause = pauseAfter;
+        if (pause != null && received >= pause && !paused.isCompleted) {
+          sub.pause();
+          paused.complete();
+          unawaited(release.future.then((_) => sub.resume()));
+        }
+      },
+      onDone: () {
+        if (!done.isCompleted) done.complete();
+      },
+      onError: (Object e) {
+        if (!done.isCompleted) done.completeError(e);
+      },
+    );
+    try {
+      await done.future;
+    } finally {
+      // Not awaited: a finished subscription's cancel() hands back a future
+      // of the root zone, which a widget test's fake clock never runs.
+      unawaited(sub.cancel());
+    }
+    final reply =
+        answer ??
+        {
+          '_id': 'up1',
+          'title': 'New paper',
+          'type': 'pdf',
+          'status': 'pending',
+          'progress': 0,
+        };
+    return _streamed(jsonEncode(reply), status, headers: const {'content-type': 'application/json; charset=utf-8'});
+  }
+
+  static http.StreamedResponse _streamed(String body, int status, {Map<String, String> headers = const {}}) =>
+      http.StreamedResponse(
+        http.ByteStream.fromBytes(utf8.encode(body)),
+        status,
+        headers: headers,
+      );
 }

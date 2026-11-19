@@ -13,6 +13,7 @@ import 'package:neuropal/day/day_models.dart';
 import 'package:neuropal/home/anchors_sheet.dart';
 import 'package:neuropal/home/check_in_slider.dart';
 import 'package:neuropal/home/home_screen.dart';
+import 'package:neuropal/home/pal_tile.dart';
 import 'package:neuropal/library/library_screen.dart';
 import 'package:neuropal/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -109,13 +110,13 @@ void main() {
       topOf(tester, 'HOW ARE YOU FEELING RIGHT NOW?'),
       lessThan(topOf(tester, 'NEXT ANCHOR')),
     );
-    await scrollTo(tester, find.textContaining('Pal: '));
+    await scrollTo(tester, find.byType(PalTile));
     // Nothing checked in, a task open: two minutes on it, in Pal's style.
     expect(
       find.text('Pal: No rush. Want to try two minutes on “Stay hydrated”?'),
       findsOneWidget,
     );
-    expect(find.text('FOCUS'), findsNothing, reason: 'focus belongs to Pal, later');
+    expect(find.text('FOCUS'), findsOneWidget, reason: 'the Focus tile opens Pal’s Sit with me');
     expect(tester.takeException(), isNull);
   });
 

@@ -18,6 +18,12 @@ import 'package:http/http.dart' as http;
 import 'package:neuropal/app.dart';
 import 'package:neuropal/data/session_store.dart';
 import 'package:neuropal/day/day_models.dart';
+import 'package:neuropal/library/document_picker.dart';
+import 'package:neuropal/pal/crisis.dart';
+import 'package:neuropal/pal/pal_bubble.dart';
+import 'package:neuropal/pal/pal_controller.dart';
+import 'package:neuropal/pal/pal_models.dart';
+import 'package:neuropal/pal/pal_sheet.dart';
 import 'package:neuropal/reader/reader_controller.dart';
 import 'package:neuropal/services.dart';
 import 'package:neuropal/widgets/np_buttons.dart';
@@ -47,6 +53,7 @@ Future<AppServices> boot(
   http.Client? client,
   SessionStore? sessions,
   DateTime Function()? clock,
+  Widget Function(Widget app)? wrap,
 }) async {
   tester.platformDispatcher.accessibilityFeaturesTestValue =
       const FakeAccessibilityFeatures(disableAnimations: true);
@@ -129,7 +136,8 @@ Future<AppServices> boot(
     sessions: sessions,
     clock: clock,
   );
-  await tester.pumpWidget(NeuroPalApp(services: services));
+  final app = NeuroPalApp(services: services);
+  await tester.pumpWidget(wrap == null ? app : wrap(app));
   await tester.pumpAndSettle();
   return services;
 }
@@ -536,4 +544,210 @@ void main() {
       await shot(tester, 'bigtext-calm-$name-2');
     });
   }
+
+
+  // ---- Pal, the assistant -------------------------------------------------------
+  for (final (name, look) in [('classic', null), ('signal', signal)]) {
+    testWidgets('pal-$name', (tester) async {
+      final services = await boot(
+        tester,
+        {'np.appearance': ?look, PalController.chatKey: palChat},
+        client: palBackend(),
+        clock: homeClock,
+      );
+      seedDay(services);
+      services.pal
+        ..addDump('Ask Milena about the SPAD dead time')
+        ..addDump('Buy oat milk');
+      await tester.pumpAndSettle();
+      // Home: the bubble in its corner, the last tile clear of it.
+      await tester.drag(find.byType(ListView).first, const Offset(0, -3000));
+      await shot(tester, 'pal-home-bottom-$name');
+
+      await tester.tap(find.byType(PalBubble));
+      await shot(tester, 'pal-sheet-$name');
+      for (final tool in ['What now?', 'Brain dump']) {
+        await tester.tap(find.text(tool));
+        await shot(tester, 'pal-${tool == 'What now?' ? 'now' : 'dump'}-$name');
+        await tester.tap(find.text('All tools'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Break it down'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'write the intro of my thesis');
+      await tester.tap(find.widgetWithText(NpButton, 'Break it down'));
+      await shot(tester, 'pal-breakdown-$name');
+      await tester.enterText(find.byType(TextField).first, 'I want to  end it all');
+      await tester.tap(find.widgetWithText(NpButton, 'Break it down'));
+      await shot(tester, 'pal-crisis-breakdown-$name');
+      await tester.tap(find.text('All tools'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Talk'));
+      await shot(tester, 'pal-talk-$name');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('pal-sit-$name', (tester) async {
+      // A clock that can move: the halfway question comes by itself.
+      var now = homeClock();
+      final services = await boot(tester, {'np.appearance': ?look}, clock: () => now);
+      seedDay(services);
+      services.pal.startSit(minutes: 25, label: 'CPI paper, one section', taskId: 'mvd-1');
+      await tester.pumpAndSettle();
+      // Home while sitting: the pill and the Focus tile.
+      await shot(tester, 'pal-sit-home-$name');
+      await tester.tap(find.byType(PalBubble));
+      await shot(tester, 'pal-sit-$name');
+      now = now.add(const Duration(minutes: 13));
+      services.pal.tick();
+      expect(services.pal.sit?.checkIn, SitCheck.asked);
+      await shot(tester, 'pal-sit-check-$name');
+      services.pal.forgetSession();
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('upload-$name', (tester) async {
+      final server = FakeUploadServer(routes: {'GET /api/documents': (_) => jsonResponse(uploadLibrary)});
+      final picker = FakeDocumentPicker();
+      await boot(
+        tester,
+        {'np.appearance': ?look},
+        client: server.client(),
+        wrap: (app) => Provider<DocumentPicker>.value(value: picker, child: app),
+      );
+      await goLibrary(tester);
+      await startUploads(tester, server, picker);
+      await shot(tester, 'upload-$name');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('settings-pal-$name', (tester) async {
+      await boot(tester, {'np.appearance': ?look});
+      await tester.tap(find.byIcon(Icons.menu_rounded));
+      await tester.pumpAndSettle();
+      await shot(tester, 'drawer-pal-$name');
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Show Pal’s bubble'),
+        250,
+        scrollable: find
+            .descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable))
+            .first,
+      );
+      await tester.drag(find.byType(ListView).first, const Offset(0, -200));
+      await shot(tester, 'settings-pal-$name');
+    });
+
+    // ---- 200 % text ----
+    testWidgets('bigtext-pal-$name', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final services = await boot(
+        tester,
+        {'np.appearance': ?look, PalController.chatKey: palChat},
+        client: palBackend(),
+        clock: homeClock,
+      );
+      seedDay(services);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).first, const Offset(0, -6000));
+      await shot(tester, 'bigtext-pal-home-bottom-$name');
+      await tester.tap(find.byType(PalBubble));
+      await shot(tester, 'bigtext-pal-sheet-$name');
+      await tester.tap(find.text('What now?'));
+      await shot(tester, 'bigtext-pal-now-$name');
+      await tester.tap(find.text('All tools'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Talk'));
+      await shot(tester, 'bigtext-pal-talk-$name');
+      await tester.drag(
+        find.descendant(of: find.byType(PalSheet), matching: find.byType(SingleChildScrollView)),
+        const Offset(0, 900),
+      );
+      await shot(tester, 'bigtext-pal-talk-$name-2');
+      await tester.tap(find.text('All tools'));
+      await tester.pumpAndSettle();
+      services.pal.startSit(minutes: 10, label: 'Thesis intro');
+      await tester.tap(find.text('Sit with me'));
+      await shot(tester, 'bigtext-pal-sit-$name');
+      services.pal.forgetSession();
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('bigtext-upload-$name', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final server = FakeUploadServer(routes: {'GET /api/documents': (_) => jsonResponse(uploadLibrary)});
+      final picker = FakeDocumentPicker();
+      await boot(
+        tester,
+        {'np.appearance': ?look},
+        client: server.client(),
+        wrap: (app) => Provider<DocumentPicker>.value(value: picker, child: app),
+      );
+      await goLibrary(tester);
+      await startUploads(tester, server, picker);
+      await shot(tester, 'bigtext-upload-$name');
+      await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+      await shot(tester, 'bigtext-upload-$name-2');
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+}
+
+/// A few saved Talk messages, the last one Pal's careful reply to a
+/// message that sounded like a crisis (answered on the phone).
+final String palChat = jsonEncode([
+  {'id': 'm-1', 'role': 'user', 'text': 'I can’t start the CPI paper.', 'at': '2026-11-19T10:01:00.000Z'},
+  {
+    'id': 'm-2',
+    'role': 'pal',
+    'text': 'That’s a big one. Want to break it into three small steps, starting with opening the file?',
+    'at': '2026-11-19T10:01:05.000Z',
+  },
+  {'id': 'm-3', 'role': 'user', 'text': 'honestly I can’t go on like this', 'at': '2026-11-19T10:02:00.000Z'},
+  {'id': 'm-4', 'role': 'pal', 'text': kCrisisReply, 'at': '2026-11-19T10:02:00.000Z', 'crisis': true, 'local': true},
+]);
+
+/// A server whose AI answers Break it down (Talk's replies are seeded).
+http.Client palBackend() => fakeBackend(
+  routes: {
+    'GET /api/documents': (_) => jsonResponse([]),
+    'POST /api/pal/breakdown': (_) => jsonResponse({
+      'steps': [
+        'Open the thesis document',
+        'Write one messy sentence about the method',
+        'List three points the intro must make',
+        'Write the first point, badly is fine',
+        'Take a two-minute break',
+      ],
+    }),
+  },
+);
+
+final List<Map<String, Object?>> uploadLibrary = [
+  {
+    '_id': 'a',
+    'title': 'Correlation plenoptic imaging with entangled photons',
+    'type': 'pdf',
+    'status': 'ready',
+    'readingProgress': 0.38,
+    'pageCount': 12,
+  },
+];
+
+/// One file the server can't read (its row says why), then one going up,
+/// held at about 40 %.
+Future<void> startUploads(WidgetTester tester, FakeUploadServer server, FakeDocumentPicker picker) async {
+  picker.next = fakePicked('lab-photo.heic', 2 * 1024 * 1024);
+  await tester.tap(find.text('Add a document'));
+  await tester.pumpAndSettle();
+  picker.next = fakePicked('Quantum optics lecture notes (week 7).pdf', 12 * 1024 * 1024);
+  server.pauseAfter = 5 * 1024 * 1024;
+  await tester.tap(find.text('Add a document'));
+  for (var i = 0; i < 400 && !server.paused.isCompleted; i++) {
+    await tester.pump(const Duration(milliseconds: 5));
+  }
+  await tester.pump();
 }

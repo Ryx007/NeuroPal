@@ -87,4 +87,38 @@ class ApiDocumentSource implements DocumentSource {
     }, timeout: const Duration(seconds: 180));
     return AskAnswer.fromJson(_map(json));
   }
+
+  /// Adds one file to the library: POST /api/documents/upload, multipart
+  /// field `file`. The server answers at once with the new document
+  /// (status `pending`) and processes it in the background; the library's
+  /// own status display follows it from there. (Only the real backend can
+  /// take uploads: the demo library is bundled with the app.)
+  Future<DocumentSummary> uploadDocument({
+    required String filename,
+    required int length,
+    required Stream<List<int>> bytes,
+    void Function(int sent, int total)? onProgress,
+    Future<void>? cancel,
+    String? server,
+    Duration stall = const Duration(seconds: 60),
+  }) async {
+    final json = await backend.uploadFile(
+      '/api/documents/upload',
+      field: 'file',
+      filename: filename,
+      length: length,
+      bytes: bytes,
+      onProgress: onProgress,
+      cancel: cancel,
+      server: server,
+      stall: stall,
+    );
+    final doc = DocumentSummary.fromJson(_map(json));
+    if (doc.id.isEmpty) {
+      throw const ApiException(
+        'The file went up, but the server sent back no document.',
+      );
+    }
+    return doc;
+  }
 }

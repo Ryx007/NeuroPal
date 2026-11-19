@@ -1,5 +1,6 @@
-// The left navigation drawer: Home, Library, Reader, Calming steps,
-// Settings, plus a live connection line at the bottom.
+// The left navigation drawer: Home, Library, Reader, Pal (opens the
+// assistant sheet over the current screen), Calming steps, Settings, plus a
+// live connection line at the bottom.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,12 @@ import 'package:provider/provider.dart';
 import '../app_routes.dart';
 import '../data/backend.dart';
 import '../data/settings_controller.dart';
+import '../pal/pal_avatar.dart';
+import '../pal/pal_bubble.dart';
+import '../pal/pal_controller.dart';
+import '../pal/pal_sheet.dart';
 import '../reader/reader_controller.dart';
+import '../theme/appearance_controller.dart';
 import '../theme/np_style.dart';
 import 'np_pressable.dart';
 import 'np_text.dart';
@@ -23,6 +29,8 @@ class NpDrawer extends StatelessWidget {
     final s = NpStyle.of(context);
     final reader = context.watch<ReaderController>();
     final doc = reader.document;
+    final assistant = context.watch<PalController>();
+    final pal = context.watch<AppearanceController>().appearance.pal;
 
     void go(String route) {
       Navigator.of(context).pop(); // close the drawer first
@@ -90,6 +98,19 @@ class NpDrawer extends StatelessWidget {
               onTap: () => go(AppRoutes.reader),
             ),
             _DrawerItem(
+              icon: Icons.chat_bubble_outline_rounded,
+              leading: PalAvatar(pal: pal, size: 30),
+              label: pal.name,
+              detail: palDrawerDetail(assistant),
+              selected: false,
+              onTap: () {
+                // Close the drawer, then open Pal over the screen it was on.
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                showPalSheet(navigator.context, from: current);
+              },
+            ),
+            _DrawerItem(
               icon: Icons.spa_outlined,
               label: 'Calming steps',
               selected: current == AppRoutes.calm,
@@ -117,9 +138,13 @@ class _DrawerItem extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.detail,
+    this.leading,
   });
 
   final IconData icon;
+
+  /// Drawn instead of [icon] (Pal's own face).
+  final Widget? leading;
   final String label;
   final String? detail;
   final bool selected;
@@ -157,8 +182,15 @@ class _DrawerItem extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: fg, size: 22),
-              const SizedBox(width: 14),
+              // Pal's face is wider than an icon: the labels still line up
+              // (30 + 6 = 22 + 14).
+              if (leading != null) ...[
+                SizedBox(width: 30, child: Center(child: leading)),
+                const SizedBox(width: 6),
+              ] else ...[
+                Icon(icon, color: fg, size: 22),
+                const SizedBox(width: 14),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
