@@ -29,6 +29,8 @@ import { ChaptersPanel, type ChapterItem } from "./ChaptersPanel";
 import { keysBelongTo, typingIn, useProgressSaver, useReadAloud } from "./hooks";
 import { PlayerBar, type PlayerChapters } from "./PlayerBar";
 import { ReaderFrame, usePanels } from "./ReaderFrame";
+import { passageAt } from "./study/passage";
+import { useStudyTools } from "./study/useStudyTools";
 import styles from "./reader.module.css";
 
 interface Props {
@@ -539,6 +541,10 @@ export function EpubReader({ doc, docId, initialAsk, askUnavailable }: Props) {
     return [typeof c.page === "number" ? `p. ${c.page}` : `Source ${n}`, head].filter(Boolean).join(" · ");
   }, []);
 
+  // Text inside the book's frame can't be selected from here: Explain takes the sentence being read.
+  const sentenceAtCursor = useCallback(() => (stream ? passageAt(stream, cursor.get()) : ""), [stream, cursor]);
+  const study = useStudyTools({ docId, docTitle: doc.title, docStatus: doc.status, panels, onCite, citeLabel, sentenceAtCursor, canSelect: false });
+
   const pageStyle = {
     padding: 0,
     ...(surface ? { "--reader-bg": surface.background, "--reader-fg": surface.color, "--reader-muted": surface.muted } : {}),
@@ -634,6 +640,7 @@ export function EpubReader({ doc, docId, initialAsk, askUnavailable }: Props) {
       chapters={<ChaptersPanel titleId={chaptersTitleId} items={chapterItems} onClose={panels.closeChapters} />}
       askTitleId={askTitleId}
       ask={<AskPanel docId={docId} titleId={askTitleId} unavailable={askUnavailable} onClose={() => panels.setAskOpen(false)} onCite={onCite} citeLabel={citeLabel} />}
+      study={study}
       view={null}
       pageStyle={pageStyle}
       customSurface={!!surface}

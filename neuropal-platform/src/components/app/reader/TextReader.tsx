@@ -28,6 +28,9 @@ import { PagesView } from "./PagesView";
 import { PlayerBar, type PlayerChapters } from "./PlayerBar";
 import { ReaderFrame, usePanels } from "./ReaderFrame";
 import { ReaderText } from "./ReaderText";
+import { SelectionExplain } from "./study/SelectionExplain";
+import { passageAt } from "./study/passage";
+import { useStudyTools } from "./study/useStudyTools";
 import styles from "./reader.module.css";
 
 const reduceMotion = () =>
@@ -420,6 +423,9 @@ export function TextReader({ doc, docId, data, progress, initialAsk, askUnavaila
     />
   );
 
+  const sentenceAtCursor = useCallback(() => passageAt(model, cursor.get()), [model, cursor]);
+  const study = useStudyTools({ docId, docTitle: doc.title, docStatus: doc.status, panels, onCite, citeLabel, sentenceAtCursor, canSelect: true });
+
   return (
     <ReaderFrame
       rootRef={rootRef}
@@ -432,6 +438,7 @@ export function TextReader({ doc, docId, data, progress, initialAsk, askUnavaila
       chapters={chapters}
       askTitleId={askTitleId}
       ask={ask}
+      study={study}
       view={canPages ? { pages, onChange: setView } : null}
       pageStyle={pageStyle}
       customSurface={!!surface}
@@ -451,7 +458,10 @@ export function TextReader({ doc, docId, data, progress, initialAsk, askUnavaila
             }}
           />
         ) : (
-          <ReaderText model={model} cursor={cursor} articleRef={articleRef} onWord={startAt} labelledBy={titleId} playing={reader.state === "playing"} />
+          <>
+            <ReaderText model={model} cursor={cursor} articleRef={articleRef} onWord={startAt} labelledBy={titleId} playing={reader.state === "playing"} />
+            <SelectionExplain containerRef={articleRef} enabled onExplain={study.explain} />
+          </>
         )
       }
       playerRef={playerRef}
