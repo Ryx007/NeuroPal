@@ -270,6 +270,8 @@ const Map<String, Object> kPalDefault = ${dart(T.PAL_DEFAULT)};
 
 const Map<String, Map<String, Object>> kHomeTiles = ${dart(T.HOME_TILES)};
 const List<Map<String, Object>> kHomeDefaultTiles = ${dart(T.HOME_DEFAULT.tiles)};
+// Classic keeps its original Home until the person arranges it (home.js#homeForSkin).
+const List<Map<String, Object>> kClassicHomeDefaultTiles = ${dart(T.CLASSIC_HOME_DEFAULT.tiles)};
 const List<String> kHomeSizes = ${dart(T.HOME_SIZES)};
 const List<String> kHomeRuleScopes = ${dart(T.HOME_RULE_SCOPES)};
 const List<String> kHomeRuleActs = ${dart(T.HOME_RULE_ACTS)};

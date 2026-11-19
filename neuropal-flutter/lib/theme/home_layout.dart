@@ -151,25 +151,13 @@ bool isDefaultHome(Object? home) {
   return true;
 }
 
-/// tokens.js CLASSIC_HOME_DEFAULT: the Classic skin's original Home (check-in,
-/// minimum day, anchor, reading). Not exported to tokens.g.dart yet, so it
-/// is written out here; it must stay identical to the JS value.
-const List<Map<String, Object>> _classicHomeDefaultTiles = [
-  {'id': 'state', 'size': 'L', 'hidden': false},
-  {'id': 'mvd', 'size': 'L', 'hidden': false},
-  {'id': 'anchor', 'size': 'M', 'hidden': false},
-  {'id': 'reading', 'size': 'M', 'hidden': false},
-  {'id': 'focus', 'size': 'M', 'hidden': true},
-  {'id': 'pal', 'size': 'S', 'hidden': true},
-];
-
 /// The layout a skin shows. Until the person arranges Home, Classic keeps
 /// its original screen and Signal uses the v2 default; once arranged, their
 /// layout applies to both skins.
 HomeLayout homeForSkin(Object? home, String skin) {
   final h = normalizeHome(home is HomeLayout ? home.toJson() : home);
   if (skin == 'classic' && isDefaultHome(h)) {
-    return normalizeHome({'tiles': _classicHomeDefaultTiles, 'rules': const []});
+    return normalizeHome({'tiles': kClassicHomeDefaultTiles, 'rules': const []});
   }
   return h;
 }

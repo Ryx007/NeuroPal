@@ -855,6 +855,39 @@ const List<Map<String, Object>> kHomeDefaultTiles = [
     'hidden': false,
   },
 ];
+// Classic keeps its original Home until the person arranges it (home.js#homeForSkin).
+const List<Map<String, Object>> kClassicHomeDefaultTiles = [
+  {
+    'id': 'state',
+    'size': 'L',
+    'hidden': false,
+  },
+  {
+    'id': 'mvd',
+    'size': 'L',
+    'hidden': false,
+  },
+  {
+    'id': 'anchor',
+    'size': 'M',
+    'hidden': false,
+  },
+  {
+    'id': 'reading',
+    'size': 'M',
+    'hidden': false,
+  },
+  {
+    'id': 'focus',
+    'size': 'M',
+    'hidden': true,
+  },
+  {
+    'id': 'pal',
+    'size': 'S',
+    'hidden': true,
+  },
+];
 const List<String> kHomeSizes = [
   'S',
   'M',
